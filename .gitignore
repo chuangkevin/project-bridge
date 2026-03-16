@@ -1,0 +1,7 @@
+node_modules
+dist
+*.db
+.env
+data/
+test-results/
+.claude/settings.local.json

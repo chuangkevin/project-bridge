@@ -54,9 +54,14 @@
 - [ ] 8.2 Support `OPENAI_API_KEY` environment variable with precedence over DB setting
 - [ ] 8.3 Build settings dialog accessible from home page to configure OpenAI API key
 
-## 9. Integration Testing
+## 9. Playwright Integration Testing
 
-- [ ] 9.1 Test project CRUD API endpoints (create, list, get, update, delete, cascade)
-- [ ] 9.2 Test chat endpoint: verify conversation storage, prototype version creation, SSE stream format
-- [ ] 9.3 Test share endpoint: valid token returns data, invalid token returns 404
-- [ ] 9.4 Smoke test: end-to-end flow from project creation → chat → generation → share link
+- [ ] 9.1 Setup Playwright: install, config (baseURL, webServer), test directory structure
+- [ ] 9.2 API tests: project CRUD endpoints (create, list, get, update, delete, cascade)
+- [ ] 9.3 API tests: chat endpoint (conversation storage, prototype version creation, SSE stream format)
+- [ ] 9.4 API tests: share endpoint (valid token returns data, invalid token returns 404)
+- [ ] 9.5 E2E tests: home page — create project, see project card, delete project
+- [ ] 9.6 E2E tests: workspace — send chat message, see streaming response, preview updates in iframe
+- [ ] 9.7 E2E tests: share — copy share link, open share page, see read-only prototype
+- [ ] 9.8 E2E tests: device size selector — switch between desktop/tablet/mobile, verify iframe resizes
+- [ ] 9.9 E2E smoke test: full flow from project creation → chat → generation → share link → view shared page
