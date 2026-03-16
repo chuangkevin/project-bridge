@@ -18,9 +18,14 @@ router.get('/:shareToken', (req: Request, res: Response) => {
       'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
     ).get(project.id) as any;
 
+    const annotations = db.prepare(
+      'SELECT * FROM annotations WHERE project_id = ? ORDER BY created_at ASC'
+    ).all(project.id);
+
     return res.json({
       name: project.name,
       html: currentPrototype?.html || null,
+      annotations,
     });
   } catch (err: any) {
     console.error('Error getting shared project:', err);

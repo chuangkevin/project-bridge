@@ -1,9 +1,59 @@
+import { useRef, useEffect, useCallback } from 'react';
+import { BRIDGE_SCRIPT } from '../utils/bridgeScript';
+
 interface Props {
   html: string | null;
   deviceSize: 'desktop' | 'tablet' | 'mobile';
+  annotationMode?: boolean;
+  onElementClick?: (data: { bridgeId: string; tagName: string; textContent: string; rect: { x: number; y: number; width: number; height: number } }) => void;
+  onIndicatorClick?: (bridgeId: string) => void;
+  annotations?: { bridgeId: string; number: number }[];
 }
 
-export default function PreviewPanel({ html, deviceSize }: Props) {
+export default function PreviewPanel({ html, deviceSize, annotationMode, onElementClick, onIndicatorClick, annotations }: Props) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const handleMessage = useCallback((e: MessageEvent) => {
+    if (!e.data || !e.data.type) return;
+    if (e.data.type === 'element-click' && annotationMode && onElementClick) {
+      onElementClick(e.data);
+    }
+    if (e.data.type === 'indicator-click' && onIndicatorClick) {
+      onIndicatorClick(e.data.bridgeId);
+    }
+  }, [annotationMode, onElementClick, onIndicatorClick]);
+
+  useEffect(() => {
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleMessage]);
+
+  // Send annotation mode state to iframe
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: 'set-annotation-mode', enabled: !!annotationMode }, '*');
+  }, [annotationMode]);
+
+  // Send annotation indicators to iframe
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow || !annotations) return;
+    iframe.contentWindow.postMessage({ type: 'show-indicators', annotations }, '*');
+  }, [annotations]);
+
+  // Resend indicators after iframe loads
+  const handleIframeLoad = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    if (annotations && annotations.length > 0) {
+      iframe.contentWindow.postMessage({ type: 'show-indicators', annotations }, '*');
+    }
+    if (annotationMode) {
+      iframe.contentWindow.postMessage({ type: 'set-annotation-mode', enabled: true }, '*');
+    }
+  }, [annotations, annotationMode]);
+
   if (!html) {
     return (
       <div style={styles.emptyState}>
@@ -18,6 +68,14 @@ export default function PreviewPanel({ html, deviceSize }: Props) {
         <p style={styles.emptyText}>Describe your UI in the chat panel to generate a prototype</p>
       </div>
     );
+  }
+
+  // Inject bridge script before </body>
+  let injectedHtml = html;
+  if (html.includes('</body>')) {
+    injectedHtml = html.replace('</body>', BRIDGE_SCRIPT + '</body>');
+  } else {
+    injectedHtml = html + BRIDGE_SCRIPT;
   }
 
   const iframeStyle: React.CSSProperties = (() => {
@@ -54,10 +112,12 @@ export default function PreviewPanel({ html, deviceSize }: Props) {
   return (
     <div style={styles.container}>
       <iframe
+        ref={iframeRef}
         style={iframeStyle}
-        sandbox="allow-scripts"
-        srcDoc={html}
+        sandbox="allow-scripts allow-same-origin"
+        srcDoc={injectedHtml}
         title="Prototype Preview"
+        onLoad={handleIframeLoad}
       />
     </div>
   );

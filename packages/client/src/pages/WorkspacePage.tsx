@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ChatPanel, { ChatMessage } from '../components/ChatPanel';
 import PreviewPanel from '../components/PreviewPanel';
 import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector';
 import Toast from '../components/Toast';
+import AnnotationEditor from '../components/AnnotationEditor';
+import SpecPanel, { Annotation } from '../components/SpecPanel';
+import { SpecData } from '../components/SpecForm';
 
 interface Project {
   id: string;
@@ -23,6 +26,23 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Annotation state
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [editingAnnotation, setEditingAnnotation] = useState<{
+    bridgeId: string;
+    tagName: string;
+    textContent: string;
+    rect: { x: number; y: number; width: number; height: number };
+  } | null>(null);
+
+  // Spec panel state
+  const [specPanelCollapsed, setSpecPanelCollapsed] = useState(false);
+  const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
+  const [savingSpec, setSavingSpec] = useState(false);
+
+  const iframeContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -61,9 +81,22 @@ export default function WorkspacePage() {
     }
   }, [id]);
 
+  const fetchAnnotations = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/annotations`);
+      if (res.ok) {
+        const data = await res.json();
+        setAnnotations(data);
+      }
+    } catch {
+      // silently fail
+    }
+  }, [id]);
+
   useEffect(() => {
     fetchProject();
-  }, [fetchProject]);
+    fetchAnnotations();
+  }, [fetchProject, fetchAnnotations]);
 
   const handleNewMessages = useCallback((userMsg: ChatMessage, assistantMsg: ChatMessage) => {
     setMessages(prev => [...prev, userMsg, assistantMsg]);
@@ -80,7 +113,6 @@ export default function WorkspacePage() {
       await navigator.clipboard.writeText(url);
       setToastMsg('Link copied!');
     } catch {
-      // Fallback
       const input = document.createElement('input');
       input.value = url;
       document.body.appendChild(input);
@@ -90,6 +122,92 @@ export default function WorkspacePage() {
       setToastMsg('Link copied!');
     }
   }, [project]);
+
+  // Annotation handlers
+  const handleElementClick = useCallback((data: {
+    bridgeId: string;
+    tagName: string;
+    textContent: string;
+    rect: { x: number; y: number; width: number; height: number };
+  }) => {
+    // Calculate popup position relative to the page, offset from the iframe container
+    const container = iframeContainerRef.current;
+    const offsetX = container ? container.getBoundingClientRect().left : 300;
+    const offsetY = container ? container.getBoundingClientRect().top : 48;
+    setEditingAnnotation({
+      ...data,
+      rect: {
+        ...data.rect,
+        x: data.rect.x + offsetX,
+        y: data.rect.y + offsetY,
+      },
+    });
+  }, []);
+
+  const handleSaveAnnotation = useCallback(async (text: string) => {
+    if (!editingAnnotation || !id) return;
+    try {
+      const res = await fetch(`/api/projects/${id}/annotations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bridgeId: editingAnnotation.bridgeId,
+          elementTag: editingAnnotation.tagName,
+          elementText: editingAnnotation.textContent,
+          content: text,
+          rect: editingAnnotation.rect,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save annotation');
+      setEditingAnnotation(null);
+      fetchAnnotations();
+    } catch {
+      setToastMsg('Failed to save annotation');
+    }
+  }, [editingAnnotation, id, fetchAnnotations]);
+
+  const handleHighlightElement = useCallback((bridgeId: string) => {
+    // Post message to iframe to highlight element
+    const iframe = document.querySelector('iframe');
+    if (iframe?.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'highlight-element', bridgeId }, '*');
+    }
+  }, []);
+
+  const handleSaveSpec = useCallback(async (annotationId: string, specData: SpecData) => {
+    if (!id) return;
+    setSavingSpec(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/annotations/${annotationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ specData }),
+      });
+      if (!res.ok) throw new Error('Failed to save spec');
+      const updated = await res.json();
+      setAnnotations(prev => prev.map(a => a.id === annotationId ? updated : a));
+      setSelectedAnnotation(prev => prev?.id === annotationId ? updated : prev);
+      setToastMsg('Spec saved');
+    } catch {
+      setToastMsg('Failed to save spec');
+    } finally {
+      setSavingSpec(false);
+    }
+  }, [id]);
+
+  // Build annotation indicators for the iframe
+  const annotationIndicators = annotations.map((ann, i) => ({
+    bridgeId: ann.bridge_id,
+    number: i + 1,
+  }));
+
+  const handleIndicatorClick = useCallback((bridgeId: string) => {
+    const ann = annotations.find(a => a.bridge_id === bridgeId);
+    if (ann) {
+      setSelectedAnnotation(ann);
+      setSpecPanelCollapsed(false);
+    }
+  }, [annotations]);
 
   if (loading) {
     return (
@@ -124,6 +242,20 @@ export default function WorkspacePage() {
           <DeviceSizeSelector value={deviceSize} onChange={setDeviceSize} />
         </div>
         <div style={styles.toolbarRight}>
+          <button
+            style={{
+              ...styles.annotateBtn,
+              ...(annotationMode ? styles.annotateBtnActive : {}),
+            }}
+            onClick={() => setAnnotationMode(!annotationMode)}
+            title={annotationMode ? 'Disable annotation mode' : 'Enable annotation mode'}
+            data-testid="annotate-toggle"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <path d="M10.5 1.5l2 2L4 12H2v-2L10.5 1.5z" />
+            </svg>
+            Annotate
+          </button>
           <button style={styles.shareBtn} onClick={handleShare} data-testid="share-btn">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
               <circle cx="3" cy="7" r="2" />
@@ -147,10 +279,37 @@ export default function WorkspacePage() {
             onHtmlGenerated={handleHtmlGenerated}
           />
         </div>
-        <div style={styles.previewPane}>
-          <PreviewPanel html={html} deviceSize={deviceSize} />
+        <div style={styles.previewPane} ref={iframeContainerRef}>
+          <PreviewPanel
+            html={html}
+            deviceSize={deviceSize}
+            annotationMode={annotationMode}
+            onElementClick={handleElementClick}
+            onIndicatorClick={handleIndicatorClick}
+            annotations={annotationIndicators}
+          />
         </div>
+        <SpecPanel
+          annotations={annotations}
+          selectedAnnotation={selectedAnnotation}
+          onSelectAnnotation={setSelectedAnnotation}
+          onHighlightElement={handleHighlightElement}
+          onSaveSpec={handleSaveSpec}
+          collapsed={specPanelCollapsed}
+          onToggle={() => setSpecPanelCollapsed(!specPanelCollapsed)}
+          savingSpec={savingSpec}
+        />
       </div>
+
+      {/* Annotation editor popup */}
+      {editingAnnotation && (
+        <AnnotationEditor
+          elementLabel={`<${editingAnnotation.tagName.toLowerCase()}> ${editingAnnotation.textContent}`}
+          position={{ x: editingAnnotation.rect.x, y: editingAnnotation.rect.y }}
+          onSave={handleSaveAnnotation}
+          onCancel={() => setEditingAnnotation(null)}
+        />
+      )}
 
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
     </div>
@@ -238,6 +397,24 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     fontWeight: 600,
     color: '#1e293b',
+  },
+  annotateBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  annotateBtnActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+    color: '#ffffff',
   },
   shareBtn: {
     display: 'flex',

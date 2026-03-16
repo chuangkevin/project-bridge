@@ -53,7 +53,7 @@ async function callOpenAIWithRetry(
 router.post('/:id/chat', async (req: Request, res: Response) => {
   try {
     const projectId = req.params.id;
-    const { message } = req.body;
+    const { message, fileIds } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
@@ -80,6 +80,22 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       'SELECT role, content FROM conversations WHERE project_id = ? ORDER BY created_at ASC LIMIT 20'
     ).all(projectId) as { role: string; content: string }[];
 
+    // Build user message, prepending file content if fileIds provided
+    let userContent = message.trim();
+    if (Array.isArray(fileIds) && fileIds.length > 0) {
+      const placeholders = fileIds.map(() => '?').join(',');
+      const files = db.prepare(
+        `SELECT original_name, extracted_text FROM uploaded_files WHERE id IN (${placeholders}) AND project_id = ?`
+      ).all(...fileIds, projectId) as { original_name: string; extracted_text: string | null }[];
+
+      if (files.length > 0) {
+        const fileParts = files.map(f =>
+          `--- ${f.original_name} ---\n${f.extracted_text || '[No text extracted]'}\n--- end ---`
+        ).join('\n');
+        userContent = `[Attached files]\n${fileParts}\n\n${userContent}`;
+      }
+    }
+
     // Build messages array
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
@@ -87,7 +103,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         role: h.role as 'user' | 'assistant',
         content: h.content,
       })),
-      { role: 'user', content: message.trim() },
+      { role: 'user', content: userContent },
     ];
 
     const openai = new OpenAI({ apiKey });
@@ -115,7 +131,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     const userMsgId = uuidv4();
     db.prepare(
       'INSERT INTO conversations (id, project_id, role, content) VALUES (?, ?, ?, ?)'
-    ).run(userMsgId, projectId, 'user', message.trim());
+    ).run(userMsgId, projectId, 'user', userContent);
 
     // Save assistant response
     const assistantMsgId = uuidv4();

@@ -8,6 +8,8 @@ import projectsRouter from './routes/projects';
 import chatRouter from './routes/chat';
 import shareRouter from './routes/share';
 import settingsRouter from './routes/settings';
+import uploadRouter from './routes/upload';
+import annotationsRouter from './routes/annotations';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +23,8 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/projects', chatRouter);
 app.use('/api/share', shareRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/projects', uploadRouter);
+app.use('/api/projects', annotationsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
