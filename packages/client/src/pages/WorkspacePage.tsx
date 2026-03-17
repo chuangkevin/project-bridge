@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ChatPanel, { ChatMessage } from '../components/ChatPanel';
+import DesignPanel from '../components/DesignPanel';
 import PreviewPanel from '../components/PreviewPanel';
 import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector';
 import Toast from '../components/Toast';
@@ -26,6 +27,8 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [leftTab, setLeftTab] = useState<'chat' | 'design'>('chat');
+  const [designActive, setDesignActive] = useState(false);
 
   // Annotation state
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -43,6 +46,24 @@ export default function WorkspacePage() {
   const [savingSpec, setSavingSpec] = useState(false);
 
   const iframeContainerRef = useRef<HTMLDivElement>(null);
+
+  const checkDesignActive = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/design`);
+      if (res.ok) {
+        const data = await res.json();
+        const profile = data.profile;
+        const isActive = !!(
+          profile &&
+          (profile.description || profile.referenceAnalysis ||
+            (profile.tokens && Object.keys(profile.tokens).length > 0))
+        );
+        setDesignActive(isActive);
+      }
+    } catch {
+      // silently fail
+    }
+  }, [id]);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -96,7 +117,8 @@ export default function WorkspacePage() {
   useEffect(() => {
     fetchProject();
     fetchAnnotations();
-  }, [fetchProject, fetchAnnotations]);
+    checkDesignActive();
+  }, [fetchProject, fetchAnnotations, checkDesignActive]);
 
   const handleNewMessages = useCallback((userMsg: ChatMessage, assistantMsg: ChatMessage) => {
     setMessages(prev => [...prev, userMsg, assistantMsg]);
@@ -242,6 +264,11 @@ export default function WorkspacePage() {
           <DeviceSizeSelector value={deviceSize} onChange={setDeviceSize} />
         </div>
         <div style={styles.toolbarRight}>
+          {designActive && (
+            <span style={styles.designActiveBadge} data-testid="design-active-badge">
+              🎨 Design Active
+            </span>
+          )}
           <button
             style={{
               ...styles.annotateBtn,
@@ -272,12 +299,38 @@ export default function WorkspacePage() {
       {/* Main content */}
       <div style={styles.body}>
         <div style={styles.chatPane}>
-          <ChatPanel
-            projectId={project.id}
-            messages={messages}
-            onNewMessages={handleNewMessages}
-            onHtmlGenerated={handleHtmlGenerated}
-          />
+          {/* Tab switcher */}
+          <div style={styles.tabBar}>
+            <button
+              style={{ ...styles.tabBtn, ...(leftTab === 'chat' ? styles.tabBtnActive : {}) }}
+              onClick={() => setLeftTab('chat')}
+              data-testid="tab-chat"
+            >
+              Chat
+            </button>
+            <button
+              style={{ ...styles.tabBtn, ...(leftTab === 'design' ? styles.tabBtnActive : {}) }}
+              onClick={() => setLeftTab('design')}
+              data-testid="tab-design"
+            >
+              Design
+            </button>
+          </div>
+          <div style={styles.tabContent}>
+            {leftTab === 'chat' ? (
+              <ChatPanel
+                projectId={project.id}
+                messages={messages}
+                onNewMessages={handleNewMessages}
+                onHtmlGenerated={handleHtmlGenerated}
+              />
+            ) : (
+              <DesignPanel
+                projectId={project.id}
+                onSaved={checkDesignActive}
+              />
+            )}
+          </div>
         </div>
         <div style={styles.previewPane} ref={iframeContainerRef}>
           <PreviewPanel
@@ -439,6 +492,47 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     borderRight: '1px solid #e2e8f0',
     overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  tabBar: {
+    display: 'flex',
+    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    flexShrink: 0,
+  },
+  tabBtn: {
+    flex: 1,
+    padding: '8px 0',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    backgroundColor: 'transparent',
+    color: '#64748b',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'color 0.15s, border-color 0.15s',
+  },
+  tabBtnActive: {
+    color: '#3b82f6',
+    borderBottom: '2px solid #3b82f6',
+  },
+  tabContent: {
+    flex: 1,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  designActiveBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '3px 8px',
+    backgroundColor: '#d1fae5',
+    color: '#065f46',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: 600,
   },
   previewPane: {
     flex: 1,

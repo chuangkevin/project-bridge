@@ -10,6 +10,7 @@ import shareRouter from './routes/share';
 import settingsRouter from './routes/settings';
 import uploadRouter from './routes/upload';
 import annotationsRouter from './routes/annotations';
+import designRouter from './routes/design';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -25,6 +26,7 @@ app.use('/api/share', shareRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/projects', uploadRouter);
 app.use('/api/projects', annotationsRouter);
+app.use('/api/projects', designRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

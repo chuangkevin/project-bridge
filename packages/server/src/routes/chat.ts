@@ -96,9 +96,42 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     }
 
+    // Query design profile and optionally append to system prompt
+    let effectiveSystemPrompt = systemPrompt;
+    const designRow = db.prepare('SELECT * FROM design_profiles WHERE project_id = ?').get(projectId) as any;
+    if (designRow) {
+      const hasDescription = designRow.description && designRow.description.trim().length > 0;
+      const hasReferenceAnalysis = designRow.reference_analysis && designRow.reference_analysis.trim().length > 0;
+      let tokens: Record<string, any> = {};
+      try { tokens = JSON.parse(designRow.tokens || '{}'); } catch { /* ignore */ }
+      const hasTokens = Object.keys(tokens).length > 0;
+
+      if (hasDescription || hasReferenceAnalysis || hasTokens) {
+        let profileBlock = '\n\n=== DESIGN PROFILE ===\n';
+        if (hasDescription) {
+          profileBlock += `Design Direction: ${designRow.description}\n`;
+        }
+        if (hasReferenceAnalysis) {
+          profileBlock += `Visual Reference Analysis:\n${designRow.reference_analysis}\n`;
+        }
+        if (hasTokens) {
+          profileBlock += 'Design Tokens:\n';
+          if (tokens.primaryColor) profileBlock += `- Primary Color: ${tokens.primaryColor}\n`;
+          if (tokens.secondaryColor) profileBlock += `- Secondary Color: ${tokens.secondaryColor}\n`;
+          if (tokens.fontFamily) profileBlock += `- Font Family: ${tokens.fontFamily}\n`;
+          if (tokens.borderRadius !== undefined) profileBlock += `- Border Radius: ${tokens.borderRadius}px\n`;
+          if (tokens.spacing) profileBlock += `- Spacing: ${tokens.spacing}\n`;
+          if (tokens.shadowStyle) profileBlock += `- Shadow: ${tokens.shadowStyle}\n`;
+        }
+        profileBlock += 'IMPORTANT: You MUST strictly follow this design profile. Use the exact colors, typography, spacing, and visual style described above.\n';
+        profileBlock += '======================';
+        effectiveSystemPrompt = systemPrompt + profileBlock;
+      }
+    }
+
     // Build messages array
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: effectiveSystemPrompt },
       ...history.map(h => ({
         role: h.role as 'user' | 'assistant',
         content: h.content,
