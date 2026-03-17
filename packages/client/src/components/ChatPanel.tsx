@@ -573,10 +573,30 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             <div key={f.id} style={styles.fileChipWrapper} data-testid="file-chip">
               <div style={styles.fileChip}>
                 <span style={styles.fileName}>{f.filename}</span>
-                {f.visualAnalysisReady && (
+                {f.visualAnalysisReady ? (
                   <span style={styles.visualBadge} data-testid="visual-analysis-badge" title="視覺分析已完成">
                     👁 Visual
                   </span>
+                ) : (
+                  <button
+                    type="button"
+                    style={styles.reanalyzeBtn}
+                    title="重新執行視覺分析"
+                    onClick={async () => {
+                      try {
+                        const r = await fetch(`/api/projects/${projectId}/upload/${f.id}/reanalyze`, { method: 'POST' });
+                        if (r.ok) {
+                          setAttachedFiles(prev => prev.map(x => x.id === f.id ? { ...x, visualAnalysisReady: true } : x));
+                          setUploadToast('視覺分析完成！');
+                        } else {
+                          const err = await r.json();
+                          setUploadToast(`分析失敗: ${err.error}`);
+                        }
+                      } catch { setUploadToast('分析失敗'); }
+                    }}
+                  >
+                    🔍 分析設計稿
+                  </button>
                 )}
                 {f.pageCount != null && f.pageCount > 1 && (
                   <span style={styles.pageCountBadge} data-testid="page-count-badge" title={`PDF 共 ${f.pageCount} 頁`}>
@@ -990,6 +1010,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     fontSize: '10px',
     fontWeight: 600,
+  },
+  reanalyzeBtn: {
+    padding: '1px 6px',
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+    borderRadius: '8px',
+    fontSize: '10px',
+    fontWeight: 600,
+    border: '1px solid #fcd34d',
+    cursor: 'pointer',
   },
   pageCountBadge: {
     padding: '1px 6px',

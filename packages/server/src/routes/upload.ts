@@ -33,7 +33,9 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         return res.status(400).json({ error: 'No file provided' });
       }
 
-      const { originalname, mimetype, size, path: storagePath } = req.file;
+      const { mimetype, size, path: storagePath } = req.file;
+      // Fix multer Latin-1 encoding of non-ASCII filenames (common with Chinese filenames)
+      const originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
 
       // Extract text from the uploaded file
       const extractedText = await extractText(storagePath, mimetype);
@@ -136,6 +138,47 @@ router.get('/:id/upload/spec-status', (req: Request, res: Response) => {
     'SELECT COUNT(*) as cnt FROM uploaded_files WHERE project_id = ? AND visual_analysis IS NOT NULL'
   ).get(projectId) as { cnt: number };
   return res.json({ hasVisualAnalysis: row.cnt > 0 });
+});
+
+// POST /:id/upload/:fileId/reanalyze — re-run visual analysis on an existing uploaded file
+router.post('/:id/upload/:fileId/reanalyze', async (req: Request, res: Response) => {
+  const { id: projectId, fileId } = req.params;
+  const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND project_id = ?').get(fileId, projectId) as any;
+  if (!file) return res.status(404).json({ error: 'File not found' });
+
+  const apiKey = process.env.OPENAI_API_KEY ||
+    (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
+  if (!apiKey) return res.status(400).json({ error: 'No API key configured' });
+
+  try {
+    const { mimetype, storage_path: storagePath, original_name: originalName } = file;
+    const isPdf = mimetype === 'application/pdf' || originalName?.toLowerCase().endsWith('.pdf');
+    const isImage = mimetype.startsWith('image/');
+
+    let images: Buffer[] = [];
+    if (isPdf) {
+      images = await renderPdfPages(storagePath, 6);
+    } else if (isImage) {
+      const fs = await import('fs');
+      images = [fs.readFileSync(storagePath)];
+    } else {
+      return res.status(400).json({ error: 'File type does not support visual analysis' });
+    }
+
+    if (images.length === 0) return res.status(400).json({ error: 'No images could be extracted' });
+
+    const analysisText = await analyzeDesignSpec(images, apiKey);
+    if (!analysisText) return res.status(500).json({ error: 'Analysis returned empty' });
+
+    db.prepare(
+      "UPDATE uploaded_files SET visual_analysis = ?, visual_analysis_at = datetime('now') WHERE id = ?"
+    ).run(analysisText, fileId);
+
+    return res.json({ success: true, visualAnalysis: analysisText });
+  } catch (err: any) {
+    console.error('[reanalyze] error:', err);
+    return res.status(500).json({ error: err.message || 'Analysis failed' });
+  }
 });
 
 // PATCH /:id/upload/:fileId/label — set component label for uploaded file
