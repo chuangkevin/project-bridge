@@ -20,6 +20,7 @@ interface Props {
   collapsed: boolean;
   onToggle: () => void;
   savingSpec?: boolean;
+  projectId?: string;
 }
 
 export default function SpecPanel({
@@ -31,13 +32,99 @@ export default function SpecPanel({
   collapsed,
   onToggle,
   savingSpec,
+  projectId,
 }: Props) {
   const [tab, setTab] = useState<'annotations' | 'spec'>('annotations');
+  const [showRegenerateForm, setShowRegenerateForm] = useState(false);
+  const [regenerateInstruction, setRegenerateInstruction] = useState('');
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateStatus, setRegenerateStatus] = useState<'idle' | 'done' | 'error'>('idle');
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   const handleAnnotationClick = (ann: Annotation) => {
     onSelectAnnotation(ann);
     onHighlightElement(ann.bridge_id);
     setTab('spec');
+  };
+
+  const handleOpenRegenerate = () => {
+    setRegenerateInstruction(selectedAnnotation?.content || '');
+    setRegenerateStatus('idle');
+    setRegenerateError(null);
+    setShowRegenerateForm(true);
+  };
+
+  const handleCancelRegenerate = () => {
+    setShowRegenerateForm(false);
+    setRegenerateStatus('idle');
+    setRegenerateError(null);
+  };
+
+  const handleRegenerate = async () => {
+    if (!selectedAnnotation || !projectId) return;
+    setRegenerating(true);
+    setRegenerateStatus('idle');
+    setRegenerateError(null);
+
+    try {
+      const url = `http://localhost:3001/api/projects/${projectId}/prototype/regenerate-component`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bridgeId: selectedAnnotation.bridge_id,
+          instruction: regenerateInstruction,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error((errData as { error?: string }).error || `Request failed: ${response.status}`);
+      }
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6);
+          try {
+            const data = JSON.parse(jsonStr);
+            if (data.error) {
+              throw new Error(data.error);
+            }
+            if (data.done && data.html) {
+              const iframe = document.querySelector('iframe');
+              if (iframe?.contentWindow) {
+                iframe.contentWindow.postMessage(
+                  { type: 'swap-component', bridgeId: selectedAnnotation.bridge_id, html: data.html },
+                  '*'
+                );
+              }
+              setRegenerateStatus('done');
+              setShowRegenerateForm(false);
+              setTimeout(() => setRegenerateStatus('idle'), 2500);
+            }
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message !== 'JSON parse error') {
+              throw parseErr;
+            }
+          }
+        }
+      }
+    } catch (err: unknown) {
+      setRegenerateError(err instanceof Error ? err.message : 'Regeneration failed');
+      setRegenerateStatus('error');
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   if (collapsed) {
@@ -113,6 +200,58 @@ export default function SpecPanel({
                 <span style={styles.annotationTag}>{selectedAnnotation.element_tag}</span>
                 <span style={styles.specLabel}>{selectedAnnotation.element_text || '(no text)'}</span>
                 <p style={styles.specAnnotation}>{selectedAnnotation.content}</p>
+                {projectId && (
+                  <div style={styles.regenerateActions}>
+                    {!showRegenerateForm && !regenerating && (
+                      <button
+                        type="button"
+                        style={styles.regenerateBtn}
+                        onClick={handleOpenRegenerate}
+                        data-testid="regenerate-btn"
+                      >
+                        &#x27F3; Regenerate
+                      </button>
+                    )}
+                    {regenerateStatus === 'done' && !showRegenerateForm && (
+                      <span style={styles.regenerateDone}>&#10003; Updated</span>
+                    )}
+                    {regenerating && (
+                      <span style={styles.regeneratingLabel}>&#x27F3; Regenerating...</span>
+                    )}
+                    {showRegenerateForm && !regenerating && (
+                      <div style={styles.regenerateForm}>
+                        <textarea
+                          style={styles.regenerateTextarea}
+                          value={regenerateInstruction}
+                          onChange={e => setRegenerateInstruction(e.target.value)}
+                          placeholder="Describe what to change..."
+                          rows={3}
+                          autoFocus
+                        />
+                        {regenerateStatus === 'error' && regenerateError && (
+                          <p style={styles.regenerateError}>{regenerateError}</p>
+                        )}
+                        <div style={styles.regenerateFormActions}>
+                          <button type="button" style={styles.regenerateCancelBtn} onClick={handleCancelRegenerate}>
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              ...styles.regenerateSubmitBtn,
+                              opacity: regenerateInstruction.trim() ? 1 : 0.5,
+                            }}
+                            onClick={handleRegenerate}
+                            disabled={!regenerateInstruction.trim()}
+                            data-testid="regenerate-submit-btn"
+                          >
+                            Generate
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <SpecForm
                 specData={selectedAnnotation.spec_data}
@@ -295,5 +434,76 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '13px',
     color: '#475569',
     lineHeight: '1.4',
+  },
+  regenerateActions: {
+    marginTop: '10px',
+  },
+  regenerateBtn: {
+    padding: '5px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  regeneratingLabel: {
+    fontSize: '12px',
+    color: '#64748b',
+    fontStyle: 'italic',
+  },
+  regenerateDone: {
+    fontSize: '12px',
+    color: '#16a34a',
+    fontWeight: 600,
+  },
+  regenerateForm: {
+    marginTop: '6px',
+  },
+  regenerateTextarea: {
+    width: '100%',
+    padding: '8px 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '13px',
+    resize: 'none' as const,
+    outline: 'none',
+    fontFamily: 'inherit',
+    lineHeight: '1.4',
+    boxSizing: 'border-box' as const,
+  },
+  regenerateError: {
+    margin: '6px 0 0',
+    fontSize: '12px',
+    color: '#ef4444',
+  },
+  regenerateFormActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '6px',
+    marginTop: '8px',
+  },
+  regenerateCancelBtn: {
+    padding: '5px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '12px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  regenerateSubmitBtn: {
+    padding: '5px 12px',
+    border: 'none',
+    borderRadius: '8px',
+    backgroundColor: '#3b82f6',
+    color: '#ffffff',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 };

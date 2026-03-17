@@ -101,6 +101,11 @@ export const BRIDGE_SCRIPT = `
       if (target) {
         target.style.display = '';
       }
+    } else if (e.data.type === 'swap-component') {
+      var el = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
+      if (el) {
+        el.outerHTML = e.data.html;
+      }
     }
   });
 })();

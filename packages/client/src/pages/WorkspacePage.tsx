@@ -432,6 +432,7 @@ export default function WorkspacePage() {
           collapsed={specPanelCollapsed}
           onToggle={() => setSpecPanelCollapsed(!specPanelCollapsed)}
           savingSpec={savingSpec}
+          projectId={project.id}
         />
       </div>
 
