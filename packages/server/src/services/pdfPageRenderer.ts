@@ -8,9 +8,9 @@ export async function renderPdfPages(filePath: string, maxPages: number): Promis
       import('pdfjs-dist')
     );
 
-    // canvas is a CJS package; require() avoids ESM/CJS interop issues.
+    // @napi-rs/canvas ships prebuilt Windows binaries — no native compile needed
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createCanvas } = require('canvas') as typeof import('canvas');
+    const { createCanvas } = require('@napi-rs/canvas') as typeof import('@napi-rs/canvas');
 
     const data = new Uint8Array(fs.readFileSync(filePath));
 

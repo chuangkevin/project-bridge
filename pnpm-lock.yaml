@@ -44,6 +44,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@napi-rs/canvas':
+        specifier: ^0.1.97
+        version: 0.1.97
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
@@ -2139,7 +2142,6 @@ snapshots:
       '@napi-rs/canvas-linux-x64-musl': 0.1.97
       '@napi-rs/canvas-win32-arm64-msvc': 0.1.97
       '@napi-rs/canvas-win32-x64-msvc': 0.1.97
-    optional: true
 
   '@playwright/test@1.58.2':
     dependencies:

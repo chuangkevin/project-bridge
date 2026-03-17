@@ -92,8 +92,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         /產生|生成|做出|幫我做|開始|go|generate|ui|prototype|原型|設計|做個|頁面|介面/.test(trimmed))
       ||
       // Fix/correction requests: describe a problem and implicitly ask to fix it
-      (!trimmed.includes('?') &&
-        /空白太|空白超|太大|太小|不對|沒有依照|沒依照|缺少|重新生成|請重新|重做|修改|修正|調整|改掉|有問題|不正確|看起來不|樣式不|版面|排版/.test(trimmed))
+      // Also catch "嗎" ending complaints about missing UI elements
+      (/空白太|空白超|太大|太小|不對|沒有依照|沒依照|缺少|重新生成|請重新|重做|修改|修正|調整|改掉|有問題|不正確|看起來不|樣式不|版面|排版|沒有正確|沒有運作|不能點|點擊沒|連結沒|沒有做出|做出來|沒有生成|為什麼沒有做|為何沒有|沒有子頁面|沒有頁面|子頁面|顏色不對|色調不對|色調錯誤|顏色錯誤|不像設計稿|沒有照設計稿|沒有按照設計稿/.test(trimmed))
     );
 
     // Classify intent (four-way)
@@ -122,15 +122,26 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     } else {
       // Auto-inject project uploaded files even if not explicitly attached
-      // This ensures design spec text is always available during regeneration
+      // Deduplicate by file_size — same PDF uploaded multiple times has same size
       const projectFiles = db.prepare(
-        `SELECT original_name, extracted_text FROM uploaded_files WHERE project_id = ? AND extracted_text IS NOT NULL ORDER BY created_at DESC LIMIT 3`
-      ).all(projectId) as { original_name: string; extracted_text: string }[];
-      if (projectFiles.length > 0) {
-        const fileParts = projectFiles.map(f =>
-          `--- ${f.original_name} ---\n${f.extracted_text.slice(0, 1500)}\n--- end ---`
-        ).join('\n');
-        userContent = `[Project design specs (auto-loaded)]\n${fileParts}\n\n${userContent}`;
+        `SELECT original_name, extracted_text, file_size FROM uploaded_files
+         WHERE project_id = ? AND extracted_text IS NOT NULL
+         ORDER BY created_at DESC`
+      ).all(projectId) as { original_name: string; extracted_text: string; file_size: number }[];
+      const seenSizes = new Set<number>();
+      const uniqueFiles = projectFiles.filter(f => {
+        if (seenSizes.has(f.file_size)) return false;
+        seenSizes.add(f.file_size);
+        return true;
+      }).slice(0, 3);
+      if (uniqueFiles.length > 0) {
+        const fileParts = uniqueFiles.map(f => {
+          // Fix Latin-1 encoded filenames from older uploads
+          let name = f.original_name;
+          try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep original */ }
+          return `--- ${name} ---\n${f.extracted_text.slice(0, 4000)}\n--- end ---`;
+        }).join('\n');
+        userContent = `[Project design specs (auto-loaded from uploaded files)]\n${fileParts}\n\n${userContent}`;
       }
     }
 
@@ -183,8 +194,79 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     // Generate path (full-page | in-shell | component)
+    // Auto-trigger visual analysis on any PDF/image files that are missing it (fire-and-forget)
+    // This ensures analysis is available on the next generation even if not yet done
+    {
+      const missingAnalysis = db.prepare(
+        `SELECT id, storage_path, mime_type, original_name, file_size FROM uploaded_files
+         WHERE project_id = ? AND visual_analysis IS NULL
+         AND (mime_type LIKE '%pdf%' OR mime_type LIKE 'image/%' OR original_name LIKE '%.pdf')
+         ORDER BY created_at DESC`
+      ).all(projectId) as { id: string; storage_path: string; mime_type: string; original_name: string; file_size: number }[];
+
+      if (missingAnalysis.length > 0) {
+        const apiKey2 = getOpenAIApiKey();
+        if (apiKey2) {
+          // Fire-and-forget: trigger analysis in background, don't await
+          import('../services/pdfPageRenderer').then(async ({ renderPdfPages }) => {
+            const { analyzeDesignSpec } = await import('../services/designSpecAnalyzer');
+            // Deduplicate by file_size — same PDF uploaded multiple times
+            const seen = new Set<number>();
+            for (const f of missingAnalysis) {
+              if (seen.has(f.file_size)) continue;
+              seen.add(f.file_size);
+              try {
+                const isPdf = f.mime_type.includes('pdf') || f.original_name.toLowerCase().endsWith('.pdf');
+                const isImage = f.mime_type.startsWith('image/');
+                let images: Buffer[] = [];
+                if (isPdf) images = await renderPdfPages(f.storage_path, 6);
+                else if (isImage) { const fs2 = await import('fs'); images = [(fs2 as any).readFileSync(f.storage_path)]; }
+                if (images.length > 0) {
+                  const analysis = await analyzeDesignSpec(images, apiKey2);
+                  if (analysis) {
+                    db.prepare("UPDATE uploaded_files SET visual_analysis = ?, visual_analysis_at = datetime('now') WHERE id = ?")
+                      .run(analysis, f.id);
+                    console.log(`[chat] Background visual analysis done for ${f.id}`);
+                  }
+                }
+              } catch (e: any) { console.warn('[chat] bg analysis failed:', e.message); }
+            }
+          }).catch(() => {});
+        }
+      }
+    }
+
     // Build effective system prompt with composed design injection
-    let effectiveSystemPrompt = systemPrompt;
+    // First, load design spec analysis — inject BEFORE base system prompt so it overrides defaults
+    const allSpecRowsEarly = db.prepare(
+      `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
+       WHERE project_id = ? AND visual_analysis IS NOT NULL
+       ORDER BY created_at DESC`
+    ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+    const seenEarly = new Set<number>();
+    const specRowsEarly = allSpecRowsEarly.filter(r => {
+      if (seenEarly.has(r.file_size)) return false;
+      seenEarly.add(r.file_size);
+      return true;
+    });
+
+    let designSpecPrefix = '';
+    if (specRowsEarly.length > 0) {
+      designSpecPrefix = '╔══════════════════════════════════════════════════════╗\n';
+      designSpecPrefix += '║  DESIGN SPEC — THIS OVERRIDES ALL DEFAULTS BELOW    ║\n';
+      designSpecPrefix += '╚══════════════════════════════════════════════════════╝\n';
+      designSpecPrefix += 'Uploaded design spec files have been analyzed. You MUST use these exact visual specifications.\n';
+      designSpecPrefix += 'IGNORE the default design system colors/fonts — use the spec values instead.\n\n';
+      for (const row of specRowsEarly) {
+        let name = row.original_name;
+        try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep */ }
+        const analysis = row.visual_analysis.length > 3000 ? row.visual_analysis.slice(0, 3000) + '…' : row.visual_analysis;
+        designSpecPrefix += `--- Spec: ${name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${analysis}\n\n`;
+      }
+      designSpecPrefix += '══════════════════════════════════════════════════════\n\n';
+    }
+
+    let effectiveSystemPrompt = designSpecPrefix + systemPrompt;
 
     // Fetch global design
     const globalRow = db.prepare("SELECT * FROM global_design_profile WHERE id = 'global'").get() as any;
@@ -253,21 +335,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       effectiveSystemPrompt += `\n\n=== PROJECT SUPPLEMENT ===\n${supplement}\nPROJECT SUPPLEMENT takes priority for any conflicting attributes.\n===========================`;
     }
 
-    // Design spec analysis injection (from uploaded files with visual analysis)
-    const specAnalysisRows = db.prepare(
-      'SELECT original_name, visual_analysis, component_label FROM uploaded_files WHERE project_id = ? AND visual_analysis IS NOT NULL'
-    ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null }[];
-    if (specAnalysisRows.length > 0) {
-      let specBlock = '\n\n=== DESIGN SPEC ANALYSIS ===\n';
-      specBlock += 'The following component specifications were extracted from uploaded design spec files.\n';
-      specBlock += 'You MUST follow these component patterns precisely when generating UI:\n\n';
-      for (const row of specAnalysisRows) {
-        const analysis = row.visual_analysis.length > 1500 ? row.visual_analysis.slice(0, 1500) + '…' : row.visual_analysis;
-        specBlock += `--- From: ${row.original_name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${analysis}\n\n`;
-      }
-      specBlock += 'CRITICAL: Use the exact colors, card layouts, search bar styles, tag designs, and spacing patterns described above.\n';
-      specBlock += '============================';
-      effectiveSystemPrompt += specBlock;
+    // Design spec analysis reminder (already injected at top — this just reinforces at end)
+    if (specRowsEarly.length > 0) {
+      effectiveSystemPrompt += '\n\n[REMINDER: Design spec was injected at the top. Use the spec colors and component patterns — NOT the defaults above.]';
     }
 
     // Art style injection
@@ -292,12 +362,18 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     if (existingProto?.html) {
       const pageMatches = existingProto.html.matchAll(/data-page="([^"]+)"/g);
       const seen = new Set<string>();
-      for (const m of pageMatches) { if (!seen.has(m[1])) { seen.add(m[1]); existingPages.push(m[1]); } }
+      for (const m of pageMatches) {
+        const name = m[1];
+        // Filter out corrupted/garbage page names (JS artifacts, template strings, etc.)
+        const isGarbage = /['"+\[\]\\]|target|\bpage\b/.test(name) || name.length > 30;
+        if (!seen.has(name) && !isGarbage) { seen.add(name); existingPages.push(name); }
+      }
     }
 
-    // Multi-page detection (only relevant for full-page intent)
+    // Multi-page detection — pass full userContent (includes injected PDF spec text) so the
+    // analyzer can detect pages described in uploaded design specs, not just the user's message
     const pageStructure = (intent === 'full-page' || intent === 'in-shell')
-      ? await analyzePageStructure(message.trim(), apiKey)
+      ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
       : { multiPage: false, pages: [] as string[] };
 
     // Use existing pages if regenerating; new pages if fresh multi-page request
@@ -306,7 +382,19 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     if (isMultiPage) {
       const pageList = finalPages.map(p => `- "${p}"`).join('\n');
-      effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===\nGenerate a multi-page prototype with ALL of these pages:\n${pageList}\n\nRequirements:\n- Use a navigation element (sidebar or top nav) that is always visible\n- Each page as: <div class="page" data-page="{page-name}"> (first page visible, others hidden with display:none)\n- Include JavaScript to show/hide pages when nav links are clicked\n- Highlight the active nav item\n- All pages must follow the same design style\n============================`;
+      effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===
+Pages to generate (ALL must have complete, content-rich HTML — zero placeholders):
+${pageList}
+
+Navigation rules:
+1. Define a global JS function: function showPage(name) { document.querySelectorAll('.page').forEach(p=>p.style.display='none'); document.getElementById('page-'+name)?.style.setProperty('display','block'); document.querySelectorAll('[data-nav]').forEach(l=>l.classList.toggle('active',l.dataset.nav===name)); }
+2. Each page div: <div class="page" id="page-[name]" data-page="[name]"> — first page has style="display:block", rest style="display:none"
+3. Each nav link: <a href="#" data-nav="[name]" onclick="showPage('[name]');return false;">[name]</a>
+4. If there is a list page with cards/items that lead to a detail page, each card must have: onclick="showPage('[detail-page-name]');return false;"
+5. Call showPage on init: document.addEventListener('DOMContentLoaded', function(){ showPage('${finalPages[0]}'); });
+
+CRITICAL: Every page must have FULL content — no placeholder text, no empty divs, no "此處將顯示..." comments.
+============================`;
     }
 
     // Build messages for generation

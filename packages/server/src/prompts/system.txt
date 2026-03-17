@@ -94,9 +94,10 @@ CSS ARCHITECTURE:
 ════════════════════════════════════════════════
 MULTI-PAGE INSTRUCTIONS (apply when generating multiple pages):
 ════════════════════════════════════════════════
-- Show ALL pages. Every page mentioned in the requirements must be fully implemented with real content — never put a placeholder div for a page
-- Each page: <div class="page" data-page="[page-name]" data-bridge-id="page-[page-name]"> with the first page having style="display:block" and others style="display:none"
-- Navigation sidebar or top nav: always visible across all pages, with active state highlighting on the current page's nav item
-- JS page switching: clicking nav items shows the correct page (display:block), hides all others (display:none), updates the active class on the nav
-- Each page must be as detailed and content-rich as the main page — same quality bar, same data density
-- Page transitions: add a brief opacity/transform fade when switching pages if it does not break functionality
+- Show ALL pages. Every page MUST be fully implemented with real content. ZERO tolerance for placeholder text like "此處將顯示..." or empty divs
+- Use a global showPage(name) function for navigation. Define it once in the script tag:
+  function showPage(name){document.querySelectorAll('.page').forEach(p=>p.style.display='none');document.getElementById('page-'+name)?.style.setProperty('display','block');document.querySelectorAll('[data-nav]').forEach(l=>l.classList.toggle('active',l.dataset.nav===name));}
+- Each page div: <div class="page" id="page-[name]" data-page="[name]"> — first page style="display:block", rest style="display:none"
+- Each nav link: <a href="#" data-nav="[name]" onclick="showPage('[name]');return false;">[name]</a>
+- If a list page has cards that lead to a detail page, each card must have onclick="showPage('[detail-name]');return false;"
+- Each page must be content-rich: list pages have 6-8 real items; detail pages fill every field with realistic data

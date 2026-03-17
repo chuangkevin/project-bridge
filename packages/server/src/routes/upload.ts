@@ -151,7 +151,7 @@ router.post('/:id/upload/:fileId/reanalyze', async (req: Request, res: Response)
   if (!apiKey) return res.status(400).json({ error: 'No API key configured' });
 
   try {
-    const { mimetype, storage_path: storagePath, original_name: originalName } = file;
+    const { mime_type: mimetype, storage_path: storagePath, original_name: originalName } = file;
     const isPdf = mimetype === 'application/pdf' || originalName?.toLowerCase().endsWith('.pdf');
     const isImage = mimetype.startsWith('image/');
 
