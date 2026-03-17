@@ -6,6 +6,7 @@ interface Version {
   is_current: number;
   is_multi_page: number;
   created_at: string;
+  preview?: string;
 }
 
 interface Props {
@@ -65,6 +66,16 @@ export default function VersionHistoryPanel({ projectId, currentVersion, onResto
           <div style={styles.list}>
             {versions.map(v => (
               <div key={v.id} style={{ ...styles.item, ...(v.is_current ? styles.itemCurrent : {}) }}>
+                {v.preview && (
+                  <div style={styles.thumbnailWrapper}>
+                    <iframe
+                      srcDoc={v.preview}
+                      style={styles.thumbnailIframe}
+                      sandbox="allow-scripts"
+                      title={`v${v.version} preview`}
+                    />
+                  </div>
+                )}
                 <div style={styles.itemLeft}>
                   <span style={styles.versionNum}>v{v.version}</span>
                   {v.is_current ? <span style={styles.currentBadge}>目前</span> : null}
@@ -94,7 +105,7 @@ const styles: Record<string, React.CSSProperties> = {
   overlay: { position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.15)' },
   panel: {
     position: 'absolute', right: '16px', top: '48px',
-    width: '280px', background: '#fff', borderRadius: '12px',
+    width: '360px', background: '#fff', borderRadius: '12px',
     boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: '1px solid #e2e8f0',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     overflow: 'hidden',
@@ -104,7 +115,9 @@ const styles: Record<string, React.CSSProperties> = {
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px' },
   empty: { padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' },
   list: { maxHeight: '320px', overflowY: 'auto' },
-  item: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #f8fafc' },
+  item: { display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #f8fafc' },
+  thumbnailWrapper: { width: '80px', height: '50px', overflow: 'hidden', borderRadius: '4px', border: '1px solid #e2e8f0', flexShrink: 0 },
+  thumbnailIframe: { width: '400px', height: '250px', transform: 'scale(0.2)', transformOrigin: '0 0', pointerEvents: 'none' as const, border: 'none' },
   itemCurrent: { background: '#f0f9ff' },
   itemLeft: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const },
   versionNum: { fontSize: '13px', fontWeight: 600, color: '#1e293b' },

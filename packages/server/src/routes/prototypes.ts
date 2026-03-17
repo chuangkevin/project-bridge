@@ -176,8 +176,8 @@ router.get('/:id/prototype/versions', (req: Request, res: Response) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const versions = db.prepare(
-    'SELECT id, version, is_current, is_multi_page, created_at FROM prototype_versions WHERE project_id = ? ORDER BY version DESC'
-  ).all(projectId) as { id: string; version: number; is_current: number; is_multi_page: number; created_at: string }[];
+    'SELECT id, version, is_current, is_multi_page, created_at, substr(html, 1, 500) as preview FROM prototype_versions WHERE project_id = ? ORDER BY version DESC'
+  ).all(projectId) as { id: string; version: number; is_current: number; is_multi_page: number; created_at: string; preview: string }[];
 
   return res.json({ versions });
 });

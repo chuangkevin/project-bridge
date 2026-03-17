@@ -237,14 +237,14 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // Design spec analysis injection (from uploaded files with visual analysis)
     const specAnalysisRows = db.prepare(
-      'SELECT original_name, visual_analysis FROM uploaded_files WHERE project_id = ? AND visual_analysis IS NOT NULL'
-    ).all(projectId) as { original_name: string; visual_analysis: string }[];
+      'SELECT original_name, visual_analysis, component_label FROM uploaded_files WHERE project_id = ? AND visual_analysis IS NOT NULL'
+    ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null }[];
     if (specAnalysisRows.length > 0) {
       let specBlock = '\n\n=== DESIGN SPEC ANALYSIS ===\n';
       specBlock += 'The following component specifications were extracted from uploaded design spec files.\n';
       specBlock += 'You MUST follow these component patterns precisely when generating UI:\n\n';
       for (const row of specAnalysisRows) {
-        specBlock += `--- From: ${row.original_name} ---\n${row.visual_analysis}\n\n`;
+        specBlock += `--- From: ${row.original_name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${row.visual_analysis}\n\n`;
       }
       specBlock += 'CRITICAL: Use the exact colors, card layouts, search bar styles, tag designs, and spacing patterns described above.\n';
       specBlock += '============================';

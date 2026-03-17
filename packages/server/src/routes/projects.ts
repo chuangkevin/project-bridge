@@ -98,6 +98,23 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/projects/:id — update project name
+router.patch('/:id', (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    db.prepare("UPDATE projects SET name = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(name.trim(), req.params.id);
+    return res.json({ success: true, name: name.trim() });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to update project' });
+  }
+});
+
 // DELETE /api/projects/:id — delete project
 router.delete('/:id', (req: Request, res: Response) => {
   try {

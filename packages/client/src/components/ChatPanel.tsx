@@ -18,6 +18,7 @@ interface UploadedFile {
   filename: string;
   extractedText?: string;
   visualAnalysisReady?: boolean;
+  componentLabel?: string;
 }
 
 interface ArtStyle {
@@ -98,6 +99,21 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const handleConstraintsChange = useCallback((c: Constraints) => {
     setConstraints(c);
   }, []);
+
+  const handleFileLabel = useCallback(async (fileId: string, label: string) => {
+    setAttachedFiles(prev =>
+      prev.map(f => f.id === fileId ? { ...f, componentLabel: label } : f)
+    );
+    try {
+      await fetch(`/api/projects/${projectId}/upload/${fileId}/label`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+    } catch {
+      // non-fatal
+    }
+  }, [projectId]);
 
   const uploadFile = async (file: File) => {
     setUploading(true);
@@ -420,27 +436,46 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       {attachedFiles.length > 0 && (
         <div style={styles.fileChips}>
           {attachedFiles.map(f => (
-            <div key={f.id} style={styles.fileChip} data-testid="file-chip">
-              <span style={styles.fileName}>{f.filename}</span>
-              {f.visualAnalysisReady && (
-                <span style={styles.visualBadge} data-testid="visual-analysis-badge" title="視覺分析已完成">
-                  👁 Visual
-                </span>
-              )}
-              {f.extractedText && (
+            <div key={f.id} style={styles.fileChipWrapper} data-testid="file-chip">
+              <div style={styles.fileChip}>
+                <span style={styles.fileName}>{f.filename}</span>
+                {f.visualAnalysisReady && (
+                  <span style={styles.visualBadge} data-testid="visual-analysis-badge" title="視覺分析已完成">
+                    👁 Visual
+                  </span>
+                )}
+                {f.extractedText && (
+                  <button
+                    type="button"
+                    style={styles.extractedBadge}
+                    onClick={() => { setViewingFile(f); setEditedText(f.extractedText || ''); }}
+                  >
+                    Text extracted
+                  </button>
+                )}
                 <button
-                  style={styles.extractedBadge}
-                  onClick={() => { setViewingFile(f); setEditedText(f.extractedText || ''); }}
+                  type="button"
+                  style={styles.removeFileBtn}
+                  onClick={() => setAttachedFiles(prev => prev.filter(x => x.id !== f.id))}
                 >
-                  Text extracted
+                  x
                 </button>
-              )}
-              <button
-                style={styles.removeFileBtn}
-                onClick={() => setAttachedFiles(prev => prev.filter(x => x.id !== f.id))}
+              </div>
+              <select
+                style={styles.labelSelect}
+                value={f.componentLabel || ''}
+                onChange={e => handleFileLabel(f.id, e.target.value)}
+                data-testid="file-label-select"
+                aria-label="標記用途"
               >
-                x
-              </button>
+                <option value="">標記用途（可選）</option>
+                <option value="卡片樣式">卡片樣式</option>
+                <option value="導覽列">導覽列</option>
+                <option value="搜尋列">搜尋列</option>
+                <option value="標籤元件">標籤元件</option>
+                <option value="整體風格">整體風格</option>
+                <option value="配色方案">配色方案</option>
+              </select>
             </div>
           ))}
         </div>
@@ -735,6 +770,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '6px',
     padding: '6px 16px',
   },
+  fileChipWrapper: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+  },
   fileChip: {
     display: 'flex',
     alignItems: 'center',
@@ -744,6 +784,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '14px',
     fontSize: '12px',
     color: '#1e293b',
+  },
+  labelSelect: {
+    fontSize: '11px',
+    padding: '2px 6px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    cursor: 'pointer',
+    outline: 'none',
   },
   fileName: {
     fontWeight: 500,

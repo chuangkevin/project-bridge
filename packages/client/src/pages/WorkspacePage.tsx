@@ -79,6 +79,10 @@ export default function WorkspacePage() {
 
   const iframeContainerRef = useRef<HTMLDivElement>(null);
 
+  // Inline rename state
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState('');
+
   const checkDesignActive = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${id}/design`);
@@ -189,6 +193,17 @@ export default function WorkspacePage() {
     });
     if (!res.ok) throw new Error('Save failed');
   }, [id]);
+
+  const handleExport = useCallback(() => {
+    if (!html || !project) return;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${project.name.replace(/[^a-z0-9\u4e00-\u9fff]/gi, '-')}-prototype.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [html, project]);
 
   const handleShare = useCallback(async () => {
     if (!project?.share_token) return;
@@ -301,6 +316,27 @@ export default function WorkspacePage() {
     }
   }, [annotations]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape: close any open popup
+      if (e.key === 'Escape') {
+        if (quickRegen) { setQuickRegen(null); setEditingAnnotation(null); }
+        if (showVersionHistory) setShowVersionHistory(false);
+      }
+      // A: toggle annotation mode (when not typing in an input)
+      if (e.key === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const active = document.activeElement;
+        const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
+        if (!isTyping && html) {
+          setAnnotationMode(prev => !prev);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [quickRegen, showVersionHistory, html]);
+
   const handleQuickRegen = useCallback(async () => {
     if (!quickRegen || !id || !quickRegen.instruction.trim()) return;
     setQuickRegen(prev => prev ? { ...prev, loading: true, error: null } : null);
@@ -355,6 +391,30 @@ export default function WorkspacePage() {
     }
   }, [quickRegen, id]);
 
+  const handleStartRename = () => {
+    setNameValue(project?.name ?? '');
+    setEditingName(true);
+  };
+
+  const handleSaveName = async () => {
+    if (!nameValue.trim() || nameValue === project?.name) {
+      setEditingName(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameValue.trim() }),
+      });
+      if (res.ok) {
+        setProject(prev => prev ? { ...prev, name: nameValue.trim() } : null);
+        setToastMsg('已重新命名');
+      }
+    } catch { /* ignore */ }
+    setEditingName(false);
+  };
+
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
@@ -382,7 +442,22 @@ export default function WorkspacePage() {
               <path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7" />
             </svg>
           </button>
-          <span style={styles.projectName}>{project.name}</span>
+          {editingName ? (
+            <input
+              autoFocus
+              title="專案名稱"
+              placeholder="專案名稱"
+              value={nameValue}
+              onChange={e => setNameValue(e.target.value)}
+              onBlur={handleSaveName}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false); }}
+              style={styles.projectNameInput}
+            />
+          ) : (
+            <span style={styles.projectName} onClick={handleStartRename} title="點擊重新命名">
+              {project.name}
+            </span>
+          )}
         </div>
         <div style={styles.toolbarCenter}>
           <DeviceSizeSelector value={deviceSize} onChange={setDeviceSize} />
@@ -407,12 +482,24 @@ export default function WorkspacePage() {
             History
           </button>
           <button
+            type="button"
+            style={{ ...styles.historyBtn, ...(html ? {} : { opacity: 0.5 }) }}
+            onClick={handleExport}
+            disabled={!html}
+            title="匯出 HTML"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <path d="M7 1v8M4 6l3 3 3-3M2 11h10"/>
+            </svg>
+            Export
+          </button>
+          <button
             style={{
               ...styles.annotateBtn,
               ...(annotationMode ? styles.annotateBtnActive : {}),
             }}
             onClick={() => setAnnotationMode(!annotationMode)}
-            title={annotationMode ? 'Disable annotation mode' : 'Enable annotation mode'}
+            title={annotationMode ? 'Disable annotation mode (A)' : 'Enable annotation mode (A)'}
             data-testid="annotate-toggle"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
@@ -432,6 +519,13 @@ export default function WorkspacePage() {
           </button>
         </div>
       </div>
+
+      {/* Annotation mode banner */}
+      {annotationMode && (
+        <div style={styles.annotationBanner}>
+          ✏️ 標注模式 — 點擊元件來修改或標注 · 按 <kbd style={styles.kbd}>A</kbd> 或 <kbd style={styles.kbd}>Esc</kbd> 退出
+        </div>
+      )}
 
       {/* Main content */}
       <div style={styles.body}>
@@ -535,6 +629,11 @@ export default function WorkspacePage() {
           <div style={styles.quickRegenHeader}>
             <span style={styles.quickRegenTitle}>
               ⟳ 修改元件 · <code style={styles.quickRegenTag}>{quickRegen.tagName.toLowerCase()}</code>
+              {editingAnnotation?.textContent && (
+                <span style={styles.quickRegenTextPreview}>
+                  {editingAnnotation.textContent.trim().slice(0, 30)}{editingAnnotation.textContent.trim().length > 30 ? '…' : ''}
+                </span>
+              )}
             </span>
             <button type="button" onClick={() => { setQuickRegen(null); setEditingAnnotation(null); }}
               style={styles.quickRegenClose}>×</button>
@@ -680,6 +779,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     fontWeight: 600,
     color: '#1e293b',
+    cursor: 'pointer',
+    textDecoration: 'underline dotted',
+  },
+  projectNameInput: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#1e293b',
+    border: '1px solid #3b82f6',
+    borderRadius: '4px',
+    padding: '2px 6px',
+    outline: 'none',
+    width: '200px',
   },
   historyBtn: {
     display: 'flex',
@@ -896,5 +1007,31 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#94a3b8',
     marginTop: '6px',
     textAlign: 'center' as const,
+  },
+  quickRegenTextPreview: {
+    display: 'block',
+    fontSize: '11px',
+    color: '#94a3b8',
+    fontWeight: 400,
+    marginTop: '2px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  annotationBanner: {
+    background: '#eff6ff',
+    borderBottom: '1px solid #bfdbfe',
+    padding: '6px 16px',
+    fontSize: '12px',
+    color: '#1d4ed8',
+    textAlign: 'center' as const,
+  },
+  kbd: {
+    background: '#dbeafe',
+    border: '1px solid #93c5fd',
+    borderRadius: '3px',
+    padding: '1px 5px',
+    fontSize: '11px',
+    fontFamily: 'monospace',
   },
 };

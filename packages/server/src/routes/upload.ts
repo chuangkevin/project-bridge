@@ -123,4 +123,15 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
   });
 });
 
+// PATCH /:id/upload/:fileId/label — set component label for uploaded file
+router.patch('/:id/upload/:fileId/label', (req: Request, res: Response) => {
+  const { id: projectId, fileId } = req.params;
+  const { label } = req.body;
+  if (typeof label !== 'string') return res.status(400).json({ error: 'label required' });
+  const file = db.prepare('SELECT id FROM uploaded_files WHERE id = ? AND project_id = ?').get(fileId, projectId);
+  if (!file) return res.status(404).json({ error: 'File not found' });
+  db.prepare('UPDATE uploaded_files SET component_label = ? WHERE id = ?').run(label || null, fileId);
+  return res.json({ success: true });
+});
+
 export default router;
