@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
 
+function isHtmlContent(content: string): boolean {
+  const t = content.trimStart().toLowerCase();
+  return t.startsWith('<!doctype html') || t.startsWith('<html');
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -355,10 +360,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 <span style={styles.answerLabel}>💬 回答</span>
                 {msg.content}
               </div>
-            ) : msg.messageType === 'generate' ? (
+            ) : (msg.messageType === 'generate' || isHtmlContent(msg.content)) ? (
               <div style={styles.generateBubble}>
-                {msg.content}
-                <div><span style={styles.generateTag}>✅ 已生成原型</span></div>
+                <span style={styles.generateTag}>✅ 已生成原型</span>
               </div>
             ) : (
               <div style={styles.assistantBubble}>

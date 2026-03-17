@@ -9,6 +9,18 @@ import AnnotationEditor from '../components/AnnotationEditor';
 import SpecPanel, { Annotation } from '../components/SpecPanel';
 import { SpecData } from '../components/SpecForm';
 
+// Strip [Attached files] block from user message display content
+function stripFileContent(content: string): string {
+  // Remove [Attached files]\n...--- end ---\n\n prefix
+  if (content.startsWith('[Attached files]')) {
+    const lastEnd = content.lastIndexOf('--- end ---');
+    if (lastEnd !== -1) {
+      return content.slice(lastEnd + '--- end ---'.length).replace(/^\n+/, '');
+    }
+  }
+  return content;
+}
+
 interface Project {
   id: string;
   name: string;
@@ -95,10 +107,11 @@ export default function WorkspacePage() {
       if (convRes.ok) {
         const convData = await convRes.json();
         setMessages(
-          convData.map((c: { id: string; role: string; content: string }) => ({
+          convData.map((c: { id: string; role: string; content: string; message_type?: string }) => ({
             id: c.id,
             role: c.role as 'user' | 'assistant',
-            content: c.content,
+            content: stripFileContent(c.content),
+            messageType: (c.message_type as 'user' | 'generate' | 'answer') || undefined,
           }))
         );
       }
