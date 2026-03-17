@@ -5,6 +5,8 @@ import db from '../db/connection';
 import upload from '../middleware/upload';
 import { extractText } from '../services/textExtractor';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
+import { renderPdfPages } from '../services/pdfPageRenderer';
+import { analyzeDesignSpec } from '../services/designSpecAnalyzer';
 
 const router = Router();
 
@@ -41,14 +43,44 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         'INSERT INTO uploaded_files (id, project_id, original_name, mime_type, file_size, storage_path, extracted_text) VALUES (?, ?, ?, ?, ?, ?, ?)'
       ).run(id, projectId, originalname, mimetype, size, storagePath, extractedText);
 
+      // Visual analysis for PDF and image files
+      const apiKey = process.env.OPENAI_API_KEY ||
+        (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
+
+      let visualAnalysisReady = false;
+
+      const isPdf = mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf');
+      const isImage = mimetype.startsWith('image/') &&
+        (mimetype.includes('png') || mimetype.includes('jpeg') || mimetype.includes('jpg') || mimetype.includes('webp'));
+
+      if (apiKey && (isPdf || isImage)) {
+        try {
+          let images: Buffer[] = [];
+          if (isPdf) {
+            images = await renderPdfPages(storagePath, 6);
+          } else if (isImage) {
+            const fs = await import('fs');
+            images = [fs.readFileSync(storagePath)];
+          }
+          if (images.length > 0) {
+            const analysisText = await analyzeDesignSpec(images, apiKey);
+            if (analysisText) {
+              db.prepare(
+                "UPDATE uploaded_files SET visual_analysis = ?, visual_analysis_at = datetime('now') WHERE id = ?"
+              ).run(analysisText, id);
+              visualAnalysisReady = true;
+            }
+          }
+        } catch (analysisErr) {
+          console.warn('[upload] Visual analysis failed (non-fatal):', (analysisErr as any).message);
+        }
+      }
+
       // Art style detection for PPTX/DOCX
       const isPptxOrDocx = mimetype.includes('presentationml') || mimetype.includes('wordprocessingml') ||
         originalname.toLowerCase().endsWith('.pptx') || originalname.toLowerCase().endsWith('.docx');
 
       if (isPptxOrDocx) {
-        const apiKey = process.env.OPENAI_API_KEY ||
-          (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
-
         if (apiKey) {
           try {
             const images = await extractImagesFromDocument(storagePath, mimetype);
@@ -82,6 +114,7 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         fileSize: size,
         extractedText,
         artStyleDetected: !!(artStyle?.detected_style),
+        visualAnalysisReady,
       });
     } catch (uploadErr: any) {
       console.error('Upload error:', uploadErr);
