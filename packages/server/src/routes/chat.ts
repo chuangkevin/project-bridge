@@ -4,6 +4,9 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import db from '../db/connection';
+import { classifyIntent } from '../services/intentClassifier';
+import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
+import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 
 const router = Router();
 
@@ -12,8 +15,9 @@ const systemPrompt = fs.readFileSync(
   'utf-8'
 );
 
+const qaSystemPrompt = `You are a helpful assistant for a UI prototype tool. Answer questions about uploaded specifications, design requirements, and prototype based on the conversation history. Be concise and specific.`;
+
 function getOpenAIApiKey(): string | null {
-  // Check env var first, then settings table
   if (process.env.OPENAI_API_KEY) {
     return process.env.OPENAI_API_KEY;
   }
@@ -39,7 +43,6 @@ async function callOpenAIWithRetry(
     } catch (err: any) {
       lastError = err;
       if (attempt < maxAttempts) {
-        // Exponential backoff: 1s, 2s
         const delay = Math.pow(2, attempt - 1) * 1000;
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -75,6 +78,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    // Classify intent
+    const intent = await classifyIntent(message.trim(), apiKey);
+
     // Load conversation history (last 20 messages)
     const history = db.prepare(
       'SELECT role, content FROM conversations WHERE project_id = ? ORDER BY created_at ASC LIMIT 20'
@@ -96,7 +102,56 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     }
 
-    // Query design profile and optionally append to system prompt
+    let fullResponse = '';
+
+    if (intent === 'question') {
+      // Q&A path
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        { role: 'system', content: qaSystemPrompt },
+        ...history.map(h => ({
+          role: h.role as 'user' | 'assistant',
+          content: h.content,
+        })),
+        { role: 'user', content: userContent },
+      ];
+
+      const openai = new OpenAI({ apiKey });
+
+      try {
+        const stream = await callOpenAIWithRetry(openai, messages);
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content;
+          if (content) {
+            fullResponse += content;
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          }
+        }
+      } catch (err: any) {
+        console.error('OpenAI API error:', err);
+        res.write(`data: ${JSON.stringify({ error: err.message || 'OpenAI API error' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Save user message with type 'user'
+      const userMsgId = uuidv4();
+      db.prepare(
+        'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
+      ).run(userMsgId, projectId, 'user', userContent, 'user');
+
+      // Save assistant Q&A response with type 'answer'
+      const assistantMsgId = uuidv4();
+      db.prepare(
+        'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
+      ).run(assistantMsgId, projectId, 'assistant', fullResponse, 'answer');
+
+      res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: 'answer' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Generate path
+    // Build effective system prompt
     let effectiveSystemPrompt = systemPrompt;
     const designRow = db.prepare('SELECT * FROM design_profiles WHERE project_id = ?').get(projectId) as any;
     if (designRow) {
@@ -108,12 +163,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
       if (hasDescription || hasReferenceAnalysis || hasTokens) {
         let profileBlock = '\n\n=== DESIGN PROFILE ===\n';
-        if (hasDescription) {
-          profileBlock += `Design Direction: ${designRow.description}\n`;
-        }
-        if (hasReferenceAnalysis) {
-          profileBlock += `Visual Reference Analysis:\n${designRow.reference_analysis}\n`;
-        }
+        if (hasDescription) profileBlock += `Design Direction: ${designRow.description}\n`;
+        if (hasReferenceAnalysis) profileBlock += `Visual Reference Analysis:\n${designRow.reference_analysis}\n`;
         if (hasTokens) {
           profileBlock += 'Design Tokens:\n';
           if (tokens.primaryColor) profileBlock += `- Primary Color: ${tokens.primaryColor}\n`;
@@ -129,7 +180,20 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     }
 
-    // Build messages array
+    // Art style injection
+    const artStyle = db.prepare('SELECT * FROM art_style_preferences WHERE project_id = ?').get(projectId) as any;
+    if (artStyle && artStyle.apply_style && artStyle.detected_style) {
+      effectiveSystemPrompt += `\n\n=== ART STYLE ===\nApply this visual art style to your generated UI:\n${artStyle.detected_style}\nNote: If a Design Profile is also active, Design Profile color tokens take precedence over conflicting art style attributes.\n=================`;
+    }
+
+    // Multi-page detection
+    const pageStructure = await analyzePageStructure(message.trim(), apiKey);
+    if (pageStructure.multiPage && pageStructure.pages.length > 1) {
+      const pageList = pageStructure.pages.map(p => `- "${p}"`).join('\n');
+      effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===\nGenerate a multi-page prototype with ALL of these pages:\n${pageList}\n\nRequirements:\n- Use a navigation element (sidebar or top nav) that is always visible\n- Each page as: <div class="page" data-page="{page-name}"> (first page visible, others hidden with display:none)\n- Include JavaScript to show/hide pages when nav links are clicked\n- Highlight the active nav item\n- All pages must follow the same design style\n============================`;
+    }
+
+    // Build messages for generation
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: effectiveSystemPrompt },
       ...history.map(h => ({
@@ -141,11 +205,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     const openai = new OpenAI({ apiKey });
 
-    let fullResponse = '';
-
     try {
       const stream = await callOpenAIWithRetry(openai, messages);
-
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) {
@@ -163,53 +224,61 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Save user message
     const userMsgId = uuidv4();
     db.prepare(
-      'INSERT INTO conversations (id, project_id, role, content) VALUES (?, ?, ?, ?)'
-    ).run(userMsgId, projectId, 'user', userContent);
+      'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
+    ).run(userMsgId, projectId, 'user', userContent, 'user');
 
     // Save assistant response
     const assistantMsgId = uuidv4();
     db.prepare(
-      'INSERT INTO conversations (id, project_id, role, content) VALUES (?, ?, ?, ?)'
-    ).run(assistantMsgId, projectId, 'assistant', fullResponse);
+      'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
+    ).run(assistantMsgId, projectId, 'assistant', fullResponse, 'generate');
 
-    // Extract HTML — the response IS the HTML
-    const html = fullResponse.trim();
+    // Extract HTML
+    let html = fullResponse.trim();
+
+    // Fix iframe nesting: inject <base target="_blank"> so all links open in new tab
+    if (html.toLowerCase().includes('<head>')) {
+      html = html.replace(/<head>/i, '<head><base target="_blank">');
+    } else if (html.toLowerCase().includes('<head ')) {
+      html = html.replace(/(<head[^>]*>)/i, '$1<base target="_blank">');
+    }
 
     // Only create prototype version if response looks like HTML
     if (html.toLowerCase().includes('<!doctype html') || html.toLowerCase().includes('<html')) {
-      // Get current max version
       const maxVersion = db.prepare(
         'SELECT MAX(version) as maxV FROM prototype_versions WHERE project_id = ?'
       ).get(projectId) as any;
       const newVersion = (maxVersion?.maxV || 0) + 1;
 
-      // Set all existing versions to not current
       db.prepare(
         'UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?'
       ).run(projectId);
 
-      // Insert new version
       const versionId = uuidv4();
       db.prepare(
-        'INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current) VALUES (?, ?, ?, ?, ?, 1)'
-      ).run(versionId, projectId, assistantMsgId, html, newVersion);
+        'INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+      ).run(
+        versionId,
+        projectId,
+        assistantMsgId,
+        html,
+        newVersion,
+        pageStructure.multiPage ? 1 : 0,
+        JSON.stringify(pageStructure.pages)
+      );
 
-      // Update project's updated_at
       db.prepare(
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?"
       ).run(projectId);
 
-      // Send done event with html
-      res.write(`data: ${JSON.stringify({ done: true, html })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, html, messageType: 'generate', isMultiPage: pageStructure.multiPage, pages: pageStructure.pages })}\n\n`);
     } else {
-      // Response wasn't HTML, just signal done
-      res.write(`data: ${JSON.stringify({ done: true, html: null })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: 'generate' })}\n\n`);
     }
 
     res.end();
   } catch (err: any) {
     console.error('Chat error:', err);
-    // If headers already sent, write SSE error
     if (res.headersSent) {
       res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
       res.end();

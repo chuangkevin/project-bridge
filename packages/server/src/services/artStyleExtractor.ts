@@ -1,0 +1,88 @@
+import yauzl from 'yauzl';
+
+export async function extractImagesFromDocument(filePath: string, mimeType: string): Promise<Buffer[]> {
+  const ext = mimeType.toLowerCase();
+  const isPptx = ext.includes('presentationml') || ext.includes('pptx') || filePath.toLowerCase().endsWith('.pptx');
+  const isDocx = ext.includes('wordprocessingml') || ext.includes('docx') || filePath.toLowerCase().endsWith('.docx');
+
+  if (!isPptx && !isDocx) return [];
+
+  const mediaFolder = isPptx ? 'ppt/media/' : 'word/media/';
+  const images: Buffer[] = [];
+
+  return new Promise((resolve) => {
+    yauzl.open(filePath, { lazyEntries: true }, (err, zipfile) => {
+      if (err || !zipfile) {
+        resolve([]);
+        return;
+      }
+
+      zipfile.readEntry();
+      zipfile.on('entry', (entry) => {
+        if (images.length >= 3) {
+          zipfile.close();
+          resolve(images);
+          return;
+        }
+
+        const name = entry.fileName.toLowerCase();
+        const isMedia = name.startsWith(mediaFolder.toLowerCase());
+        const isImage = /\.(png|jpg|jpeg|gif|bmp|webp)$/.test(name);
+
+        if (isMedia && isImage) {
+          zipfile.openReadStream(entry, (streamErr, stream) => {
+            if (streamErr || !stream) {
+              zipfile.readEntry();
+              return;
+            }
+
+            const chunks: Buffer[] = [];
+            stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+            stream.on('end', () => {
+              images.push(Buffer.concat(chunks));
+              zipfile.readEntry();
+            });
+            stream.on('error', () => zipfile.readEntry());
+          });
+        } else {
+          zipfile.readEntry();
+        }
+      });
+
+      zipfile.on('end', () => resolve(images));
+      zipfile.on('error', () => resolve(images));
+    });
+  });
+}
+
+export async function analyzeArtStyle(images: Buffer[], apiKey: string): Promise<string> {
+  const OpenAI = (await import('openai')).default;
+  const openai = new OpenAI({ apiKey });
+
+  const imageMessages = images.map(buf => ({
+    type: 'image_url' as const,
+    image_url: {
+      url: `data:image/png;base64,${buf.toString('base64')}`,
+      detail: 'low' as const,
+    },
+  }));
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.',
+          },
+          ...imageMessages,
+        ],
+      },
+    ],
+    max_tokens: 150,
+  });
+
+  return response.choices[0]?.message?.content?.trim() || '';
+}

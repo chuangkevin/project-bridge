@@ -5,6 +5,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  messageType?: 'user' | 'generate' | 'answer';
 }
 
 interface UploadedFile {
@@ -13,11 +14,16 @@ interface UploadedFile {
   extractedText?: string;
 }
 
+interface ArtStyle {
+  summary: string;
+  applyStyle: boolean;
+}
+
 interface Props {
   projectId: string;
   messages: ChatMessage[];
   onNewMessages: (userMsg: ChatMessage, assistantMsg: ChatMessage) => void;
-  onHtmlGenerated: (html: string) => void;
+  onHtmlGenerated: (data: { html: string; isMultiPage: boolean; pages: string[] }) => void;
 }
 
 export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated }: Props) {
@@ -32,6 +38,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [viewingFile, setViewingFile] = useState<UploadedFile | null>(null);
   const [editedText, setEditedText] = useState('');
   const [constraints, setConstraints] = useState<Constraints | null>(null);
+  const [artStyle, setArtStyle] = useState<ArtStyle | null>(null);
+  const [artStyleLoading, setArtStyleLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,6 +47,40 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
+
+  const fetchArtStyle = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/art-style`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.summary) {
+          setArtStyle({ summary: data.summary, applyStyle: !!data.applyStyle });
+        }
+      }
+    } catch {
+      // silently fail
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchArtStyle();
+  }, [fetchArtStyle]);
+
+  const handleArtStyleToggle = useCallback(async (enabled: boolean) => {
+    setArtStyleLoading(true);
+    try {
+      await fetch(`/api/projects/${projectId}/art-style`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applyStyle: enabled }),
+      });
+      setArtStyle(prev => prev ? { ...prev, applyStyle: enabled } : null);
+    } catch {
+      // silently fail
+    } finally {
+      setArtStyleLoading(false);
+    }
+  }, [projectId]);
 
   const handleConstraintsChange = useCallback((c: Constraints) => {
     setConstraints(c);
@@ -75,6 +117,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         filename: data.filename,
         extractedText: data.extractedText,
       }]);
+
+      // Refetch art style in case a new image was uploaded
+      fetchArtStyle();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to upload file');
     } finally {
@@ -159,6 +204,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       const decoder = new TextDecoder();
       let fullContent = '';
       let receivedHtml: string | null = null;
+      let receivedMessageType: 'user' | 'generate' | 'answer' | undefined;
+      let receivedIsMultiPage = false;
+      let receivedPages: string[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -184,6 +232,15 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               if (data.html) {
                 receivedHtml = data.html;
               }
+              if (data.messageType) {
+                receivedMessageType = data.messageType;
+              }
+              if (data.isMultiPage !== undefined) {
+                receivedIsMultiPage = !!data.isMultiPage;
+              }
+              if (data.pages) {
+                receivedPages = data.pages;
+              }
             }
           } catch {
             // skip malformed JSON lines
@@ -195,6 +252,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: fullContent,
+        messageType: receivedMessageType,
       };
 
       setLocalUserMsg(null);
@@ -202,7 +260,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       onNewMessages(userMsg, assistantMsg);
 
       if (receivedHtml) {
-        onHtmlGenerated(receivedHtml);
+        onHtmlGenerated({ html: receivedHtml, isMultiPage: receivedIsMultiPage, pages: receivedPages });
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
@@ -235,6 +293,31 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         <h3 style={styles.headerTitle}>Chat</h3>
       </div>
 
+      {/* Art Style Card */}
+      {artStyle && artStyle.summary && (
+        <div style={styles.artStyleCard} data-testid="art-style-card">
+          <div style={styles.artStyleTop}>
+            <span style={styles.artStyleTitle}>🎨 偵測到美術風格</span>
+            <label style={styles.toggleLabel}>
+              <input
+                type="checkbox"
+                checked={artStyle.applyStyle}
+                onChange={e => handleArtStyleToggle(e.target.checked)}
+                disabled={artStyleLoading}
+                style={styles.toggleInput}
+                aria-label="Apply art style"
+                data-testid="art-style-toggle"
+              />
+              <span style={{
+                ...styles.toggleSlider,
+                backgroundColor: artStyle.applyStyle ? '#3b82f6' : '#cbd5e1',
+              }} />
+            </label>
+          </div>
+          <p style={styles.artStyleSummary}>{artStyle.summary}</p>
+        </div>
+      )}
+
       {/* Drop zone */}
       <div
         style={{
@@ -263,9 +346,25 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             key={msg.id}
             style={msg.role === 'user' ? styles.userMsgRow : styles.assistantMsgRow}
           >
-            <div style={msg.role === 'user' ? styles.userBubble : styles.assistantBubble}>
-              {msg.content}
-            </div>
+            {msg.role === 'user' ? (
+              <div style={styles.userBubble}>
+                {msg.content}
+              </div>
+            ) : msg.messageType === 'answer' ? (
+              <div style={styles.answerBubble}>
+                <span style={styles.answerLabel}>💬 回答</span>
+                {msg.content}
+              </div>
+            ) : msg.messageType === 'generate' ? (
+              <div style={styles.generateBubble}>
+                {msg.content}
+                <div><span style={styles.generateTag}>✅ 已生成原型</span></div>
+              </div>
+            ) : (
+              <div style={styles.assistantBubble}>
+                {msg.content}
+              </div>
+            )}
           </div>
         ))}
         {streaming && streamingContent && (
@@ -419,6 +518,51 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#1e293b',
   },
+  artStyleCard: {
+    margin: '8px 12px 0',
+    padding: '10px 12px',
+    backgroundColor: '#fafafa',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+  },
+  artStyleTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '4px',
+  },
+  artStyleTitle: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#1e293b',
+  },
+  artStyleSummary: {
+    margin: 0,
+    fontSize: '11px',
+    color: '#64748b',
+    lineHeight: '1.4',
+  },
+  toggleLabel: {
+    position: 'relative',
+    display: 'inline-flex',
+    alignItems: 'center',
+    cursor: 'pointer',
+    width: '36px',
+    height: '20px',
+    flexShrink: 0,
+  },
+  toggleInput: {
+    position: 'absolute',
+    opacity: 0,
+    width: 0,
+    height: 0,
+  },
+  toggleSlider: {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: '10px',
+    transition: 'background-color 0.2s',
+  },
   dropZone: {
     margin: '8px 12px 0',
     padding: '10px',
@@ -482,6 +626,52 @@ const styles: Record<string, React.CSSProperties> = {
     wordBreak: 'break-word' as const,
     maxHeight: '200px',
     overflowY: 'auto',
+  },
+  answerBubble: {
+    maxWidth: '85%',
+    padding: '10px 14px',
+    backgroundColor: '#eff6ff',
+    color: '#1e293b',
+    borderRadius: '14px 14px 14px 4px',
+    borderLeft: '3px solid #3b82f6',
+    fontSize: '13px',
+    lineHeight: '1.5',
+    fontFamily: 'inherit',
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-word' as const,
+    maxHeight: '200px',
+    overflowY: 'auto' as const,
+  },
+  generateBubble: {
+    maxWidth: '85%',
+    padding: '10px 14px',
+    backgroundColor: '#f1f5f9',
+    color: '#1e293b',
+    borderRadius: '14px 14px 14px 4px',
+    fontSize: '13px',
+    lineHeight: '1.5',
+    fontFamily: '"SF Mono", "Fira Code", "Consolas", monospace',
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-word' as const,
+    maxHeight: '200px',
+    overflowY: 'auto' as const,
+  },
+  generateTag: {
+    display: 'inline-block',
+    marginTop: '6px',
+    padding: '2px 8px',
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+    borderRadius: '10px',
+    fontSize: '11px',
+    fontWeight: 600 as const,
+  },
+  answerLabel: {
+    fontSize: '11px',
+    color: '#3b82f6',
+    fontWeight: 600 as const,
+    marginBottom: '4px',
+    display: 'block',
   },
   cursor: {
     animation: 'blink 1s infinite',

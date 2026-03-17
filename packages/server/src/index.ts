@@ -11,6 +11,7 @@ import settingsRouter from './routes/settings';
 import uploadRouter from './routes/upload';
 import annotationsRouter from './routes/annotations';
 import designRouter from './routes/design';
+import artStyleRouter from './routes/artStyle';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,6 +28,7 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/projects', uploadRouter);
 app.use('/api/projects', annotationsRouter);
 app.use('/api/projects', designRouter);
+app.use('/api/projects', artStyleRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

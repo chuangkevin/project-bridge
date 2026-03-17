@@ -94,6 +94,53 @@ router.put('/:id/design', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/projects/:id/design/summarize-direction — summarize analyses into Chinese design direction
+router.post('/:id/design/summarize-direction', async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const { analyses } = req.body;
+    if (!Array.isArray(analyses) || analyses.length === 0) {
+      return res.status(400).json({ error: 'analyses array is required' });
+    }
+
+    const apiKey = getOpenAIApiKey();
+    if (!apiKey) {
+      return res.status(400).json({ error: 'OpenAI API key not configured.' });
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    const combined = analyses.map((a, i) => `參考圖 ${i + 1}:\n${a}`).join('\n\n---\n\n');
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: '你是一位設計顧問。根據提供的視覺參考圖分析，用繁體中文寫出 2-4 句精簡的設計方向描述，涵蓋：整體風格、主色調、排版感受、元件風格。語氣簡潔專業，像在給設計師的 brief。',
+        },
+        {
+          role: 'user',
+          content: `以下是視覺參考圖的分析結果，請總結成設計方向：\n\n${combined}`,
+        },
+      ],
+      max_tokens: 300,
+      temperature: 0.3,
+    });
+
+    const direction = response.choices[0]?.message?.content?.trim() || '';
+    return res.json({ direction });
+  } catch (err: any) {
+    console.error('Error summarizing design direction:', err);
+    return res.status(500).json({ error: 'Could not summarize design direction' });
+  }
+});
+
 // POST /api/projects/:id/design/analyze-reference — analyze image via Vision API
 router.post('/:id/design/analyze-reference', (req: Request, res: Response, next: NextFunction) => {
   const projectId = req.params.id;

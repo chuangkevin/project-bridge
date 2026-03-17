@@ -15,7 +15,7 @@ router.get('/:shareToken', (req: Request, res: Response) => {
     }
 
     const currentPrototype = db.prepare(
-      'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+      'SELECT * FROM prototype_versions WHERE project_id = ? AND is_current = 1'
     ).get(project.id) as any;
 
     const annotations = db.prepare(
@@ -26,6 +26,8 @@ router.get('/:shareToken', (req: Request, res: Response) => {
       name: project.name,
       html: currentPrototype?.html || null,
       annotations,
+      isMultiPage: !!(currentPrototype?.is_multi_page),
+      pages: currentPrototype ? JSON.parse(currentPrototype.pages || '[]') : [],
     });
   } catch (err: any) {
     console.error('Error getting shared project:', err);

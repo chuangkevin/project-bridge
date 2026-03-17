@@ -37,8 +37,10 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
   const [tokens, setTokens] = useState<DesignTokens>({ ...DEFAULT_TOKENS });
   const [references, setReferences] = useState<ReferenceImage[]>([]);
   const [saving, setSaving] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevAllDoneRef = useRef(false);
 
   // Load design profile on mount
   useEffect(() => {
@@ -66,6 +68,40 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
     const t = setTimeout(() => setToastMsg(null), 2500);
     return () => clearTimeout(t);
   }, [toastMsg]);
+
+  // Auto-summarize design direction in Chinese when all images finish analyzing
+  useEffect(() => {
+    if (references.length === 0) {
+      prevAllDoneRef.current = false;
+      return;
+    }
+    const allDone = references.every(r => !r.loading);
+    const wasAllDone = prevAllDoneRef.current;
+    prevAllDoneRef.current = allDone;
+
+    if (!allDone || wasAllDone) return;
+
+    const validAnalyses = references
+      .filter(r => r.analysis && r.analysis !== '分析失敗')
+      .map(r => r.analysis as string);
+
+    if (validAnalyses.length === 0) return;
+
+    setSummarizing(true);
+    fetch(`/api/projects/${projectId}/design/summarize-direction`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analyses: validAnalyses }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.direction) {
+          setDescription(data.direction);
+        }
+      })
+      .catch(() => { /* silently fail */ })
+      .finally(() => setSummarizing(false));
+  }, [references, projectId]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -172,13 +208,22 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
 
         {/* Section 1: Design Direction */}
         <div style={panelStyles.section}>
-          <label style={panelStyles.sectionLabel}>設計方向</label>
+          <div style={panelStyles.sectionLabelRow}>
+            <label style={panelStyles.sectionLabel}>設計方向</label>
+            {summarizing && (
+              <span style={panelStyles.summarizingLabel}>
+                <span style={panelStyles.summarizingSpinner} />
+                AI 生成中...
+              </span>
+            )}
+          </div>
           <textarea
             style={panelStyles.textarea}
             value={description}
             onChange={e => setDescription(e.target.value)}
             placeholder="描述你的設計風格，例如：現代簡約，企業感，主打信任感..."
             rows={4}
+            disabled={summarizing}
             data-testid="design-description"
           />
         </div>
@@ -644,6 +689,28 @@ const panelStyles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     fontFamily: 'inherit',
+  },
+  sectionLabelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '2px',
+  },
+  summarizingLabel: {
+    fontSize: '11px',
+    color: '#3b82f6',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  summarizingSpinner: {
+    display: 'inline-block',
+    width: '10px',
+    height: '10px',
+    border: '2px solid #e2e8f0',
+    borderTop: '2px solid #3b82f6',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
   },
   toast: {
     position: 'absolute',

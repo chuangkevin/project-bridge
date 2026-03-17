@@ -15,6 +15,8 @@ interface Project {
   share_token: string;
   currentHtml: string | null;
   currentVersion: number | null;
+  isMultiPage?: boolean;
+  pages?: string[];
 }
 
 export default function WorkspacePage() {
@@ -29,6 +31,9 @@ export default function WorkspacePage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [leftTab, setLeftTab] = useState<'chat' | 'design'>('chat');
   const [designActive, setDesignActive] = useState(false);
+  const [isMultiPage, setIsMultiPage] = useState(false);
+  const [pages, setPages] = useState<string[]>([]);
+  const [activePage, setActivePage] = useState<string>('');
 
   // Annotation state
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -84,6 +89,8 @@ export default function WorkspacePage() {
       const projData = await projRes.json();
       setProject(projData);
       setHtml(projData.currentHtml);
+      setIsMultiPage(!!projData.isMultiPage);
+      setPages(projData.pages || []);
 
       if (convRes.ok) {
         const convData = await convRes.json();
@@ -124,8 +131,19 @@ export default function WorkspacePage() {
     setMessages(prev => [...prev, userMsg, assistantMsg]);
   }, []);
 
-  const handleHtmlGenerated = useCallback((newHtml: string) => {
-    setHtml(newHtml);
+  const handleHtmlGenerated = useCallback((data: { html: string; isMultiPage: boolean; pages: string[] }) => {
+    setHtml(data.html);
+    setIsMultiPage(data.isMultiPage);
+    setPages(data.pages);
+    setActivePage('');
+  }, []);
+
+  const handleNavigatePage = useCallback((page: string) => {
+    setActivePage(page);
+    const iframe = document.querySelector('iframe');
+    if (iframe?.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'navigate', page }, '*');
+    }
   }, []);
 
   const handleShare = useCallback(async () => {
@@ -333,6 +351,24 @@ export default function WorkspacePage() {
           </div>
         </div>
         <div style={styles.previewPane} ref={iframeContainerRef}>
+          {isMultiPage && pages.length > 1 && (
+            <div style={styles.pageTabBar}>
+              {pages.map(page => (
+                <button
+                  key={page}
+                  type="button"
+                  style={{
+                    ...styles.pageTab,
+                    ...(activePage === page ? styles.pageTabActive : {}),
+                  }}
+                  onClick={() => handleNavigatePage(page)}
+                  data-testid={`page-tab-${page}`}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+          )}
           <PreviewPanel
             html={html}
             deviceSize={deviceSize}
@@ -537,5 +573,33 @@ const styles: Record<string, React.CSSProperties> = {
   previewPane: {
     flex: 1,
     overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  pageTabBar: {
+    display: 'flex',
+    gap: '4px',
+    padding: '6px 12px',
+    backgroundColor: '#ffffff',
+    borderBottom: '1px solid #e2e8f0',
+    flexShrink: 0,
+    overflowX: 'auto',
+  },
+  pageTab: {
+    padding: '4px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    backgroundColor: '#f8fafc',
+    color: '#475569',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+  pageTabActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+    color: '#ffffff',
   },
 };
