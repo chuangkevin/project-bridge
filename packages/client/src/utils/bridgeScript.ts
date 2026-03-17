@@ -133,6 +133,17 @@ export const BRIDGE_SCRIPT = `
       if (target) {
         target.style.display = '';
       }
+    } else if (e.data.type === 'navigate-page') {
+      var npName = e.data.page;
+      var npAll = document.querySelectorAll('[data-page]');
+      if (npAll.length > 0) {
+        npAll.forEach(function(p) { p.style.display = 'none'; });
+        var npTarget = document.querySelector('[data-page="' + npName + '"]');
+        if (npTarget) { npTarget.style.display = ''; }
+      } else {
+        var npEl = document.getElementById(npName);
+        if (npEl) { npEl.scrollIntoView(); }
+      }
     } else if (e.data.type === 'swap-component') {
       var el = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
       if (el) {

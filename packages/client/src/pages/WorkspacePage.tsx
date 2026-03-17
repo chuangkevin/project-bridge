@@ -9,6 +9,7 @@ import Toast from '../components/Toast';
 import AnnotationEditor from '../components/AnnotationEditor';
 import SpecPanel, { Annotation } from '../components/SpecPanel';
 import VersionHistoryPanel from '../components/VersionHistoryPanel';
+import TokenPanel, { DesignToken } from '../components/TokenPanel';
 import { SpecData } from '../components/SpecForm';
 
 // Strip [Attached files] block from user message display content
@@ -51,6 +52,11 @@ export default function WorkspacePage() {
 
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
+  // Token panel state
+  const [showTokens, setShowTokens] = useState(false);
+  const [tokens, setTokens] = useState<DesignToken[]>([]);
+  const [tokensLoading, setTokensLoading] = useState(false);
+
   // Annotation state
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -71,6 +77,9 @@ export default function WorkspacePage() {
     error: string | null;
     showAnnotationForm: boolean;
   } | null>(null);
+
+  // Prompt history chips for quick regen (shared localStorage key with ChatPanel)
+  const [regenHistory, setRegenHistory] = useState<string[]>([]);
 
   // Spec panel state
   const [specPanelCollapsed, setSpecPanelCollapsed] = useState(false);
@@ -116,6 +125,22 @@ export default function WorkspacePage() {
       }
     } catch {
       // silently fail
+    }
+  }, [id]);
+
+  const handleOpenTokens = useCallback(async () => {
+    setShowTokens(true);
+    setTokensLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/prototype/tokens`);
+      if (res.ok) {
+        const data = await res.json();
+        setTokens(data.tokens || []);
+      }
+    } catch {
+      setTokens([]);
+    } finally {
+      setTokensLoading(false);
     }
   }, [id]);
 
@@ -178,6 +203,19 @@ export default function WorkspacePage() {
     checkDesignSpec();
   }, [fetchProject, fetchAnnotations, checkDesignActive, checkDesignSpec]);
 
+  // Load prompt history when quick regen popup opens
+  useEffect(() => {
+    if (quickRegen && !quickRegen.showAnnotationForm) {
+      try {
+        const raw = localStorage.getItem('pb-prompt-history');
+        const parsed = raw ? JSON.parse(raw) : [];
+        setRegenHistory(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        // silently fail
+      }
+    }
+  }, [quickRegen?.bridgeId, quickRegen?.showAnnotationForm]);
+
   const handleNewMessages = useCallback((userMsg: ChatMessage, assistantMsg: ChatMessage) => {
     setMessages(prev => [...prev, userMsg, assistantMsg]);
   }, []);
@@ -193,7 +231,7 @@ export default function WorkspacePage() {
     setActivePage(page);
     const iframe = document.querySelector('iframe');
     if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'navigate', page }, '*');
+      iframe.contentWindow.postMessage({ type: 'navigate-page', page }, '*');
     }
   }, []);
 
@@ -489,6 +527,18 @@ export default function WorkspacePage() {
           )}
           <button
             type="button"
+            style={{ ...styles.historyBtn, ...(showTokens ? styles.annotateBtnActive : {}), ...(!html ? { opacity: 0.5 } : {}) }}
+            onClick={() => {
+              if (showTokens) { setShowTokens(false); } else { handleOpenTokens(); }
+            }}
+            title="Design Tokens"
+            disabled={!html}
+            data-testid="tokens-btn"
+          >
+            🎨 Tokens
+          </button>
+          <button
+            type="button"
             style={styles.historyBtn}
             onClick={() => setShowVersionHistory(true)}
             title="版本歷史"
@@ -622,14 +672,15 @@ export default function WorkspacePage() {
         </div>
         <div style={styles.previewPane} ref={iframeContainerRef}>
           {isMultiPage && pages.length > 1 && (
-            <div style={styles.pageTabBar}>
+            <div style={styles.pageSidebar}>
+              <div style={styles.pageSidebarLabel}>Pages</div>
               {pages.map(page => (
                 <button
                   key={page}
                   type="button"
                   style={{
-                    ...styles.pageTab,
-                    ...(activePage === page ? styles.pageTabActive : {}),
+                    ...styles.pageSidebarItem,
+                    ...(activePage === page ? styles.pageSidebarItemActive : {}),
                   }}
                   onClick={() => handleNavigatePage(page)}
                   data-testid={`page-tab-${page}`}
@@ -690,6 +741,21 @@ export default function WorkspacePage() {
             <button type="button" onClick={() => { setQuickRegen(null); setEditingAnnotation(null); }}
               style={styles.quickRegenClose}>×</button>
           </div>
+          {regenHistory.length > 0 && (
+            <div style={styles.regenHistoryChips}>
+              {regenHistory.slice(0, 3).map((p, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  style={styles.regenHistoryChip}
+                  onClick={() => setQuickRegen(prev => prev ? { ...prev, instruction: p } : null)}
+                  title={p}
+                >
+                  {p.length > 30 ? p.slice(0, 30) + '…' : p}
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
             autoFocus
             placeholder="描述要怎麼修改這個元件..."
@@ -733,6 +799,14 @@ export default function WorkspacePage() {
           position={{ x: editingAnnotation.rect.x, y: editingAnnotation.rect.y }}
           onSave={handleSaveAnnotation}
           onCancel={() => { setEditingAnnotation(null); setQuickRegen(null); }}
+        />
+      )}
+
+      {showTokens && (
+        <TokenPanel
+          tokens={tokens}
+          loading={tokensLoading}
+          onClose={() => setShowTokens(false)}
         />
       )}
 
@@ -953,33 +1027,47 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflow: 'hidden',
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'row',
   },
-  pageTabBar: {
-    display: 'flex',
-    gap: '4px',
-    padding: '6px 12px',
-    backgroundColor: '#ffffff',
-    borderBottom: '1px solid #e2e8f0',
+  pageSidebar: {
+    width: '120px',
     flexShrink: 0,
-    overflowX: 'auto',
+    borderRight: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflowY: 'auto' as const,
+    padding: '8px 6px',
+    gap: '4px',
   },
-  pageTab: {
-    padding: '4px 12px',
-    border: '1px solid #e2e8f0',
+  pageSidebarLabel: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: '#94a3b8',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    padding: '2px 6px 6px',
+    flexShrink: 0,
+  },
+  pageSidebarItem: {
+    display: 'block',
+    width: '100%',
+    padding: '6px 8px',
+    border: '1px solid transparent',
     borderRadius: '6px',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'transparent',
     color: '#475569',
     fontSize: '12px',
     fontWeight: 500,
     cursor: 'pointer',
-    whiteSpace: 'nowrap',
+    textAlign: 'left' as const,
+    wordBreak: 'break-word' as const,
     flexShrink: 0,
   },
-  pageTabActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-    color: '#ffffff',
+  pageSidebarItemActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    color: '#1d4ed8',
   },
   quickRegenPopup: {
     position: 'fixed' as const,
@@ -1159,5 +1247,27 @@ const styles: Record<string, React.CSSProperties> = {
     border: '2px solid #333',
     borderRadius: '40px',
     overflow: 'hidden',
+  },
+  regenHistoryChips: {
+    display: 'flex',
+    flexWrap: 'nowrap' as const,
+    overflowX: 'auto' as const,
+    gap: '4px',
+    marginBottom: '6px',
+    scrollbarWidth: 'none' as const,
+  },
+  regenHistoryChip: {
+    flexShrink: 0,
+    padding: '3px 8px',
+    backgroundColor: '#f1f5f9',
+    border: '1px solid #e2e8f0',
+    borderRadius: '999px',
+    fontSize: '12px',
+    color: '#475569',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
+    maxWidth: '200px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
 };

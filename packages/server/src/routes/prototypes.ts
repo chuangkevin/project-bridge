@@ -169,6 +169,73 @@ RULES:
   }
 });
 
+// GET /:id/prototype/tokens — extract CSS custom property tokens from current prototype
+router.get('/:id/prototype/tokens', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const version = db.prepare(
+    'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+  ).get(projectId) as { html: string } | undefined;
+
+  if (!version) {
+    return res.json({ tokens: [] });
+  }
+
+  // Extract all <style> tag contents
+  const styleContents: string[] = [];
+  const styleRe = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+  let styleMatch: RegExpExecArray | null;
+  while ((styleMatch = styleRe.exec(version.html)) !== null) {
+    styleContents.push(styleMatch[1]);
+  }
+
+  const combined = styleContents.join('\n');
+
+  // Extract CSS custom property definitions: --name: value
+  const tokenRe = /(--[\w-]+)\s*:\s*([^;}{]+)/g;
+  const seen = new Set<string>();
+  const tokens: { name: string; value: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(combined)) !== null) {
+    const name = m[1].trim();
+    const value = m[2].trim();
+    if (!seen.has(name)) {
+      seen.add(name);
+      tokens.push({ name, value });
+    }
+  }
+
+  return res.json({ tokens });
+});
+
+// GET /:id/prototype — return current prototype HTML and extracted page list
+router.get('/:id/prototype', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const version = db.prepare(
+    'SELECT html, is_multi_page FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+  ).get(projectId) as { html: string; is_multi_page: number } | undefined;
+
+  if (!version) return res.status(404).json({ error: 'No prototype found' });
+
+  const pages: string[] = [];
+  const pageRe = /data-page="([^"]+)"/g;
+  let mp: RegExpExecArray | null;
+  while ((mp = pageRe.exec(version.html)) !== null) {
+    if (!pages.includes(mp[1])) pages.push(mp[1]);
+  }
+
+  return res.json({
+    html: version.html,
+    isMultiPage: !!version.is_multi_page,
+    pages,
+  });
+});
+
 // GET /:id/prototype/versions — list all versions
 router.get('/:id/prototype/versions', (req: Request, res: Response) => {
   const projectId = req.params.id;

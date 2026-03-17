@@ -34,6 +34,29 @@ interface Props {
   onHtmlGenerated: (data: { html: string; isMultiPage: boolean; pages: string[] }) => void;
 }
 
+const HISTORY_KEY = 'pb-prompt-history';
+const MAX_HISTORY = 10;
+const MAX_CHIPS = 5;
+
+function loadHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(history: string[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    // silently fail
+  }
+}
+
 export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated }: Props) {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -49,6 +72,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [artStyle, setArtStyle] = useState<ArtStyle | null>(null);
   const [artStyleLoading, setArtStyleLoading] = useState(false);
   const [uploadToast, setUploadToast] = useState<string | null>(null);
+  const [promptHistory, setPromptHistory] = useState<string[]>(() => loadHistory());
+  const [inputFocused, setInputFocused] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -193,6 +218,13 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const handleSend = async () => {
     const text = input.trim();
     if (!text || streaming) return;
+
+    // Update prompt history
+    setPromptHistory(prev => {
+      const deduped = [text, ...prev.filter(p => p !== text)].slice(0, MAX_HISTORY);
+      saveHistory(deduped);
+      return deduped;
+    });
 
     setInput('');
     setStreaming(true);
@@ -494,6 +526,36 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         </div>
       )}
 
+      {/* Prompt history chips */}
+      {(inputFocused || promptHistory.length > 0) && promptHistory.length > 0 && (
+        <div style={styles.historyChips} data-testid="prompt-history-chips">
+          {promptHistory.slice(0, MAX_CHIPS).map((p, i) => (
+            <div key={i} style={styles.historyChip}>
+              <button
+                type="button"
+                style={styles.historyChipText}
+                onClick={() => setInput(p)}
+                title={p}
+              >
+                {p.length > 30 ? p.slice(0, 30) + '…' : p}
+              </button>
+              <button
+                type="button"
+                style={styles.historyChipRemove}
+                onClick={() => setPromptHistory(prev => {
+                  const next = prev.filter((_, idx) => idx !== i);
+                  saveHistory(next);
+                  return next;
+                })}
+                aria-label="Remove from history"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={styles.inputArea}>
         <input
           ref={fileInputRef}
@@ -519,6 +581,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
           placeholder="Describe your UI..."
           rows={2}
           disabled={streaming}
@@ -979,5 +1043,43 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '13px',
     fontWeight: 600,
     cursor: 'pointer',
+  },
+  historyChips: {
+    display: 'flex',
+    flexWrap: 'nowrap' as const,
+    overflowX: 'auto' as const,
+    gap: '6px',
+    padding: '6px 16px 2px',
+    scrollbarWidth: 'none' as const,
+  },
+  historyChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    backgroundColor: '#f1f5f9',
+    borderRadius: '999px',
+    border: '1px solid #e2e8f0',
+    overflow: 'hidden',
+  },
+  historyChipText: {
+    padding: '3px 8px',
+    fontSize: '12px',
+    color: '#475569',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
+    maxWidth: '180px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  historyChipRemove: {
+    padding: '3px 6px 3px 2px',
+    fontSize: '10px',
+    color: '#94a3b8',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    lineHeight: 1,
   },
 };
