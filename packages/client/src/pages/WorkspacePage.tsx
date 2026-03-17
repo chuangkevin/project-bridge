@@ -89,7 +89,6 @@ export default function WorkspacePage() {
   const iframeContainerRef = useRef<HTMLDivElement>(null);
 
   // Device frame state
-  const [deviceFrame, setDeviceFrame] = useState<'desktop' | 'mobile' | 'tablet'>('desktop');
 
   // Export dropdown state
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -633,29 +632,6 @@ export default function WorkspacePage() {
             </svg>
             History
           </button>
-          <div style={styles.deviceFrameGroup}>
-            <button
-              type="button"
-              style={{ ...styles.deviceFrameBtn, ...(deviceFrame === 'desktop' ? styles.deviceFrameBtnActive : {}) }}
-              onClick={() => setDeviceFrame('desktop')}
-              title="Desktop"
-              data-testid="device-frame-desktop"
-            >🖥</button>
-            <button
-              type="button"
-              style={{ ...styles.deviceFrameBtn, ...(deviceFrame === 'mobile' ? styles.deviceFrameBtnActive : {}) }}
-              onClick={() => setDeviceFrame('mobile')}
-              title="Mobile"
-              data-testid="device-frame-mobile"
-            >📱</button>
-            <button
-              type="button"
-              style={{ ...styles.deviceFrameBtn, ...(deviceFrame === 'tablet' ? styles.deviceFrameBtnActive : {}) }}
-              onClick={() => setDeviceFrame('tablet')}
-              title="Tablet"
-              data-testid="device-frame-tablet"
-            >📟</button>
-          </div>
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <button
               type="button"
@@ -972,7 +948,7 @@ export default function WorkspacePage() {
               ))}
             </div>
           )}
-          <div style={deviceFrame === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
+          <div style={deviceSize === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
             {!html ? (
               <div style={styles.emptyStateContainer}>
                 <div style={styles.emptyStateCard}>
@@ -990,9 +966,9 @@ export default function WorkspacePage() {
               </div>
             ) : (
               <div style={
-                deviceFrame === 'mobile'
+                deviceSize === 'mobile'
                   ? styles.deviceFrameMobile
-                  : deviceFrame === 'tablet'
+                  : deviceSize === 'tablet'
                     ? styles.deviceFrameTablet
                     : styles.deviceFrameDesktop
               }>

@@ -87,8 +87,14 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // Fast-path: short imperative messages always mean "generate" — skip expensive classifier
     const trimmed = message.trim().toLowerCase();
-    const isObviousGenerate = trimmed.length <= 20 && !trimmed.includes('?') &&
-      /產生|生成|做出|幫我做|開始|go|generate|ui|prototype|原型|設計|做個|頁面|介面/.test(trimmed);
+    const isObviousGenerate = (
+      (trimmed.length <= 20 && !trimmed.includes('?') &&
+        /產生|生成|做出|幫我做|開始|go|generate|ui|prototype|原型|設計|做個|頁面|介面/.test(trimmed))
+      ||
+      // Fix/correction requests: describe a problem and implicitly ask to fix it
+      (!trimmed.includes('?') &&
+        /空白太|空白超|太大|太小|不對|沒有依照|沒依照|缺少|重新生成|請重新|重做|修改|修正|調整|改掉|有問題|不正確|看起來不|樣式不|版面|排版/.test(trimmed))
+    );
 
     // Classify intent (four-way)
     const intent = isObviousGenerate

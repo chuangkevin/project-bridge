@@ -520,10 +520,18 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         })}
         {streaming && streamingContent && (
           <div style={styles.assistantMsgRow}>
-            <div style={styles.assistantBubble}>
-              {streamingContent}
-              <span style={styles.cursor}>|</span>
-            </div>
+            {isHtmlContent(streamingContent) ? (
+              <div style={styles.generateBubble}>
+                <span style={styles.generateTag}>
+                  {generationPhase === 'finalizing' ? '✅ 即將完成...' : generationPhase === 'writing' ? '✏ 撰寫中...' : '🤔 生成中...'}
+                </span>
+              </div>
+            ) : (
+              <div style={styles.assistantBubble}>
+                {streamingContent}
+                <span style={styles.cursor}>|</span>
+              </div>
+            )}
           </div>
         )}
         {streaming && !streamingContent && (

@@ -30,11 +30,12 @@ Intents:
 ${shellContext}
 
 Keywords for component: 元件, card, modal, 彈窗, 表單, form, widget, badge, tag, chip, dropdown, picker, 對話框
-Keywords for full-page: 整頁, 完整設計, 重新設計, landing page, 獨立頁面, standalone, 產生, 生成, 設計, 做出, 幫我做, 請做, 開始產生, 生成UI, 做UI, 做個, UI, prototype, 原型, 頁面, 介面
+Keywords for full-page: 整頁, 完整設計, 重新設計, landing page, 獨立頁面, standalone, 產生, 生成, 設計, 做出, 幫我做, 請做, 開始產生, 生成UI, 做UI, 做個, UI, prototype, 原型, 頁面, 介面, 修改, 修正, 調整, 空白, 太大, 太小, 不對, 缺少, 重做, 版面, 排版, 沒有依照, 請重新
 Keywords for in-shell: 子頁, 明細, 詳情, 詳細頁, 新增頁, 功能頁, list頁, detail頁, 列表, 管理頁
 
 IMPORTANT: When the message is a short imperative like "做", "產生", "UI", "開始", "go", "generate", classify as full-page (or in-shell if shell exists), NOT question.
-Only classify as "question" if the message is clearly asking for information (contains ?, 什麼, 如何, 為何, explain, what, how, why, 幾個, 多少).
+Messages describing a UI problem or requesting a fix (e.g. "空白太大", "沒有依照規格", "Header太寬", "修改排版") should be full-page or in-shell, NOT question.
+Only classify as "question" if the message is clearly asking for information (contains ?, 什麼, 如何, 為何, explain, what, how, why, 幾個, 多少) with NO fix/generate intent.
 
 Reply ONLY with: question, component, full-page, or in-shell`,
         },
