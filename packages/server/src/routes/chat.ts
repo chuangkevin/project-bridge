@@ -28,16 +28,18 @@ function getOpenAIApiKey(): string | null {
 async function callOpenAIWithRetry(
   openai: OpenAI,
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
-  maxAttempts = 3
+  maxAttempts = 3,
+  model = 'gpt-4o'
 ): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
   let lastError: any;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const stream = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model,
         messages,
         stream: true,
+        max_tokens: 16384,
       });
       return stream;
     } catch (err: any) {
@@ -118,7 +120,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       const openai = new OpenAI({ apiKey });
 
       try {
-        const stream = await callOpenAIWithRetry(openai, messages);
+        const stream = await callOpenAIWithRetry(openai, messages, 3, 'gpt-4o-mini');
         for await (const chunk of stream) {
           const content = chunk.choices[0]?.delta?.content;
           if (content) {
