@@ -120,6 +120,18 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         ).join('\n');
         userContent = `[Attached files]\n${fileParts}\n\n${userContent}`;
       }
+    } else {
+      // Auto-inject project uploaded files even if not explicitly attached
+      // This ensures design spec text is always available during regeneration
+      const projectFiles = db.prepare(
+        `SELECT original_name, extracted_text FROM uploaded_files WHERE project_id = ? AND extracted_text IS NOT NULL ORDER BY created_at DESC LIMIT 3`
+      ).all(projectId) as { original_name: string; extracted_text: string }[];
+      if (projectFiles.length > 0) {
+        const fileParts = projectFiles.map(f =>
+          `--- ${f.original_name} ---\n${f.extracted_text.slice(0, 1500)}\n--- end ---`
+        ).join('\n');
+        userContent = `[Project design specs (auto-loaded)]\n${fileParts}\n\n${userContent}`;
+      }
     }
 
     let fullResponse = '';
@@ -272,12 +284,28 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       effectiveSystemPrompt += `\n\n=== COMPONENT MODE ===\nYou are designing an ISOLATED UI COMPONENT (not a full page).\n\nCRITICAL INSTRUCTIONS:\n- Output ONLY the component HTML and its scoped CSS in a <style> tag\n- Do NOT output <!DOCTYPE html>, <html>, <head>, <body>, <nav>, <header>, <footer>\n- The component will be previewed on a light gray background\n- Include all necessary CSS within a single <style> tag at the top of your output\n- Make the component visually complete and production-ready\n=====================`;
     }
 
+    // Preserve existing page structure when regenerating
+    const existingProto = db.prepare(
+      'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+    ).get(projectId) as { html: string } | undefined;
+    const existingPages: string[] = [];
+    if (existingProto?.html) {
+      const pageMatches = existingProto.html.matchAll(/data-page="([^"]+)"/g);
+      const seen = new Set<string>();
+      for (const m of pageMatches) { if (!seen.has(m[1])) { seen.add(m[1]); existingPages.push(m[1]); } }
+    }
+
     // Multi-page detection (only relevant for full-page intent)
     const pageStructure = (intent === 'full-page' || intent === 'in-shell')
       ? await analyzePageStructure(message.trim(), apiKey)
       : { multiPage: false, pages: [] as string[] };
-    if (pageStructure.multiPage && pageStructure.pages.length > 1) {
-      const pageList = pageStructure.pages.map(p => `- "${p}"`).join('\n');
+
+    // Use existing pages if regenerating; new pages if fresh multi-page request
+    const finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
+    const isMultiPage = finalPages.length > 1;
+
+    if (isMultiPage) {
+      const pageList = finalPages.map(p => `- "${p}"`).join('\n');
       effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===\nGenerate a multi-page prototype with ALL of these pages:\n${pageList}\n\nRequirements:\n- Use a navigation element (sidebar or top nav) that is always visible\n- Each page as: <div class="page" data-page="{page-name}"> (first page visible, others hidden with display:none)\n- Include JavaScript to show/hide pages when nav links are clicked\n- Highlight the active nav item\n- All pages must follow the same design style\n============================`;
     }
 
