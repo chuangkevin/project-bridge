@@ -20,6 +20,7 @@ export default function VersionHistoryPanel({ projectId, currentVersion, onResto
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState<number | null>(null);
+  const [expandedPreview, setExpandedPreview] = useState<number | null>(null);
 
   const fetchVersions = useCallback(async () => {
     setLoading(true);
@@ -65,32 +66,56 @@ export default function VersionHistoryPanel({ projectId, currentVersion, onResto
         ) : (
           <div style={styles.list}>
             {versions.map(v => (
-              <div key={v.id} style={{ ...styles.item, ...(v.is_current ? styles.itemCurrent : {}) }}>
-                {v.preview && (
-                  <div style={styles.thumbnailWrapper}>
-                    <iframe
-                      srcDoc={v.preview}
-                      style={styles.thumbnailIframe}
-                      sandbox="allow-scripts"
-                      title={`v${v.version} preview`}
-                    />
+              <div key={v.id} style={styles.itemWrapper}>
+                <div style={{ ...styles.item, ...(v.is_current ? styles.itemCurrent : {}) }}>
+                  {v.preview && (
+                    <div style={styles.thumbnailWrapper}>
+                      <iframe
+                        srcDoc={v.preview}
+                        style={styles.thumbnailIframe}
+                        sandbox="allow-scripts"
+                        title={`v${v.version} preview`}
+                      />
+                    </div>
+                  )}
+                  <div style={styles.itemLeft}>
+                    <span style={styles.versionNum}>v{v.version}</span>
+                    {v.is_current ? <span style={styles.currentBadge}>目前</span> : null}
+                    {v.is_multi_page ? <span style={styles.multiPageBadge}>多頁</span> : null}
+                    <span style={styles.timestamp}>{new Date(v.created_at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
-                )}
-                <div style={styles.itemLeft}>
-                  <span style={styles.versionNum}>v{v.version}</span>
-                  {v.is_current ? <span style={styles.currentBadge}>目前</span> : null}
-                  {v.is_multi_page ? <span style={styles.multiPageBadge}>多頁</span> : null}
-                  <span style={styles.timestamp}>{new Date(v.created_at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  <div style={styles.btnGroup}>
+                    {v.preview && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPreview(expandedPreview === v.version ? null : v.version)}
+                        style={styles.previewToggleBtn}
+                      >
+                        {expandedPreview === v.version ? '收起' : '展開預覽'}
+                      </button>
+                    )}
+                    <a
+                      href={`/api/projects/${projectId}/prototype/versions/${v.version}/html`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={styles.viewLink}
+                    >
+                      🔗 在新分頁查看
+                    </a>
+                    {!v.is_current && (
+                      <button
+                        type="button"
+                        onClick={() => handleRestore(v.version)}
+                        disabled={restoring === v.version}
+                        style={styles.restoreBtn}
+                      >
+                        {restoring === v.version ? '還原中...' : '還原'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {!v.is_current && (
-                  <button
-                    type="button"
-                    onClick={() => handleRestore(v.version)}
-                    disabled={restoring === v.version}
-                    style={styles.restoreBtn}
-                  >
-                    {restoring === v.version ? '還原中...' : '還原'}
-                  </button>
+                {expandedPreview === v.version && v.preview && (
+                  <pre style={styles.previewBlock}>{v.preview.slice(0, 300)}</pre>
                 )}
               </div>
             ))}
@@ -115,7 +140,7 @@ const styles: Record<string, React.CSSProperties> = {
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '16px' },
   empty: { padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' },
   list: { maxHeight: '320px', overflowY: 'auto' },
-  item: { display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #f8fafc' },
+  item: { display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between', padding: '10px 14px' },
   thumbnailWrapper: { width: '80px', height: '50px', overflow: 'hidden', borderRadius: '4px', border: '1px solid #e2e8f0', flexShrink: 0 },
   thumbnailIframe: { width: '400px', height: '250px', transform: 'scale(0.2)', transformOrigin: '0 0', pointerEvents: 'none' as const, border: 'none' },
   itemCurrent: { background: '#f0f9ff' },
@@ -125,4 +150,9 @@ const styles: Record<string, React.CSSProperties> = {
   multiPageBadge: { fontSize: '10px', background: '#f0fdf4', color: '#15803d', padding: '1px 6px', borderRadius: '10px' },
   timestamp: { fontSize: '11px', color: '#94a3b8' },
   restoreBtn: { fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  viewLink: { fontSize: '12px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', textDecoration: 'none', whiteSpace: 'nowrap' as const },
+  itemWrapper: { borderBottom: '1px solid #f8fafc' },
+  btnGroup: { display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 },
+  previewToggleBtn: { fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #c7d2fe', background: '#eef2ff', color: '#4338ca', cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  previewBlock: { margin: '0', padding: '8px 12px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: '11px', color: '#475569', overflowX: 'auto' as const, maxHeight: '100px', whiteSpace: 'pre-wrap' as const, wordBreak: 'break-all' as const },
 };

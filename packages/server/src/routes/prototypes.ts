@@ -182,6 +182,55 @@ router.get('/:id/prototype/versions', (req: Request, res: Response) => {
   return res.json({ versions });
 });
 
+// GET /:id/prototype/versions/:versionA/diff/:versionB — line-count diff between two versions
+router.get('/:id/prototype/versions/:versionA/diff/:versionB', (req: Request, res: Response) => {
+  const { id: projectId, versionA, versionB } = req.params;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const rowA = db.prepare(
+    'SELECT html FROM prototype_versions WHERE project_id = ? AND version = ?'
+  ).get(projectId, parseInt(versionA as string)) as { html: string } | undefined;
+  if (!rowA) return res.status(404).json({ error: `Version ${versionA} not found` });
+
+  const rowB = db.prepare(
+    'SELECT html FROM prototype_versions WHERE project_id = ? AND version = ?'
+  ).get(projectId, parseInt(versionB as string)) as { html: string } | undefined;
+  if (!rowB) return res.status(404).json({ error: `Version ${versionB} not found` });
+
+  const linesA = new Set(rowA.html.split('\n'));
+  const linesB = new Set(rowB.html.split('\n'));
+
+  let addedLines = 0;
+  for (const line of linesB) { if (!linesA.has(line)) addedLines++; }
+  let removedLines = 0;
+  for (const line of linesA) { if (!linesB.has(line)) removedLines++; }
+
+  const changed = addedLines + removedLines;
+  return res.json({
+    versionA: parseInt(versionA as string),
+    versionB: parseInt(versionB as string),
+    addedLines,
+    removedLines,
+    diffSummary: `Changed ${changed} lines`,
+  });
+});
+
+// GET /:id/prototype/versions/:version/html — serve a specific version's full HTML
+router.get('/:id/prototype/versions/:version/html', (req: Request, res: Response) => {
+  const { id: projectId, version } = req.params;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).send('Project not found');
+
+  const row = db.prepare(
+    'SELECT html FROM prototype_versions WHERE project_id = ? AND version = ?'
+  ).get(projectId, parseInt(version as string)) as { html: string } | undefined;
+  if (!row) return res.status(404).send('Version not found');
+
+  res.setHeader('Content-Type', 'text/html');
+  return res.send(row.html);
+});
+
 // POST /:id/prototype/versions/:version/restore — restore a version
 router.post('/:id/prototype/versions/:version/restore', (req: Request, res: Response) => {
   const { id: projectId, version } = req.params;

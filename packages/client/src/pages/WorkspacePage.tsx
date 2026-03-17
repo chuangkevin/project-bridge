@@ -79,6 +79,12 @@ export default function WorkspacePage() {
 
   const iframeContainerRef = useRef<HTMLDivElement>(null);
 
+  // Device frame state
+  const [deviceFrame, setDeviceFrame] = useState<'desktop' | 'mobile' | 'tablet'>('desktop');
+
+  // Whether this project has uploaded files with visual analysis (design spec)
+  const [hasDesignSpec, setHasDesignSpec] = useState(false);
+
   // Inline rename state
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
@@ -95,6 +101,18 @@ export default function WorkspacePage() {
             (profile.tokens && Object.keys(profile.tokens).length > 0))
         );
         setDesignActive(isActive);
+      }
+    } catch {
+      // silently fail
+    }
+  }, [id]);
+
+  const checkDesignSpec = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/upload/spec-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setHasDesignSpec(!!data.hasVisualAnalysis);
       }
     } catch {
       // silently fail
@@ -157,7 +175,8 @@ export default function WorkspacePage() {
     fetchProject();
     fetchAnnotations();
     checkDesignActive();
-  }, [fetchProject, fetchAnnotations, checkDesignActive]);
+    checkDesignSpec();
+  }, [fetchProject, fetchAnnotations, checkDesignActive, checkDesignSpec]);
 
   const handleNewMessages = useCallback((userMsg: ChatMessage, assistantMsg: ChatMessage) => {
     setMessages(prev => [...prev, userMsg, assistantMsg]);
@@ -481,6 +500,29 @@ export default function WorkspacePage() {
             </svg>
             History
           </button>
+          <div style={styles.deviceFrameGroup}>
+            <button
+              type="button"
+              style={{ ...styles.deviceFrameBtn, ...(deviceFrame === 'desktop' ? styles.deviceFrameBtnActive : {}) }}
+              onClick={() => setDeviceFrame('desktop')}
+              title="Desktop"
+              data-testid="device-frame-desktop"
+            >🖥</button>
+            <button
+              type="button"
+              style={{ ...styles.deviceFrameBtn, ...(deviceFrame === 'mobile' ? styles.deviceFrameBtnActive : {}) }}
+              onClick={() => setDeviceFrame('mobile')}
+              title="Mobile"
+              data-testid="device-frame-mobile"
+            >📱</button>
+            <button
+              type="button"
+              style={{ ...styles.deviceFrameBtn, ...(deviceFrame === 'tablet' ? styles.deviceFrameBtnActive : {}) }}
+              onClick={() => setDeviceFrame('tablet')}
+              title="Tablet"
+              data-testid="device-frame-tablet"
+            >📟</button>
+          </div>
           <button
             type="button"
             style={{ ...styles.historyBtn, ...(html ? {} : { opacity: 0.5 }) }}
@@ -597,14 +639,24 @@ export default function WorkspacePage() {
               ))}
             </div>
           )}
-          <PreviewPanel
-            html={html}
-            deviceSize={deviceSize}
-            annotationMode={annotationMode}
-            onElementClick={handleElementClick}
-            onIndicatorClick={handleIndicatorClick}
-            annotations={annotationIndicators}
-          />
+          <div style={deviceFrame === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
+            <div style={
+              deviceFrame === 'mobile'
+                ? styles.deviceFrameMobile
+                : deviceFrame === 'tablet'
+                  ? styles.deviceFrameTablet
+                  : styles.deviceFrameDesktop
+            }>
+              <PreviewPanel
+                html={html}
+                deviceSize={deviceSize}
+                annotationMode={annotationMode}
+                onElementClick={handleElementClick}
+                onIndicatorClick={handleIndicatorClick}
+                annotations={annotationIndicators}
+              />
+            </div>
+          </div>
         </div>
         <SpecPanel
           annotations={annotations}
@@ -665,6 +717,11 @@ export default function WorkspacePage() {
               + 標注
             </button>
           </div>
+          {hasDesignSpec && (
+            <div style={styles.quickRegenSpecIndicator} data-testid="design-spec-indicator">
+              Using design spec
+            </div>
+          )}
           <div style={styles.quickRegenHint}>⌘Enter 送出</div>
         </div>
       )}
@@ -1002,6 +1059,15 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: '12px',
   },
+  quickRegenSpecIndicator: {
+    fontSize: '11px',
+    color: '#0369a1',
+    backgroundColor: '#e0f2fe',
+    borderRadius: '6px',
+    padding: '3px 8px',
+    marginTop: '6px',
+    display: 'inline-block',
+  },
   quickRegenHint: {
     fontSize: '11px',
     color: '#94a3b8',
@@ -1033,5 +1099,65 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '1px 5px',
     fontSize: '11px',
     fontFamily: 'monospace',
+  },
+  deviceFrameGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    overflow: 'hidden',
+  },
+  deviceFrameBtn: {
+    padding: '5px 9px',
+    border: 'none',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '13px',
+    cursor: 'pointer',
+    lineHeight: 1,
+  },
+  deviceFrameBtnActive: {
+    backgroundColor: '#eff6ff',
+    color: '#3b82f6',
+  },
+  previewScroll: {
+    flex: 1,
+    overflow: 'auto',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: '16px',
+    backgroundColor: '#f1f5f9',
+    boxSizing: 'border-box' as const,
+  },
+  previewScrollDesktop: {
+    flex: 1,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  deviceFrameDesktop: {
+    flex: 1,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  deviceFrameMobile: {
+    width: '375px',
+    height: '812px',
+    flexShrink: 0,
+    margin: '0 auto',
+    border: '2px solid #333',
+    borderRadius: '40px',
+    overflow: 'hidden',
+  },
+  deviceFrameTablet: {
+    width: '768px',
+    height: '1024px',
+    flexShrink: 0,
+    margin: '0 auto',
+    border: '2px solid #333',
+    borderRadius: '40px',
+    overflow: 'hidden',
   },
 };

@@ -19,6 +19,7 @@ interface UploadedFile {
   extractedText?: string;
   visualAnalysisReady?: boolean;
   componentLabel?: string;
+  pageCount?: number;
 }
 
 interface ArtStyle {
@@ -143,9 +144,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       const data = await res.json();
       setAttachedFiles(prev => [...prev, {
         id: data.id,
-        filename: data.filename,
+        filename: data.originalName ?? data.filename,
         extractedText: data.extractedText,
         visualAnalysisReady: !!data.visualAnalysisReady,
+        pageCount: data.pageCount ?? undefined,
       }]);
 
       // Show upload success feedback
@@ -444,6 +446,11 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                     👁 Visual
                   </span>
                 )}
+                {f.pageCount != null && f.pageCount > 1 && (
+                  <span style={styles.pageCountBadge} data-testid="page-count-badge" title={`PDF 共 ${f.pageCount} 頁`}>
+                    📄 {f.pageCount} pages
+                  </span>
+                )}
                 {f.extractedText && (
                   <button
                     type="button"
@@ -468,7 +475,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 data-testid="file-label-select"
                 aria-label="標記用途"
               >
-                <option value="">標記用途（可選）</option>
+                <option value="">{f.pageCount != null && f.pageCount > 1 ? `PDF 有 ${f.pageCount} 頁 — 標記整體用途` : '標記用途（可選）'}</option>
                 <option value="卡片樣式">卡片樣式</option>
                 <option value="導覽列">導覽列</option>
                 <option value="搜尋列">搜尋列</option>
@@ -819,6 +826,14 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     fontSize: '10px',
     fontWeight: 600,
+  },
+  pageCountBadge: {
+    padding: '1px 6px',
+    backgroundColor: '#f1f5f9',
+    color: '#475569',
+    borderRadius: '8px',
+    fontSize: '10px',
+    fontWeight: 500,
   },
   uploadToast: {
     position: 'absolute' as const,

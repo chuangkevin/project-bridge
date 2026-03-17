@@ -48,6 +48,7 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
 
       let visualAnalysisReady = false;
+      let pageCount: number | null = null;
 
       const isPdf = mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf');
       const isImage = mimetype.startsWith('image/') &&
@@ -58,6 +59,10 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
           let images: Buffer[] = [];
           if (isPdf) {
             images = await renderPdfPages(storagePath, 6);
+            if (images.length > 0) {
+              pageCount = images.length;
+              db.prepare('UPDATE uploaded_files SET page_count = ? WHERE id = ?').run(pageCount, id);
+            }
           } else if (isImage) {
             const fs = await import('fs');
             images = [fs.readFileSync(storagePath)];
@@ -115,12 +120,22 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         extractedText,
         artStyleDetected: !!(artStyle?.detected_style),
         visualAnalysisReady,
+        pageCount,
       });
     } catch (uploadErr: any) {
       console.error('Upload error:', uploadErr);
       return res.status(500).json({ error: 'Failed to upload file' });
     }
   });
+});
+
+// GET /:id/upload/spec-status — returns whether the project has any uploaded files with visual analysis
+router.get('/:id/upload/spec-status', (req: Request, res: Response) => {
+  const { id: projectId } = req.params;
+  const row = db.prepare(
+    'SELECT COUNT(*) as cnt FROM uploaded_files WHERE project_id = ? AND visual_analysis IS NOT NULL'
+  ).get(projectId) as { cnt: number };
+  return res.json({ hasVisualAnalysis: row.cnt > 0 });
 });
 
 // PATCH /:id/upload/:fileId/label — set component label for uploaded file
