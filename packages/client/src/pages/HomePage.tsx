@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NewProjectDialog from '../components/NewProjectDialog';
-import SettingsDialog from '../components/SettingsDialog';
 
 interface Project {
   id: string;
@@ -32,7 +31,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest');
   const navigate = useNavigate();
@@ -89,7 +87,7 @@ export default function HomePage() {
           <span style={styles.subtitle}>AI-powered prototype generator</span>
         </div>
         <div style={styles.headerRight}>
-          <button style={styles.settingsBtn} onClick={() => setShowSettings(true)} title="Settings">
+          <button style={styles.settingsBtn} onClick={() => navigate('/settings')} title="Settings" data-testid="settings-btn">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="10" cy="10" r="3" />
               <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.93 3.93l1.41 1.41M14.66 14.66l1.41 1.41M3.93 16.07l1.41-1.41M14.66 5.34l1.41-1.41" />
@@ -188,9 +186,6 @@ export default function HomePage() {
           onClose={() => setShowNewProject(false)}
           onCreated={handleProjectCreated}
         />
-      )}
-      {showSettings && (
-        <SettingsDialog onClose={() => setShowSettings(false)} />
       )}
     </div>
   );

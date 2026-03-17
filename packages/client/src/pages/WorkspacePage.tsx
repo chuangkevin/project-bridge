@@ -94,6 +94,11 @@ export default function WorkspacePage() {
   // Export dropdown state
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // Share panel state
+  const [showSharePanel, setShowSharePanel] = useState(false);
+  const [shareEnabled, setShareEnabled] = useState(true);
+  const [copyLinkFeedback, setCopyLinkFeedback] = useState(false);
+
   // Whether this project has uploaded files with visual analysis (design spec)
   const [hasDesignSpec, setHasDesignSpec] = useState(false);
 
@@ -102,6 +107,10 @@ export default function WorkspacePage() {
 
   // Keyboard shortcuts help overlay state
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Onboarding tour state: null = no tour, 0-3 = step index
+  const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
+  const prevHtmlRef = useRef<string | null | undefined>(undefined);
 
   // Inline rename state
   const [editingName, setEditingName] = useState(false);
@@ -280,12 +289,22 @@ export default function WorkspacePage() {
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }, [html]);
 
-  const handleShare = useCallback(async () => {
+  const handleShare = useCallback(() => {
+    if (!project?.share_token) return;
+    if (shareEnabled) {
+      setShowSharePanel(v => !v);
+    } else {
+      // Re-enable sharing and show panel
+      setShareEnabled(true);
+      setShowSharePanel(true);
+    }
+  }, [project, shareEnabled]);
+
+  const handleCopyShareLink = useCallback(async () => {
     if (!project?.share_token) return;
     const url = `${window.location.origin}/share/${project.share_token}`;
     try {
       await navigator.clipboard.writeText(url);
-      setToastMsg('Link copied!');
     } catch {
       const input = document.createElement('input');
       input.value = url;
@@ -293,9 +312,16 @@ export default function WorkspacePage() {
       input.select();
       document.execCommand('copy');
       document.body.removeChild(input);
-      setToastMsg('Link copied!');
     }
+    setCopyLinkFeedback(true);
+    setTimeout(() => setCopyLinkFeedback(false), 1800);
   }, [project]);
+
+  const handleStopSharing = useCallback(() => {
+    setShareEnabled(false);
+    setShowSharePanel(false);
+    setToastMsg('已停止分享');
+  }, []);
 
   // Annotation handlers
   const handleElementClick = useCallback((data: {
@@ -428,6 +454,28 @@ export default function WorkspacePage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [quickRegen, showVersionHistory, showShortcuts, html]);
+
+  // Onboarding: start tour for first-time users when there is no prototype yet
+  useEffect(() => {
+    if (!html && localStorage.getItem('pb-onboarded') === null) {
+      const timer = setTimeout(() => setOnboardingStep(0), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [html]);
+
+  // Onboarding: when html transitions from null to non-null, mark as onboarded
+  useEffect(() => {
+    if (prevHtmlRef.current === undefined) {
+      // first render — just record value
+      prevHtmlRef.current = html;
+      return;
+    }
+    if (prevHtmlRef.current === null && html !== null) {
+      localStorage.setItem('pb-onboarded', '1');
+      setOnboardingStep(null);
+    }
+    prevHtmlRef.current = html;
+  }, [html]);
 
   const handleQuickRegen = useCallback(async () => {
     if (!quickRegen || !id || !quickRegen.instruction.trim()) return;
@@ -704,16 +752,136 @@ export default function WorkspacePage() {
           >
             ⛶ 專注
           </button>
-          <button style={styles.shareBtn} onClick={handleShare} data-testid="share-btn">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-              <circle cx="3" cy="7" r="2" />
-              <circle cx="11" cy="3" r="2" />
-              <circle cx="11" cy="11" r="2" />
-              <line x1="4.8" y1="6" x2="9.2" y2="3.8" />
-              <line x1="4.8" y1="8" x2="9.2" y2="10.2" />
-            </svg>
-            Share
-          </button>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              style={{
+                ...styles.shareBtn,
+                ...(shareEnabled && showSharePanel
+                  ? { backgroundColor: '#eff6ff', borderColor: '#3b82f6', color: '#2563eb' }
+                  : {}),
+              }}
+              onClick={handleShare}
+              data-testid="share-btn"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+                <circle cx="3" cy="7" r="2" />
+                <circle cx="11" cy="3" r="2" />
+                <circle cx="11" cy="11" r="2" />
+                <line x1="4.8" y1="6" x2="9.2" y2="3.8" />
+                <line x1="4.8" y1="8" x2="9.2" y2="10.2" />
+              </svg>
+              {shareEnabled ? '已分享' : 'Share'}
+            </button>
+            {showSharePanel && shareEnabled && project?.share_token && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  zIndex: 1100,
+                  minWidth: '280px',
+                  padding: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+                onMouseLeave={() => setShowSharePanel(false)}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    overflow: 'hidden',
+                  }}
+                  title={`${window.location.origin}/share/${project.share_token}`}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: '12px',
+                      color: '#64748b',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {`${window.location.origin}/share/${project.share_token}`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '7px',
+                    backgroundColor: copyLinkFeedback ? '#f0fdf4' : '#f8fafc',
+                    color: copyLinkFeedback ? '#16a34a' : '#374151',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  onClick={handleCopyShareLink}
+                  data-testid="copy-share-link-btn"
+                >
+                  {copyLinkFeedback ? '✓ 已複製!' : '📋 複製連結'}
+                </button>
+                <a
+                  href={`${window.location.origin}/share/${project.share_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '7px',
+                    backgroundColor: '#f8fafc',
+                    color: '#374151',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                  }}
+                  data-testid="open-share-link-btn"
+                >
+                  🔗 在新分頁開啟
+                </a>
+                <button
+                  type="button"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    border: '1px solid #fecaca',
+                    borderRadius: '7px',
+                    backgroundColor: '#fff5f5',
+                    color: '#dc2626',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                  onClick={handleStopSharing}
+                  data-testid="stop-sharing-btn"
+                >
+                  停止分享
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             style={styles.shortcutsBtn}
@@ -1024,6 +1192,70 @@ export default function WorkspacePage() {
       )}
 
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
+
+      {/* Onboarding tour tooltip */}
+      {onboardingStep !== null && (() => {
+        const steps = [
+          {
+            icon: '👋',
+            title: '歡迎使用 Project Bridge！',
+            body: '在這裡輸入你的設計需求，AI 會幫你生成互動式原型',
+          },
+          {
+            icon: '📎',
+            title: '上傳設計稿',
+            body: '你可以上傳 PDF 設計稿，AI 會分析視覺樣式並應用到原型',
+          },
+          {
+            icon: '✏',
+            title: '標注模式',
+            body: '生成後按 A 進入標注模式，點擊元素可以快速修改',
+          },
+          {
+            icon: '🚀',
+            title: '準備好了！',
+            body: '按 ? 查看所有快捷鍵。開始你的第一個原型吧！',
+          },
+        ];
+        const step = steps[onboardingStep];
+        const isLast = onboardingStep === steps.length - 1;
+        const dismiss = () => {
+          localStorage.setItem('pb-onboarded', '1');
+          setOnboardingStep(null);
+        };
+        return (
+          <div style={styles.onboardingCard} data-testid="onboarding-tooltip">
+            <div style={styles.onboardingTopRow}>
+              <span style={styles.onboardingStepLabel}>{onboardingStep + 1} / {steps.length}</span>
+              <button
+                type="button"
+                style={styles.onboardingSkip}
+                onClick={dismiss}
+                data-testid="onboarding-skip"
+              >
+                跳過導覽
+              </button>
+            </div>
+            <div style={styles.onboardingIcon}>{step.icon}</div>
+            <div style={styles.onboardingTitle}>{step.title}</div>
+            <div style={styles.onboardingBody}>{step.body}</div>
+            <button
+              type="button"
+              style={styles.onboardingNextBtn}
+              onClick={() => {
+                if (isLast) {
+                  dismiss();
+                } else {
+                  setOnboardingStep(onboardingStep + 1);
+                }
+              }}
+              data-testid="onboarding-next"
+            >
+              {isLast ? '開始使用' : '下一步 →'}
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1623,5 +1855,67 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#334155',
     verticalAlign: 'middle' as const,
     borderBottom: '1px solid #f1f5f9',
+  },
+  onboardingCard: {
+    position: 'fixed' as const,
+    bottom: '80px',
+    right: '20px',
+    zIndex: 10000,
+    backgroundColor: '#ffffff',
+    borderRadius: '8px',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
+    padding: '16px',
+    maxWidth: '280px',
+    width: '280px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  onboardingTopRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '10px',
+  },
+  onboardingStepLabel: {
+    fontSize: '11px',
+    color: '#94a3b8',
+    fontWeight: 500,
+  },
+  onboardingSkip: {
+    background: 'none',
+    border: 'none',
+    fontSize: '11px',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    padding: 0,
+  },
+  onboardingIcon: {
+    fontSize: '28px',
+    lineHeight: 1,
+    marginBottom: '8px',
+  },
+  onboardingTitle: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#1e293b',
+    marginBottom: '6px',
+  },
+  onboardingBody: {
+    fontSize: '13px',
+    color: '#475569',
+    lineHeight: 1.55,
+    marginBottom: '14px',
+  },
+  onboardingNextBtn: {
+    display: 'block',
+    width: '100%',
+    padding: '8px',
+    backgroundColor: '#3b82f6',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    textAlign: 'center' as const,
   },
 };
