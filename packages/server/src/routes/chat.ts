@@ -133,7 +133,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         if (seenSizes.has(f.file_size)) return false;
         seenSizes.add(f.file_size);
         return true;
-      }).slice(0, 3);
+      }).slice(0, 1); // Only most recent unique file — prevents old uploads from overriding new intent
       if (uniqueFiles.length > 0) {
         const fileParts = uniqueFiles.map(f => {
           // Fix Latin-1 encoded filenames from older uploads
@@ -238,17 +238,23 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // Build effective system prompt with composed design injection
     // First, load design spec analysis — inject BEFORE base system prompt so it overrides defaults
-    const allSpecRowsEarly = db.prepare(
-      `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
-       WHERE project_id = ? AND visual_analysis IS NOT NULL
-       ORDER BY created_at DESC`
-    ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
-    const seenEarly = new Set<number>();
-    const specRowsEarly = allSpecRowsEarly.filter(r => {
-      if (seenEarly.has(r.file_size)) return false;
-      seenEarly.add(r.file_size);
-      return true;
-    });
+    // Scope: if user explicitly attached fileIds, use only those; otherwise use only the MOST RECENT file.
+    // This prevents old uploaded files from previous sessions from polluting new generations.
+    let specRowsEarly: { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+    if (Array.isArray(fileIds) && fileIds.length > 0) {
+      const placeholders = fileIds.map(() => '?').join(',');
+      specRowsEarly = db.prepare(
+        `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
+         WHERE id IN (${placeholders}) AND project_id = ? AND visual_analysis IS NOT NULL`
+      ).all(...fileIds, projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+    } else {
+      // Auto: only the single most recently uploaded file with visual analysis
+      specRowsEarly = db.prepare(
+        `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
+         WHERE project_id = ? AND visual_analysis IS NOT NULL
+         ORDER BY created_at DESC LIMIT 1`
+      ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+    }
 
     let designSpecPrefix = '';
     if (specRowsEarly.length > 0) {
