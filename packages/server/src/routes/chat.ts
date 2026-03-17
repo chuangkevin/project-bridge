@@ -193,7 +193,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       if (hasGlobalDesc || hasGlobalAnalysis || hasGlobalTokens) {
         let globalBlock = '\n\n=== GLOBAL DESIGN (Brand Style) ===\n';
         if (hasGlobalDesc) globalBlock += `Design Direction: ${globalRow.description}\n`;
-        if (hasGlobalAnalysis) globalBlock += `Visual Reference Analysis:\n${globalRow.reference_analysis}\n`;
+        if (hasGlobalAnalysis) globalBlock += `Visual Reference Analysis:\n${(globalRow.reference_analysis as string).slice(0, 1000)}\n`;
         if (hasGlobalTokens) {
           globalBlock += 'Design Tokens:\n';
           if (globalTokens.primaryColor) globalBlock += `- Primary Color: ${globalTokens.primaryColor}\n`;
@@ -220,7 +220,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       if (hasDescription || hasReferenceAnalysis || hasTokens) {
         let profileBlock = '\n\n=== PROJECT DESIGN ===\n';
         if (hasDescription) profileBlock += `Design Direction: ${designRow.description}\n`;
-        if (hasReferenceAnalysis) profileBlock += `Visual Reference Analysis:\n${designRow.reference_analysis}\n`;
+        if (hasReferenceAnalysis) profileBlock += `Visual Reference Analysis:\n${(designRow.reference_analysis as string).slice(0, 1000)}\n`;
         if (hasTokens) {
           profileBlock += 'Design Tokens:\n';
           if (tokens.primaryColor) profileBlock += `- Primary Color: ${tokens.primaryColor}\n`;
@@ -250,7 +250,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       specBlock += 'The following component specifications were extracted from uploaded design spec files.\n';
       specBlock += 'You MUST follow these component patterns precisely when generating UI:\n\n';
       for (const row of specAnalysisRows) {
-        specBlock += `--- From: ${row.original_name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${row.visual_analysis}\n\n`;
+        const analysis = row.visual_analysis.length > 1500 ? row.visual_analysis.slice(0, 1500) + '…' : row.visual_analysis;
+        specBlock += `--- From: ${row.original_name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${analysis}\n\n`;
       }
       specBlock += 'CRITICAL: Use the exact colors, card layouts, search bar styles, tag designs, and spacing patterns described above.\n';
       specBlock += '============================';
@@ -281,12 +282,17 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     // Build messages for generation
+    // Strip HTML from assistant history to avoid token explosion
+    const trimmedHistory = history.slice(-10).map(h => ({
+      role: h.role as 'user' | 'assistant',
+      content: h.role === 'assistant' && h.content.trim().startsWith('<')
+        ? '[前一次生成的原型 HTML — 已省略以節省 tokens]'
+        : h.content.length > 800 ? h.content.slice(0, 800) + '…' : h.content,
+    }));
+
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: effectiveSystemPrompt },
-      ...history.map(h => ({
-        role: h.role as 'user' | 'assistant',
-        content: h.content,
-      })),
+      ...trimmedHistory,
       { role: 'user', content: userContent },
     ];
 
