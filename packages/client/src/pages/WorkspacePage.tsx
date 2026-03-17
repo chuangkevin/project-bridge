@@ -58,6 +58,17 @@ export default function WorkspacePage() {
     rect: { x: number; y: number; width: number; height: number };
   } | null>(null);
 
+  // Quick regenerate popup state (Pencil-style: click element → describe change → done)
+  const [quickRegen, setQuickRegen] = useState<{
+    bridgeId: string;
+    tagName: string;
+    rect: { x: number; y: number };
+    instruction: string;
+    loading: boolean;
+    error: string | null;
+    showAnnotationForm: boolean;
+  } | null>(null);
+
   // Spec panel state
   const [specPanelCollapsed, setSpecPanelCollapsed] = useState(false);
   const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
@@ -200,17 +211,25 @@ export default function WorkspacePage() {
     textContent: string;
     rect: { x: number; y: number; width: number; height: number };
   }) => {
-    // Calculate popup position relative to the page, offset from the iframe container
     const container = iframeContainerRef.current;
     const offsetX = container ? container.getBoundingClientRect().left : 300;
     const offsetY = container ? container.getBoundingClientRect().top : 48;
+    const absX = data.rect.x + offsetX;
+    const absY = data.rect.y + offsetY;
+    // Show quick regenerate popup (primary action) instead of annotation editor
+    setQuickRegen({
+      bridgeId: data.bridgeId,
+      tagName: data.tagName,
+      rect: { x: absX, y: absY },
+      instruction: '',
+      loading: false,
+      error: null,
+      showAnnotationForm: false,
+    });
+    // Keep editingAnnotation available for annotation-only flow
     setEditingAnnotation({
       ...data,
-      rect: {
-        ...data.rect,
-        x: data.rect.x + offsetX,
-        y: data.rect.y + offsetY,
-      },
+      rect: { ...data.rect, x: absX, y: absY },
     });
   }, []);
 
@@ -278,6 +297,60 @@ export default function WorkspacePage() {
       setSpecPanelCollapsed(false);
     }
   }, [annotations]);
+
+  const handleQuickRegen = useCallback(async () => {
+    if (!quickRegen || !id || !quickRegen.instruction.trim()) return;
+    setQuickRegen(prev => prev ? { ...prev, loading: true, error: null } : null);
+
+    try {
+      const response = await fetch(`/api/projects/${id}/prototype/regenerate-component`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bridgeId: quickRegen.bridgeId, instruction: quickRegen.instruction }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed' }));
+        setQuickRegen(prev => prev ? { ...prev, loading: false, error: err.error || 'Failed' } : null);
+        return;
+      }
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.done && evt.html) {
+              // Swap in iframe
+              const iframe = document.querySelector('iframe');
+              if (iframe?.contentWindow) {
+                iframe.contentWindow.postMessage({ type: 'swap-component', bridgeId: evt.bridgeId, html: evt.html }, '*');
+              }
+              // Refresh full HTML from server
+              const projRes = await fetch(`/api/projects/${id}`);
+              if (projRes.ok) {
+                const proj = await projRes.json();
+                setHtml(proj.currentHtml);
+              }
+              setQuickRegen(null);
+              setEditingAnnotation(null);
+              setToastMsg('✓ 元件已更新');
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    } catch (err: any) {
+      setQuickRegen(prev => prev ? { ...prev, loading: false, error: err.message || 'Failed' } : null);
+    }
+  }, [quickRegen, id]);
 
   if (loading) {
     return (
@@ -436,13 +509,58 @@ export default function WorkspacePage() {
         />
       </div>
 
-      {/* Annotation editor popup */}
-      {editingAnnotation && (
+      {/* Quick Regenerate popup — primary action when clicking element in annotation mode */}
+      {quickRegen && !quickRegen.showAnnotationForm && (
+        <div style={{
+          ...styles.quickRegenPopup,
+          left: Math.min(quickRegen.rect.x, window.innerWidth - 320),
+          top: Math.min(quickRegen.rect.y + 8, window.innerHeight - 200),
+        }}>
+          <div style={styles.quickRegenHeader}>
+            <span style={styles.quickRegenTitle}>
+              ⟳ 修改元件 · <code style={styles.quickRegenTag}>{quickRegen.tagName.toLowerCase()}</code>
+            </span>
+            <button type="button" onClick={() => { setQuickRegen(null); setEditingAnnotation(null); }}
+              style={styles.quickRegenClose}>×</button>
+          </div>
+          <textarea
+            autoFocus
+            placeholder="描述要怎麼修改這個元件..."
+            value={quickRegen.instruction}
+            onChange={e => setQuickRegen(prev => prev ? { ...prev, instruction: e.target.value } : null)}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleQuickRegen(); }}
+            style={styles.quickRegenTextarea}
+          />
+          {quickRegen.error && <div style={styles.quickRegenError}>{quickRegen.error}</div>}
+          <div style={styles.quickRegenActions}>
+            <button
+              type="button"
+              onClick={handleQuickRegen}
+              disabled={quickRegen.loading || !quickRegen.instruction.trim()}
+              style={{ ...styles.quickRegenSubmit, background: quickRegen.loading ? '#94a3b8' : '#3b82f6' }}
+            >
+              {quickRegen.loading ? '⟳ 生成中...' : '⚡ 修改'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickRegen(prev => prev ? { ...prev, showAnnotationForm: true } : null)}
+              style={styles.quickRegenAnnotateBtn}
+              title="改成建立標注"
+            >
+              + 標注
+            </button>
+          </div>
+          <div style={styles.quickRegenHint}>⌘Enter 送出</div>
+        </div>
+      )}
+
+      {/* Annotation editor popup — secondary action */}
+      {editingAnnotation && quickRegen?.showAnnotationForm && (
         <AnnotationEditor
           elementLabel={`<${editingAnnotation.tagName.toLowerCase()}> ${editingAnnotation.textContent}`}
           position={{ x: editingAnnotation.rect.x, y: editingAnnotation.rect.y }}
           onSave={handleSaveAnnotation}
-          onCancel={() => setEditingAnnotation(null)}
+          onCancel={() => { setEditingAnnotation(null); setQuickRegen(null); }}
         />
       )}
 
@@ -651,5 +769,89 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#3b82f6',
     borderColor: '#3b82f6',
     color: '#ffffff',
+  },
+  quickRegenPopup: {
+    position: 'fixed' as const,
+    zIndex: 10000,
+    background: '#fff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '12px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.16)',
+    padding: '12px',
+    width: '300px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  },
+  quickRegenHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '8px',
+  },
+  quickRegenTitle: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#475569',
+  },
+  quickRegenTag: {
+    fontSize: '11px',
+    background: '#f1f5f9',
+    padding: '1px 4px',
+    borderRadius: '3px',
+  },
+  quickRegenClose: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#94a3b8',
+    fontSize: '16px',
+    lineHeight: 1,
+  },
+  quickRegenTextarea: {
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    resize: 'none' as const,
+    height: '72px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    padding: '8px',
+    fontSize: '13px',
+    color: '#1e293b',
+    outline: 'none',
+    fontFamily: 'inherit',
+  },
+  quickRegenError: {
+    fontSize: '12px',
+    color: '#ef4444',
+    marginTop: '4px',
+  },
+  quickRegenActions: {
+    display: 'flex',
+    gap: '6px',
+    marginTop: '8px',
+  },
+  quickRegenSubmit: {
+    flex: 1,
+    padding: '7px',
+    borderRadius: '8px',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#fff',
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  quickRegenAnnotateBtn: {
+    padding: '7px 10px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    background: '#fff',
+    color: '#64748b',
+    cursor: 'pointer',
+    fontSize: '12px',
+  },
+  quickRegenHint: {
+    fontSize: '11px',
+    color: '#94a3b8',
+    marginTop: '6px',
+    textAlign: 'center' as const,
   },
 };
