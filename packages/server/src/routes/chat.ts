@@ -423,15 +423,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         assistantMsgId,
         html,
         newVersion,
-        pageStructure.multiPage ? 1 : 0,
-        JSON.stringify(pageStructure.pages)
+        isMultiPage ? 1 : 0,
+        JSON.stringify(finalPages)
       );
 
       db.prepare(
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?"
       ).run(projectId);
 
-      res.write(`data: ${JSON.stringify({ done: true, html, messageType: generateMessageType, intent, isMultiPage: pageStructure.multiPage, pages: pageStructure.pages })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, html, messageType: generateMessageType, intent, isMultiPage, pages: finalPages })}\n\n`);
     } else {
       res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: generateMessageType, intent })}\n\n`);
     }

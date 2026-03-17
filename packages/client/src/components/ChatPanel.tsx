@@ -277,16 +277,21 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       let receivedIsMultiPage = false;
       let receivedPages: string[] = [];
 
+      let lineBuffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        // Buffer chunks to handle SSE lines split across TCP packets
+        lineBuffer += decoder.decode(value, { stream: true });
+        const lines = lineBuffer.split('\n');
+        // Keep the last (possibly incomplete) line in the buffer
+        lineBuffer = lines.pop() ?? '';
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          const jsonStr = line.slice(6);
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
           try {
             const data = JSON.parse(jsonStr);
             if (data.error) {
@@ -321,6 +326,16 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             // skip malformed JSON lines
           }
         }
+      }
+      // Process any remaining buffered data
+      if (lineBuffer.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(lineBuffer.slice(6).trim());
+          if (data.html) receivedHtml = data.html;
+          if (data.messageType) receivedMessageType = data.messageType;
+          if (data.isMultiPage !== undefined) receivedIsMultiPage = !!data.isMultiPage;
+          if (data.pages) receivedPages = data.pages;
+        } catch { /* ignore */ }
       }
 
       const assistantMsg: ChatMessage = {
