@@ -9,6 +9,7 @@ export interface Annotation {
   content: string;
   spec_data: SpecData | null;
   rect?: { x: number; y: number; width: number; height: number };
+  created_at?: string;
 }
 
 interface Props {
@@ -41,6 +42,34 @@ export default function SpecPanel({
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateStatus, setRegenerateStatus] = useState<'idle' | 'done' | 'error'>('idle');
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+
+  const handleExportMarkdown = () => {
+    const title = 'Prototype Annotations';
+    const lines: string[] = [`# ${title}`, ''];
+    annotations.forEach((ann, i) => {
+      const heading = ann.content.length > 50 ? ann.content.slice(0, 50) + '…' : ann.content;
+      const bridgeLabel = ann.bridge_id || '未指定';
+      const createdLabel = ann.created_at
+        ? new Date(ann.created_at).toLocaleString('zh-TW')
+        : '—';
+      lines.push(`## ${i + 1}. ${heading}`);
+      lines.push('');
+      lines.push(`**元件:** ${bridgeLabel}  `);
+      lines.push(`**內容:** ${ann.content}`);
+      lines.push(`**建立時間:** ${createdLabel}`);
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+    });
+    const markdown = lines.join('\n');
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'annotations.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleAnnotationClick = (ann: Annotation) => {
     onSelectAnnotation(ann);
@@ -193,6 +222,18 @@ export default function SpecPanel({
             <p style={styles.searchCount}>
               顯示 {annotations.filter(a => a.content.toLowerCase().includes(searchQuery.toLowerCase())).length} / {annotations.length} 項
             </p>
+          )}
+          {annotations.length > 0 && (
+            <div style={styles.exportRow}>
+              <button
+                type="button"
+                style={styles.exportBtn}
+                onClick={handleExportMarkdown}
+                data-testid="export-annotations-btn"
+              >
+                ↓ 匯出標注
+              </button>
+            </div>
           )}
           {annotations.length === 0 && (
             <p style={styles.emptyText}>No annotations yet. Enable annotation mode to add one.</p>
@@ -571,5 +612,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '11px',
     color: '#64748b',
     textAlign: 'right' as const,
+  },
+  exportRow: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    marginBottom: '6px',
+  },
+  exportBtn: {
+    padding: '4px 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '11px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 };
