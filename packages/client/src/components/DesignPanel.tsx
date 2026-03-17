@@ -41,6 +41,14 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevAllDoneRef = useRef(false);
+  const [globalProfile, setGlobalProfile] = useState<{ description: string; tokens: Record<string, unknown> } | null>(null);
+  const [inheritGlobal, setInheritGlobal] = useState(true);
+  const [supplement, setSupplement] = useState('');
+  const [shellHtml, setShellHtml] = useState('');
+  const [hasShell, setHasShell] = useState(false);
+  const [shellExpanded, setShellExpanded] = useState(false);
+  const [savingShell, setSavingShell] = useState(false);
+  const [extractingShell, setExtractingShell] = useState(false);
 
   // Load design profile on mount
   useEffect(() => {
@@ -54,12 +62,33 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
           if (data.profile.tokens) {
             setTokens({ ...DEFAULT_TOKENS, ...data.profile.tokens });
           }
+          setInheritGlobal(data.profile.inheritGlobal !== false);
+          setSupplement(data.profile.supplement || '');
         }
       } catch {
         // silently fail
       }
     }
     loadDesign();
+
+    fetch('/api/global-design')
+      .then(r => r.json())
+      .then(data => {
+        if (data.profile && (data.profile.description || data.profile.referenceAnalysis || Object.keys(data.profile.tokens || {}).length > 0)) {
+          setGlobalProfile(data.profile);
+        }
+      })
+      .catch(() => {});
+
+    fetch(`/api/projects/${projectId}/platform-shell`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.shell) {
+          setShellHtml(data.shell.shellHtml || '');
+          setHasShell(true);
+        }
+      })
+      .catch(() => {});
   }, [projectId]);
 
   // Toast auto-dismiss
@@ -184,6 +213,8 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
           description,
           referenceAnalysis,
           tokens,
+          inheritGlobal,
+          supplement,
         }),
       });
 
@@ -196,7 +227,45 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [projectId, description, references, tokens, onSaved]);
+  }, [projectId, description, references, tokens, inheritGlobal, supplement, onSaved]);
+
+  const handleExtractShell = useCallback(async () => {
+    setExtractingShell(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/platform-shell/extract`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        setToastMsg({ text: err.error || '擷取失敗', type: 'error' });
+        return;
+      }
+      const data = await res.json();
+      setShellHtml(data.shell.shellHtml);
+      setHasShell(true);
+      setToastMsg({ text: 'Platform Shell 已從原型擷取', type: 'success' });
+    } catch {
+      setToastMsg({ text: '擷取失敗', type: 'error' });
+    } finally {
+      setExtractingShell(false);
+    }
+  }, [projectId]);
+
+  const handleSaveShell = useCallback(async () => {
+    setSavingShell(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/platform-shell`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shellHtml }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setHasShell(true);
+      setToastMsg({ text: 'Platform Shell 已儲存', type: 'success' });
+    } catch {
+      setToastMsg({ text: '儲存失敗', type: 'error' });
+    } finally {
+      setSavingShell(false);
+    }
+  }, [projectId, shellHtml]);
 
   const updateToken = <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => {
     setTokens(prev => ({ ...prev, [key]: value }));
@@ -226,6 +295,110 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
             disabled={summarizing}
             data-testid="design-description"
           />
+        </div>
+
+        {/* Global Design Inheritance */}
+        {globalProfile && (
+          <div style={panelStyles.section}>
+            <div style={panelStyles.inheritRow}>
+              <span style={panelStyles.sectionLabel}>繼承全域設計</span>
+              <label style={panelStyles.toggleLabel}>
+                <input
+                  type="checkbox"
+                  aria-label="繼承全域設計"
+                  checked={inheritGlobal}
+                  onChange={e => setInheritGlobal(e.target.checked)}
+                  style={{ display: 'none' }}
+                />
+                <span style={{
+                  ...panelStyles.toggleTrack,
+                  backgroundColor: inheritGlobal ? '#7c3aed' : '#cbd5e1',
+                }}>
+                  <span style={{
+                    ...panelStyles.toggleThumb,
+                    transform: inheritGlobal ? 'translateX(14px)' : 'translateX(0)',
+                  }} />
+                </span>
+              </label>
+            </div>
+            {inheritGlobal && (
+              <>
+                <div style={panelStyles.globalPreview}>
+                  <div style={panelStyles.globalPreviewRow}>
+                    {!!globalProfile.tokens?.primaryColor && (
+                      <span style={{
+                        ...panelStyles.colorSwatch,
+                        backgroundColor: globalProfile.tokens.primaryColor as string,
+                      }} />
+                    )}
+                    <span style={panelStyles.globalPreviewText}>
+                      {globalProfile.description
+                        ? globalProfile.description.slice(0, 80) + (globalProfile.description.length > 80 ? '...' : '')
+                        : '（無描述）'}
+                    </span>
+                  </div>
+                </div>
+                <label style={panelStyles.sectionLabel}>專案補充說明</label>
+                <textarea
+                  style={panelStyles.textarea}
+                  value={supplement}
+                  onChange={e => setSupplement(e.target.value)}
+                  placeholder="針對此專案的補充設計說明，例如：此頁面的 CTA 按鈕使用橘色強調色..."
+                  rows={3}
+                  data-testid="supplement-textarea"
+                />
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Platform Shell Section */}
+        <div style={panelStyles.section}>
+          <div style={panelStyles.inheritRow}>
+            <span style={panelStyles.sectionLabel}>平台 Shell</span>
+            {hasShell && (
+              <span style={panelStyles.shellBadge} data-testid="shell-active-badge">已啟用</span>
+            )}
+          </div>
+          <p style={panelStyles.shellHint}>定義現有系統的 nav/sidebar/header 框架，AI 生成子頁時將嵌入此框架中</p>
+          <div style={panelStyles.shellBtnRow}>
+            <button
+              type="button"
+              style={panelStyles.shellBtn}
+              onClick={handleExtractShell}
+              disabled={extractingShell}
+              data-testid="extract-shell-btn"
+            >
+              {extractingShell ? '擷取中...' : '從現有原型擷取'}
+            </button>
+            <button
+              type="button"
+              style={panelStyles.shellBtnPurple}
+              onClick={() => setShellExpanded(v => !v)}
+            >
+              {shellExpanded ? '收起手動輸入' : '手動貼上 Shell'}
+            </button>
+          </div>
+          {shellExpanded && (
+            <>
+              <textarea
+                style={panelStyles.shellTextarea}
+                value={shellHtml}
+                onChange={e => setShellHtml(e.target.value)}
+                placeholder={'貼上現有系統的 HTML shell，使用 {CONTENT} 標記主內容插入位置\n\n例如：\n<nav>...</nav>\n<main>{CONTENT}</main>'}
+                data-testid="shell-html-textarea"
+              />
+              <button
+                type="button"
+                style={panelStyles.shellSaveBtn}
+                onClick={handleSaveShell}
+                disabled={savingShell || !shellHtml.trim()}
+                data-testid="save-shell-btn"
+              >
+                {savingShell ? '儲存中...' : '儲存 Shell'}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Section 2: Visual References */}
@@ -711,6 +884,136 @@ const panelStyles: Record<string, React.CSSProperties> = {
     borderTop: '2px solid #3b82f6',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
+  },
+  inheritRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  toggleLabel: {
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  toggleTrack: {
+    position: 'relative' as const,
+    display: 'inline-block',
+    width: '32px',
+    height: '18px',
+    borderRadius: '9px',
+    transition: 'background-color 0.2s',
+    flexShrink: 0,
+  },
+  toggleThumb: {
+    position: 'absolute' as const,
+    top: '2px',
+    left: '2px',
+    width: '14px',
+    height: '14px',
+    borderRadius: '50%',
+    backgroundColor: '#ffffff',
+    transition: 'transform 0.2s',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+  },
+  globalPreview: {
+    padding: '10px 12px',
+    backgroundColor: '#f5f3ff',
+    borderRadius: '8px',
+    border: '1px solid #ddd6fe',
+  },
+  globalPreviewRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+  },
+  colorSwatch: {
+    width: '16px',
+    height: '16px',
+    borderRadius: '4px',
+    flexShrink: 0,
+    marginTop: '2px',
+    border: '1px solid rgba(0,0,0,0.1)',
+  },
+  globalPreviewText: {
+    fontSize: '12px',
+    color: '#4c1d95',
+    lineHeight: '1.4',
+  },
+  shellBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '2px 8px',
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+    borderRadius: '10px',
+    fontSize: '11px',
+    fontWeight: 600,
+  },
+  shellHint: {
+    margin: '0 0 4px',
+    fontSize: '11px',
+    color: '#94a3b8',
+    lineHeight: '1.4',
+  },
+  shellBtnRow: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap' as const,
+  },
+  shellBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '5px 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  shellBtnPurple: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '5px 10px',
+    border: '1px solid #c4b5fd',
+    borderRadius: '6px',
+    backgroundColor: '#ffffff',
+    color: '#7c3aed',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  shellTextarea: {
+    width: '100%',
+    padding: '8px 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontFamily: '"SF Mono","Fira Code",monospace',
+    resize: 'vertical' as const,
+    outline: 'none',
+    lineHeight: '1.5',
+    color: '#1e293b',
+    backgroundColor: '#f8fafc',
+    boxSizing: 'border-box' as const,
+    minHeight: '120px',
+  },
+  shellSaveBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '5px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    alignSelf: 'flex-start' as const,
   },
   toast: {
     position: 'absolute',

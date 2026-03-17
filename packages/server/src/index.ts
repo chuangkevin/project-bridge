@@ -12,6 +12,9 @@ import uploadRouter from './routes/upload';
 import annotationsRouter from './routes/annotations';
 import designRouter from './routes/design';
 import artStyleRouter from './routes/artStyle';
+import globalDesignRouter from './routes/globalDesign';
+import prototypesRouter from './routes/prototypes';
+import platformShellRouter from './routes/platformShell';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,6 +32,9 @@ app.use('/api/projects', uploadRouter);
 app.use('/api/projects', annotationsRouter);
 app.use('/api/projects', designRouter);
 app.use('/api/projects', artStyleRouter);
+app.use('/api/global-design', globalDesignRouter);
+app.use('/api/projects', prototypesRouter);
+app.use('/api/projects', platformShellRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

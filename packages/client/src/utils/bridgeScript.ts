@@ -80,6 +80,17 @@ export const BRIDGE_SCRIPT = `
     } else if (e.data.type === 'set-annotation-mode') {
       annotationMode = !!e.data.enabled;
       document.body.style.cursor = annotationMode ? 'crosshair' : '';
+    } else if (e.data.type === 'inject-styles') {
+      var css = e.data.css || '';
+      var existing = document.getElementById('__tweaker__');
+      if (existing) {
+        existing.textContent = css;
+      } else {
+        var styleEl = document.createElement('style');
+        styleEl.id = '__tweaker__';
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+      }
     } else if (e.data.type === 'navigate') {
       var pageName = e.data.page;
       var allPages = document.querySelectorAll('.page[data-page]');

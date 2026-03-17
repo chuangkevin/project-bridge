@@ -85,6 +85,9 @@ export default function HomePage() {
               <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.93 3.93l1.41 1.41M14.66 14.66l1.41 1.41M3.93 16.07l1.41-1.41M14.66 5.34l1.41-1.41" />
             </svg>
           </button>
+          <button type="button" style={styles.globalDesignBtn} onClick={() => navigate('/global-design')} data-testid="global-design-btn">
+            🌐 全域設計
+          </button>
           <button style={styles.newBtn} onClick={() => setShowNewProject(true)} data-testid="new-project-btn">
             + New Project
           </button>
@@ -199,6 +202,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     backgroundColor: '#ffffff',
     color: '#64748b',
+    cursor: 'pointer',
+  },
+  globalDesignBtn: {
+    padding: '8px 14px',
+    backgroundColor: '#f5f3ff',
+    color: '#7c3aed',
+    border: '1px solid #ddd6fe',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
     cursor: 'pointer',
   },
   newBtn: {

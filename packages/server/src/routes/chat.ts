@@ -80,8 +80,13 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    // Classify intent
-    const intent = await classifyIntent(message.trim(), apiKey);
+    // Fetch platform shell (needed for intent classification)
+    const shellRow = db.prepare('SELECT shell_html FROM platform_shells WHERE project_id = ?').get(projectId) as { shell_html: string } | undefined;
+    const shellHtml = shellRow?.shell_html || null;
+    const hasShell = !!shellHtml;
+
+    // Classify intent (four-way)
+    const intent = await classifyIntent(message.trim(), apiKey, hasShell);
 
     // Load conversation history (last 20 messages)
     const history = db.prepare(
@@ -152,19 +157,55 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       return;
     }
 
-    // Generate path
-    // Build effective system prompt
+    // Generate path (full-page | in-shell | component)
+    // Build effective system prompt with composed design injection
     let effectiveSystemPrompt = systemPrompt;
+
+    // Fetch global design
+    const globalRow = db.prepare("SELECT * FROM global_design_profile WHERE id = 'global'").get() as any;
+
+    // Fetch project design
     const designRow = db.prepare('SELECT * FROM design_profiles WHERE project_id = ?').get(projectId) as any;
+    const inheritGlobal = designRow ? designRow.inherit_global !== 0 : true;
+    const supplement = designRow?.supplement || '';
+
+    // Inject global design block
+    if (inheritGlobal && globalRow) {
+      let globalTokens: Record<string, any> = {};
+      try { globalTokens = JSON.parse(globalRow.tokens || '{}'); } catch { /* ignore */ }
+      const hasGlobalDesc = globalRow.description?.trim().length > 0;
+      const hasGlobalAnalysis = globalRow.reference_analysis?.trim().length > 0;
+      const hasGlobalTokens = Object.keys(globalTokens).length > 0;
+
+      if (hasGlobalDesc || hasGlobalAnalysis || hasGlobalTokens) {
+        let globalBlock = '\n\n=== GLOBAL DESIGN (Brand Style) ===\n';
+        if (hasGlobalDesc) globalBlock += `Design Direction: ${globalRow.description}\n`;
+        if (hasGlobalAnalysis) globalBlock += `Visual Reference Analysis:\n${globalRow.reference_analysis}\n`;
+        if (hasGlobalTokens) {
+          globalBlock += 'Design Tokens:\n';
+          if (globalTokens.primaryColor) globalBlock += `- Primary Color: ${globalTokens.primaryColor}\n`;
+          if (globalTokens.secondaryColor) globalBlock += `- Secondary Color: ${globalTokens.secondaryColor}\n`;
+          if (globalTokens.fontFamily) globalBlock += `- Font Family: ${globalTokens.fontFamily}\n`;
+          if (globalTokens.borderRadius !== undefined) globalBlock += `- Border Radius: ${globalTokens.borderRadius}px\n`;
+          if (globalTokens.spacing) globalBlock += `- Spacing: ${globalTokens.spacing}\n`;
+          if (globalTokens.shadowStyle) globalBlock += `- Shadow: ${globalTokens.shadowStyle}\n`;
+        }
+        globalBlock += 'PROJECT DESIGN tokens override conflicting GLOBAL DESIGN tokens.\n';
+        globalBlock += '====================================';
+        effectiveSystemPrompt += globalBlock;
+      }
+    }
+
+    // Inject project design block
     if (designRow) {
-      const hasDescription = designRow.description && designRow.description.trim().length > 0;
-      const hasReferenceAnalysis = designRow.reference_analysis && designRow.reference_analysis.trim().length > 0;
+      const hasDescription = designRow.description?.trim().length > 0;
+      const hasReferenceAnalysis = designRow.reference_analysis?.trim().length > 0;
       let tokens: Record<string, any> = {};
       try { tokens = JSON.parse(designRow.tokens || '{}'); } catch { /* ignore */ }
       const hasTokens = Object.keys(tokens).length > 0;
 
       if (hasDescription || hasReferenceAnalysis || hasTokens) {
-        let profileBlock = '\n\n=== DESIGN PROFILE ===\n';
+        let profileBlock = '\n\n=== PROJECT DESIGN ===\n';
         if (hasDescription) profileBlock += `Design Direction: ${designRow.description}\n`;
         if (hasReferenceAnalysis) profileBlock += `Visual Reference Analysis:\n${designRow.reference_analysis}\n`;
         if (hasTokens) {
@@ -178,8 +219,29 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         }
         profileBlock += 'IMPORTANT: You MUST strictly follow this design profile. Use the exact colors, typography, spacing, and visual style described above.\n';
         profileBlock += '======================';
-        effectiveSystemPrompt = systemPrompt + profileBlock;
+        effectiveSystemPrompt += profileBlock;
       }
+    }
+
+    // Inject supplement block
+    if (supplement.trim().length > 0) {
+      effectiveSystemPrompt += `\n\n=== PROJECT SUPPLEMENT ===\n${supplement}\nPROJECT SUPPLEMENT takes priority for any conflicting attributes.\n===========================`;
+    }
+
+    // Design spec analysis injection (from uploaded files with visual analysis)
+    const specAnalysisRows = db.prepare(
+      'SELECT original_name, visual_analysis FROM uploaded_files WHERE project_id = ? AND visual_analysis IS NOT NULL'
+    ).all(projectId) as { original_name: string; visual_analysis: string }[];
+    if (specAnalysisRows.length > 0) {
+      let specBlock = '\n\n=== DESIGN SPEC ANALYSIS ===\n';
+      specBlock += 'The following component specifications were extracted from uploaded design spec files.\n';
+      specBlock += 'You MUST follow these component patterns precisely when generating UI:\n\n';
+      for (const row of specAnalysisRows) {
+        specBlock += `--- From: ${row.original_name} ---\n${row.visual_analysis}\n\n`;
+      }
+      specBlock += 'CRITICAL: Use the exact colors, card layouts, search bar styles, tag designs, and spacing patterns described above.\n';
+      specBlock += '============================';
+      effectiveSystemPrompt += specBlock;
     }
 
     // Art style injection
@@ -188,8 +250,18 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       effectiveSystemPrompt += `\n\n=== ART STYLE ===\nApply this visual art style to your generated UI:\n${artStyle.detected_style}\nNote: If a Design Profile is also active, Design Profile color tokens take precedence over conflicting art style attributes.\n=================`;
     }
 
-    // Multi-page detection
-    const pageStructure = await analyzePageStructure(message.trim(), apiKey);
+    // Platform context injection based on intent
+    if (intent === 'in-shell' && shellHtml) {
+      const shellPreview = shellHtml.slice(0, 3000);
+      effectiveSystemPrompt += `\n\n=== PLATFORM SHELL CONTEXT ===\nThis is an ENTERPRISE PLATFORM. You are designing a NEW SUB-PAGE or FEATURE PAGE to be embedded within the existing platform shell below.\n\nExisting shell structure (may be truncated):\n${shellPreview}\n\nCRITICAL INSTRUCTIONS:\n- Output ONLY the content that goes inside <main>...</main>\n- Do NOT output <!DOCTYPE html>, <html>, <head>, <nav>, <aside>, <header>, <footer>\n- Your output will be inserted into the platform shell automatically\n- Match the visual style, colors, and component patterns visible in the shell\n=============================`;
+    } else if (intent === 'component') {
+      effectiveSystemPrompt += `\n\n=== COMPONENT MODE ===\nYou are designing an ISOLATED UI COMPONENT (not a full page).\n\nCRITICAL INSTRUCTIONS:\n- Output ONLY the component HTML and its scoped CSS in a <style> tag\n- Do NOT output <!DOCTYPE html>, <html>, <head>, <body>, <nav>, <header>, <footer>\n- The component will be previewed on a light gray background\n- Include all necessary CSS within a single <style> tag at the top of your output\n- Make the component visually complete and production-ready\n=====================`;
+    }
+
+    // Multi-page detection (only relevant for full-page intent)
+    const pageStructure = (intent === 'full-page' || intent === 'in-shell')
+      ? await analyzePageStructure(message.trim(), apiKey)
+      : { multiPage: false, pages: [] as string[] };
     if (pageStructure.multiPage && pageStructure.pages.length > 1) {
       const pageList = pageStructure.pages.map(p => `- "${p}"`).join('\n');
       effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===\nGenerate a multi-page prototype with ALL of these pages:\n${pageList}\n\nRequirements:\n- Use a navigation element (sidebar or top nav) that is always visible\n- Each page as: <div class="page" data-page="{page-name}"> (first page visible, others hidden with display:none)\n- Include JavaScript to show/hide pages when nav links are clicked\n- Highlight the active nav item\n- All pages must follow the same design style\n============================`;
@@ -229,24 +301,63 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
     ).run(userMsgId, projectId, 'user', userContent, 'user');
 
+    // Determine message_type label based on intent
+    const generateMessageType = intent === 'component' ? 'component' : intent === 'in-shell' ? 'in-shell' : 'generate';
+
     // Save assistant response
     const assistantMsgId = uuidv4();
     db.prepare(
       'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
-    ).run(assistantMsgId, projectId, 'assistant', fullResponse, 'generate');
+    ).run(assistantMsgId, projectId, 'assistant', fullResponse, generateMessageType);
 
-    // Extract HTML
-    let html = fullResponse.trim();
+    // Extract raw AI output — strip markdown fences and trailing commentary
+    const rawAiOutput = (() => {
+      const raw = fullResponse.trim();
+      const fenceMatch = raw.match(/```(?:html)?\s*([\s\S]*?)```/i);
+      if (fenceMatch) return fenceMatch[1].trim();
+      const startIdx = raw.search(/<!doctype html|<html[\s>]/i);
+      if (startIdx === -1) return raw;
+      const endIdx = raw.lastIndexOf('</html>');
+      if (endIdx !== -1) return raw.slice(startIdx, endIdx + '</html>'.length);
+      return raw.slice(startIdx);
+    })();
 
-    // Fix iframe nesting: inject <base target="_blank"> so all links open in new tab
-    if (html.toLowerCase().includes('<head>')) {
-      html = html.replace(/<head>/i, '<head><base target="_blank">');
-    } else if (html.toLowerCase().includes('<head ')) {
-      html = html.replace(/(<head[^>]*>)/i, '$1<base target="_blank">');
+    // Compose final HTML based on intent
+    let html: string;
+    if (intent === 'component') {
+      // Wrap component fragment in minimal preview HTML
+      html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>body{display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:32px 24px;background:#f8fafc;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}</style></head><body>${rawAiOutput}</body></html>`;
+    } else if (intent === 'in-shell' && shellHtml) {
+      // Compose in-shell: replace {CONTENT} with AI output
+      // If AI mistakenly returned full HTML, extract <main> content first
+      let content = rawAiOutput;
+      const mainMatch = content.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+      if (mainMatch) content = mainMatch[1].trim();
+      else if (content.toLowerCase().includes('<!doctype')) {
+        // Full page returned — strip outer shell, keep body content
+        const bodyMatch = content.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if (bodyMatch) content = bodyMatch[1].trim();
+      }
+      html = shellHtml.replace('{CONTENT}', content);
+      // Inject base target
+      if (html.toLowerCase().includes('<head>')) {
+        html = html.replace(/<head>/i, '<head><base target="_blank">');
+      } else if (html.toLowerCase().includes('<head ')) {
+        html = html.replace(/(<head[^>]*>)/i, '$1<base target="_blank">');
+      }
+    } else {
+      // full-page: existing logic
+      html = rawAiOutput;
+      if (html.toLowerCase().includes('<head>')) {
+        html = html.replace(/<head>/i, '<head><base target="_blank">');
+      } else if (html.toLowerCase().includes('<head ')) {
+        html = html.replace(/(<head[^>]*>)/i, '$1<base target="_blank">');
+      }
     }
 
     // Only create prototype version if response looks like HTML
-    if (html.toLowerCase().includes('<!doctype html') || html.toLowerCase().includes('<html')) {
+    const isFullHtml = html.toLowerCase().includes('<!doctype html') || html.toLowerCase().includes('<html');
+    if (isFullHtml) {
       const maxVersion = db.prepare(
         'SELECT MAX(version) as maxV FROM prototype_versions WHERE project_id = ?'
       ).get(projectId) as any;
@@ -273,9 +384,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?"
       ).run(projectId);
 
-      res.write(`data: ${JSON.stringify({ done: true, html, messageType: 'generate', isMultiPage: pageStructure.multiPage, pages: pageStructure.pages })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, html, messageType: generateMessageType, intent, isMultiPage: pageStructure.multiPage, pages: pageStructure.pages })}\n\n`);
     } else {
-      res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: 'generate' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: generateMessageType, intent })}\n\n`);
     }
 
     res.end();

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ChatPanel, { ChatMessage } from '../components/ChatPanel';
 import DesignPanel from '../components/DesignPanel';
+import StyleTweakerPanel from '../components/StyleTweakerPanel';
 import PreviewPanel from '../components/PreviewPanel';
 import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector';
 import Toast from '../components/Toast';
@@ -41,7 +42,7 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [leftTab, setLeftTab] = useState<'chat' | 'design'>('chat');
+  const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
   const [designActive, setDesignActive] = useState(false);
   const [isMultiPage, setIsMultiPage] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
@@ -158,6 +159,22 @@ export default function WorkspacePage() {
       iframe.contentWindow.postMessage({ type: 'navigate', page }, '*');
     }
   }, []);
+
+  const injectStyles = useCallback((css: string) => {
+    const iframe = document.querySelector('iframe');
+    if (iframe?.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'inject-styles', css }, '*');
+    }
+  }, []);
+
+  const handleSaveStyles = useCallback(async (css: string) => {
+    const res = await fetch(`/api/projects/${id}/prototype/styles`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ css }),
+    });
+    if (!res.ok) throw new Error('Save failed');
+  }, [id]);
 
   const handleShare = useCallback(async () => {
     if (!project?.share_token) return;
@@ -346,6 +363,15 @@ export default function WorkspacePage() {
             >
               Design
             </button>
+            <button
+              style={{ ...styles.tabBtn, ...(leftTab === 'style' ? styles.tabBtnActive : {}), ...(!html ? styles.tabBtnDisabled : {}) }}
+              onClick={() => html && setLeftTab('style')}
+              disabled={!html}
+              data-testid="tab-style"
+              title={!html ? '請先生成原型' : undefined}
+            >
+              🎨 樣式
+            </button>
           </div>
           <div style={styles.tabContent}>
             {leftTab === 'chat' ? (
@@ -355,10 +381,16 @@ export default function WorkspacePage() {
                 onNewMessages={handleNewMessages}
                 onHtmlGenerated={handleHtmlGenerated}
               />
-            ) : (
+            ) : leftTab === 'design' ? (
               <DesignPanel
                 projectId={project.id}
                 onSaved={checkDesignActive}
+              />
+            ) : (
+              <StyleTweakerPanel
+                html={html}
+                onInject={injectStyles}
+                onSave={handleSaveStyles}
               />
             )}
           </div>
@@ -566,6 +598,10 @@ const styles: Record<string, React.CSSProperties> = {
   tabBtnActive: {
     color: '#3b82f6',
     borderBottom: '2px solid #3b82f6',
+  },
+  tabBtnDisabled: {
+    opacity: 0.4,
+    cursor: 'not-allowed',
   },
   tabContent: {
     flex: 1,

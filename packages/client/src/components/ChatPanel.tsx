@@ -10,13 +10,14 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  messageType?: 'user' | 'generate' | 'answer';
+  messageType?: 'user' | 'generate' | 'in-shell' | 'component' | 'answer';
 }
 
 interface UploadedFile {
   id: string;
   filename: string;
   extractedText?: string;
+  visualAnalysisReady?: boolean;
 }
 
 interface ArtStyle {
@@ -45,6 +46,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [constraints, setConstraints] = useState<Constraints | null>(null);
   const [artStyle, setArtStyle] = useState<ArtStyle | null>(null);
   const [artStyleLoading, setArtStyleLoading] = useState(false);
+  const [uploadToast, setUploadToast] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +72,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   useEffect(() => {
     fetchArtStyle();
   }, [fetchArtStyle]);
+
+  useEffect(() => {
+    if (!uploadToast) return;
+    const t = setTimeout(() => setUploadToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [uploadToast]);
 
   const handleArtStyleToggle = useCallback(async (enabled: boolean) => {
     setArtStyleLoading(true);
@@ -121,7 +129,11 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         id: data.id,
         filename: data.filename,
         extractedText: data.extractedText,
+        visualAnalysisReady: !!data.visualAnalysisReady,
       }]);
+
+      // Show upload success feedback
+      setUploadToast(data.visualAnalysisReady ? '上傳完成，視覺分析已完成' : '上傳完成');
 
       // Refetch art style in case a new image was uploaded
       fetchArtStyle();
@@ -360,6 +372,14 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 <span style={styles.answerLabel}>💬 回答</span>
                 {msg.content}
               </div>
+            ) : msg.messageType === 'component' ? (
+              <div style={styles.generateBubble}>
+                <span style={styles.generateTag}>🧩 已生成元件</span>
+              </div>
+            ) : msg.messageType === 'in-shell' ? (
+              <div style={styles.generateBubble}>
+                <span style={styles.generateTag}>✅ 已生成子頁</span>
+              </div>
             ) : (msg.messageType === 'generate' || isHtmlContent(msg.content)) ? (
               <div style={styles.generateBubble}>
                 <span style={styles.generateTag}>✅ 已生成原型</span>
@@ -402,6 +422,11 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           {attachedFiles.map(f => (
             <div key={f.id} style={styles.fileChip} data-testid="file-chip">
               <span style={styles.fileName}>{f.filename}</span>
+              {f.visualAnalysisReady && (
+                <span style={styles.visualBadge} data-testid="visual-analysis-badge" title="視覺分析已完成">
+                  👁 Visual
+                </span>
+              )}
               {f.extractedText && (
                 <button
                   style={styles.extractedBadge}
@@ -471,6 +496,13 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         </button>
       </div>
 
+      {/* Upload success toast */}
+      {uploadToast && (
+        <div style={styles.uploadToast} data-testid="upload-toast">
+          {uploadToast}
+        </div>
+      )}
+
       {/* File text modal */}
       {viewingFile && (
         <div style={styles.modalOverlay} onClick={() => setViewingFile(null)}>
@@ -510,6 +542,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     backgroundColor: '#f8fafc',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    position: 'relative' as const,
   },
   header: {
     padding: '12px 16px',
@@ -728,6 +761,29 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '10px',
     fontWeight: 600,
     cursor: 'pointer',
+  },
+  visualBadge: {
+    padding: '1px 6px',
+    backgroundColor: '#d1fae5',
+    color: '#065f46',
+    borderRadius: '8px',
+    fontSize: '10px',
+    fontWeight: 600,
+  },
+  uploadToast: {
+    position: 'absolute' as const,
+    bottom: '72px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    padding: '7px 14px',
+    backgroundColor: '#16a34a',
+    color: '#ffffff',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: 500,
+    whiteSpace: 'nowrap' as const,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    zIndex: 100,
   },
   removeFileBtn: {
     width: '16px',
