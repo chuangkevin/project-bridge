@@ -341,6 +341,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   };
 
   const [localUserMsg, setLocalUserMsg] = useState<ChatMessage | null>(null);
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -408,39 +409,75 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             <p style={styles.emptyChatText}>Describe your UI to start generating a prototype.</p>
           </div>
         )}
-        {displayMessages.map(msg => (
-          <div
-            key={msg.id}
-            style={msg.role === 'user' ? styles.userMsgRow : styles.assistantMsgRow}
-          >
-            {msg.role === 'user' ? (
-              <div style={styles.userBubble}>
-                {msg.content}
+        {displayMessages.map((msg, idx) => {
+          const isHovered = hoveredMessageId === msg.id;
+          const lastUserMsgBeforeThis = msg.role === 'assistant'
+            ? displayMessages.slice(0, idx).filter(m => m.role === 'user').slice(-1)[0]
+            : null;
+          return (
+            <div
+              key={msg.id}
+              style={msg.role === 'user' ? styles.userMsgRow : styles.assistantMsgRow}
+            >
+              <div
+                style={styles.msgBubbleWrapper}
+                onMouseEnter={() => setHoveredMessageId(msg.id)}
+                onMouseLeave={() => setHoveredMessageId(null)}
+              >
+                {isHovered && (
+                  <div style={styles.messageActions}>
+                    <button
+                      type="button"
+                      style={styles.messageActionBtn}
+                      onClick={() => navigator.clipboard.writeText(msg.content)}
+                      title="複製訊息"
+                    >
+                      📋 複製
+                    </button>
+                    {msg.role === 'assistant' && lastUserMsgBeforeThis && (
+                      <button
+                        type="button"
+                        style={styles.messageActionBtn}
+                        onClick={() => {
+                          setInput(lastUserMsgBeforeThis.content);
+                        }}
+                        title="重新生成"
+                      >
+                        🔄 重新生成
+                      </button>
+                    )}
+                  </div>
+                )}
+                {msg.role === 'user' ? (
+                  <div style={styles.userBubble}>
+                    {msg.content}
+                  </div>
+                ) : msg.messageType === 'answer' ? (
+                  <div style={styles.answerBubble}>
+                    <span style={styles.answerLabel}>💬 回答</span>
+                    {msg.content}
+                  </div>
+                ) : msg.messageType === 'component' ? (
+                  <div style={styles.generateBubble}>
+                    <span style={styles.generateTag}>🧩 已生成元件</span>
+                  </div>
+                ) : msg.messageType === 'in-shell' ? (
+                  <div style={styles.generateBubble}>
+                    <span style={styles.generateTag}>✅ 已生成子頁</span>
+                  </div>
+                ) : (msg.messageType === 'generate' || isHtmlContent(msg.content)) ? (
+                  <div style={styles.generateBubble}>
+                    <span style={styles.generateTag}>✅ 已生成原型</span>
+                  </div>
+                ) : (
+                  <div style={styles.assistantBubble}>
+                    {msg.content}
+                  </div>
+                )}
               </div>
-            ) : msg.messageType === 'answer' ? (
-              <div style={styles.answerBubble}>
-                <span style={styles.answerLabel}>💬 回答</span>
-                {msg.content}
-              </div>
-            ) : msg.messageType === 'component' ? (
-              <div style={styles.generateBubble}>
-                <span style={styles.generateTag}>🧩 已生成元件</span>
-              </div>
-            ) : msg.messageType === 'in-shell' ? (
-              <div style={styles.generateBubble}>
-                <span style={styles.generateTag}>✅ 已生成子頁</span>
-              </div>
-            ) : (msg.messageType === 'generate' || isHtmlContent(msg.content)) ? (
-              <div style={styles.generateBubble}>
-                <span style={styles.generateTag}>✅ 已生成原型</span>
-              </div>
-            ) : (
-              <div style={styles.assistantBubble}>
-                {msg.content}
-              </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
         {streaming && streamingContent && (
           <div style={styles.assistantMsgRow}>
             <div style={styles.assistantBubble}>
@@ -1081,5 +1118,28 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     lineHeight: 1,
+  },
+  msgBubbleWrapper: {
+    position: 'relative' as const,
+    display: 'inline-block',
+    maxWidth: '100%',
+  },
+  messageActions: {
+    position: 'absolute' as const,
+    top: '-28px',
+    right: 0,
+    display: 'flex',
+    gap: '4px',
+    zIndex: 10,
+  },
+  messageActionBtn: {
+    fontSize: '11px',
+    padding: '2px 6px',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
+    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
   },
 };

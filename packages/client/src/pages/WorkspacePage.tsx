@@ -94,6 +94,9 @@ export default function WorkspacePage() {
   // Whether this project has uploaded files with visual analysis (design spec)
   const [hasDesignSpec, setHasDesignSpec] = useState(false);
 
+  // Focus mode state
+  const [focusMode, setFocusMode] = useState(false);
+
   // Inline rename state
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
@@ -389,6 +392,14 @@ export default function WorkspacePage() {
           setAnnotationMode(prev => !prev);
         }
       }
+      // F: toggle focus mode (when not typing in an input)
+      if (e.key === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const active = document.activeElement;
+        const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
+        if (!isTyping) {
+          setFocusMode(prev => !prev);
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -492,7 +503,7 @@ export default function WorkspacePage() {
   return (
     <div style={styles.container}>
       {/* Toolbar */}
-      <div style={styles.toolbar}>
+      <div style={{ ...styles.toolbar, ...(focusMode ? { display: 'none' } : {}) }}>
         <div style={styles.toolbarLeft}>
           <button style={styles.homeBtn} onClick={() => navigate('/')} title="Home" data-testid="home-btn">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -599,6 +610,15 @@ export default function WorkspacePage() {
             </svg>
             Annotate
           </button>
+          <button
+            type="button"
+            style={styles.historyBtn}
+            onClick={() => setFocusMode(true)}
+            title="專注模式 (F)"
+            data-testid="focus-mode-btn"
+          >
+            ⛶ 專注
+          </button>
           <button style={styles.shareBtn} onClick={handleShare} data-testid="share-btn">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
               <circle cx="3" cy="7" r="2" />
@@ -621,7 +641,7 @@ export default function WorkspacePage() {
 
       {/* Main content */}
       <div style={styles.body}>
-        <div style={styles.chatPane}>
+        <div style={{ ...styles.chatPane, ...(focusMode ? { width: 0, overflow: 'hidden', borderRight: 'none' } : {}) }}>
           {/* Tab switcher */}
           <div style={styles.tabBar}>
             <button
@@ -709,18 +729,33 @@ export default function WorkspacePage() {
             </div>
           </div>
         </div>
-        <SpecPanel
-          annotations={annotations}
-          selectedAnnotation={selectedAnnotation}
-          onSelectAnnotation={setSelectedAnnotation}
-          onHighlightElement={handleHighlightElement}
-          onSaveSpec={handleSaveSpec}
-          collapsed={specPanelCollapsed}
-          onToggle={() => setSpecPanelCollapsed(!specPanelCollapsed)}
-          savingSpec={savingSpec}
-          projectId={project.id}
-        />
+        {!focusMode && (
+          <SpecPanel
+            annotations={annotations}
+            selectedAnnotation={selectedAnnotation}
+            onSelectAnnotation={setSelectedAnnotation}
+            onHighlightElement={handleHighlightElement}
+            onSaveSpec={handleSaveSpec}
+            collapsed={specPanelCollapsed}
+            onToggle={() => setSpecPanelCollapsed(!specPanelCollapsed)}
+            savingSpec={savingSpec}
+            projectId={project.id}
+          />
+        )}
       </div>
+
+      {/* Focus mode floating exit button */}
+      {focusMode && (
+        <button
+          type="button"
+          style={styles.focusModeExitBtn}
+          onClick={() => setFocusMode(false)}
+          title="退出專注模式 (F)"
+          data-testid="focus-mode-exit-btn"
+        >
+          ⛶ 退出專注
+        </button>
+      )}
 
       {/* Quick Regenerate popup — primary action when clicking element in annotation mode */}
       {quickRegen && !quickRegen.showAnnotationForm && (
@@ -1255,6 +1290,25 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '4px',
     marginBottom: '6px',
     scrollbarWidth: 'none' as const,
+  },
+  focusModeExitBtn: {
+    position: 'fixed' as const,
+    bottom: '16px',
+    right: '16px',
+    zIndex: 10001,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 16px',
+    border: 'none',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    color: '#ffffff',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    backdropFilter: 'blur(4px)',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
   },
   regenHistoryChip: {
     flexShrink: 0,

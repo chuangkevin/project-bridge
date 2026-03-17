@@ -35,6 +35,7 @@ export default function SpecPanel({
   projectId,
 }: Props) {
   const [tab, setTab] = useState<'annotations' | 'spec'>('annotations');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showRegenerateForm, setShowRegenerateForm] = useState(false);
   const [regenerateInstruction, setRegenerateInstruction] = useState('');
   const [regenerating, setRegenerating] = useState(false);
@@ -167,10 +168,40 @@ export default function SpecPanel({
 
       {tab === 'annotations' && (
         <div style={styles.list}>
+          <div style={styles.searchWrapper}>
+            <input
+              style={styles.searchInput}
+              type="search"
+              placeholder="搜尋標注..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              data-testid="annotation-search"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                style={styles.searchClear}
+                onClick={() => setSearchQuery('')}
+                title="清除搜尋"
+                data-testid="annotation-search-clear"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <p style={styles.searchCount}>
+              顯示 {annotations.filter(a => a.content.toLowerCase().includes(searchQuery.toLowerCase())).length} / {annotations.length} 項
+            </p>
+          )}
           {annotations.length === 0 && (
             <p style={styles.emptyText}>No annotations yet. Enable annotation mode to add one.</p>
           )}
-          {annotations.map((ann, i) => (
+          {annotations
+            .filter(ann =>
+              !searchQuery || ann.content.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            .map((ann, i) => (
             <div
               key={ann.id}
               style={{
@@ -505,5 +536,40 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     fontFamily: 'inherit',
+  },
+  searchWrapper: {
+    position: 'relative',
+    marginBottom: '6px',
+  },
+  searchInput: {
+    width: '100%',
+    padding: '6px 28px 6px 8px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontFamily: 'inherit',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+    color: '#1e293b',
+    backgroundColor: '#f8fafc',
+  },
+  searchClear: {
+    position: 'absolute',
+    right: '6px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    fontSize: '11px',
+    color: '#94a3b8',
+    padding: '0',
+    lineHeight: 1,
+  },
+  searchCount: {
+    margin: '0 0 6px',
+    fontSize: '11px',
+    color: '#64748b',
+    textAlign: 'right' as const,
   },
 };
