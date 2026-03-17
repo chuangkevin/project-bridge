@@ -61,6 +61,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [generationPhase, setGenerationPhase] = useState<'idle' | 'thinking' | 'writing' | 'finalizing'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -229,6 +230,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setInput('');
     setStreaming(true);
     setStreamingContent('');
+    setGenerationPhase('thinking');
     setError(null);
 
     const userMsg: ChatMessage = {
@@ -294,6 +296,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             if (data.content) {
               fullContent += data.content;
               setStreamingContent(fullContent);
+              const len = fullContent.length;
+              if (len > 2000) {
+                setGenerationPhase('finalizing');
+              } else if (len > 200) {
+                setGenerationPhase('writing');
+              }
             }
             if (data.done) {
               if (data.html) {
@@ -337,6 +345,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       onNewMessages(userMsg, { id: `err-${Date.now()}`, role: 'assistant', content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` });
     } finally {
       setStreaming(false);
+      setGenerationPhase('idle');
     }
   };
 
@@ -360,6 +369,37 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       <div style={styles.header}>
         <h3 style={styles.headerTitle}>Chat</h3>
       </div>
+
+      {/* Generation progress bar */}
+      {generationPhase !== 'idle' && (
+        <div style={styles.generationProgress} data-testid="generation-progress">
+          <div style={styles.generationSteps}>
+            {(['thinking', 'writing', 'finalizing'] as const).map((phase, idx) => {
+              const labels: Record<string, string> = { thinking: '思考中', writing: '撰寫中', finalizing: '完成' };
+              const phaseOrder = { thinking: 0, writing: 1, finalizing: 2 };
+              const isActive = generationPhase === phase;
+              const isPast = phaseOrder[generationPhase] > idx;
+              const stepStyle: React.CSSProperties = {
+                ...styles.generationStep,
+                fontWeight: isActive ? 700 : 400,
+                color: isActive ? '#3b82f6' : isPast ? '#22c55e' : '#94a3b8',
+              };
+              return (
+                <span key={phase} style={stepStyle}>
+                  {labels[phase]}
+                </span>
+              );
+            })}
+          </div>
+          <div style={styles.generationBarTrack}>
+            {(() => {
+              const fillWidth = generationPhase === 'thinking' ? '33%' : generationPhase === 'writing' ? '66%' : '100%';
+              const barFillStyle: React.CSSProperties = { ...styles.generationBarFill, width: fillWidth };
+              return <div style={barFillStyle} />;
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Art Style Card */}
       {artStyle && artStyle.summary && (
@@ -1118,6 +1158,32 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     lineHeight: 1,
+  },
+  generationProgress: {
+    padding: '8px 16px 6px',
+    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+  },
+  generationSteps: {
+    display: 'flex',
+    gap: '16px',
+    marginBottom: '6px',
+  },
+  generationStep: {
+    fontSize: '12px',
+    transition: 'color 0.3s',
+  },
+  generationBarTrack: {
+    height: '3px',
+    backgroundColor: '#e2e8f0',
+    borderRadius: '2px',
+    overflow: 'hidden',
+  },
+  generationBarFill: {
+    height: '100%',
+    backgroundColor: '#3b82f6',
+    borderRadius: '2px',
+    transition: 'width 0.5s ease',
   },
   msgBubbleWrapper: {
     position: 'relative' as const,

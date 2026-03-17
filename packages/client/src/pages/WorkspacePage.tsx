@@ -91,6 +91,9 @@ export default function WorkspacePage() {
   // Device frame state
   const [deviceFrame, setDeviceFrame] = useState<'desktop' | 'mobile' | 'tablet'>('desktop');
 
+  // Export dropdown state
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
   // Whether this project has uploaded files with visual analysis (design spec)
   const [hasDesignSpec, setHasDesignSpec] = useState(false);
 
@@ -264,6 +267,15 @@ export default function WorkspacePage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [html, project]);
+
+  const handleOpenInNewTab = useCallback(() => {
+    if (!html) return;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Revoke after a short delay to allow the browser to load the page
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }, [html]);
 
   const handleShare = useCallback(async () => {
     if (!project?.share_token) return;
@@ -584,18 +596,79 @@ export default function WorkspacePage() {
               data-testid="device-frame-tablet"
             >📟</button>
           </div>
-          <button
-            type="button"
-            style={{ ...styles.historyBtn, ...(html ? {} : { opacity: 0.5 }) }}
-            onClick={handleExport}
-            disabled={!html}
-            title="匯出 HTML"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-              <path d="M7 1v8M4 6l3 3 3-3M2 11h10"/>
-            </svg>
-            Export
-          </button>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              type="button"
+              style={{ ...styles.historyBtn, ...(html ? {} : { opacity: 0.5 }) }}
+              onClick={() => setShowExportMenu(v => !v)}
+              disabled={!html}
+              title="匯出選項"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+                <path d="M7 1v8M4 6l3 3 3-3M2 11h10"/>
+              </svg>
+              Export
+            </button>
+            {showExportMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: 4,
+                  background: '#1e1e2e',
+                  border: '1px solid #3a3a4a',
+                  borderRadius: 6,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                  zIndex: 1000,
+                  minWidth: 170,
+                  overflow: 'hidden',
+                }}
+                onMouseLeave={() => setShowExportMenu(false)}
+              >
+                <button
+                  type="button"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 14px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#e0e0f0',
+                    fontSize: 13,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  onClick={() => { handleExport(); setShowExportMenu(false); }}
+                >
+                  📥 下載 HTML
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 14px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#e0e0f0',
+                    fontSize: 13,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  onClick={() => { handleOpenInNewTab(); setShowExportMenu(false); }}
+                >
+                  🔗 在新分頁開啟
+                </button>
+              </div>
+            )}
+          </div>
           <button
             style={{
               ...styles.annotateBtn,

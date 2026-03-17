@@ -33,6 +33,8 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest');
   const navigate = useNavigate();
 
   const fetchProjects = useCallback(async () => {
@@ -70,6 +72,14 @@ export default function HomePage() {
     setShowNewProject(false);
     navigate(`/project/${project.id}`);
   };
+
+  const filteredProjects = projects
+    .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return a.name.localeCompare(b.name);
+    });
 
   return (
     <div style={styles.container}>
@@ -110,8 +120,36 @@ export default function HomePage() {
             <p style={styles.emptyText}>No projects yet. Create one to get started!</p>
           </div>
         )}
+        {!loading && !error && projects.length > 0 && (
+          <div style={styles.toolbar}>
+            <input
+              type="text"
+              placeholder="搜尋專案..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={styles.searchInput}
+              data-testid="search-input"
+            />
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as 'newest' | 'oldest' | 'name')}
+              style={styles.sortSelect}
+              data-testid="sort-select"
+              title="排序方式"
+            >
+              <option value="newest">最新</option>
+              <option value="oldest">最舊</option>
+              <option value="name">名稱 A-Z</option>
+            </select>
+          </div>
+        )}
+        {!loading && !error && projects.length > 0 && filteredProjects.length === 0 && (
+          <div style={styles.emptyState}>
+            <p style={styles.emptyText}>沒有找到符合的專案</p>
+          </div>
+        )}
         <div style={styles.grid}>
-          {projects.map(project => (
+          {filteredProjects.map(project => (
             <div
               key={project.id}
               style={styles.card}
@@ -251,6 +289,30 @@ const styles: Record<string, React.CSSProperties> = {
   emptyText: {
     color: '#64748b',
     fontSize: '16px',
+  },
+  toolbar: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  searchInput: {
+    flex: 1,
+    padding: '8px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '14px',
+    color: '#1e293b',
+    backgroundColor: '#ffffff',
+    outline: 'none',
+  },
+  sortSelect: {
+    padding: '8px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '14px',
+    color: '#1e293b',
+    backgroundColor: '#ffffff',
+    cursor: 'pointer',
   },
   grid: {
     display: 'grid',
