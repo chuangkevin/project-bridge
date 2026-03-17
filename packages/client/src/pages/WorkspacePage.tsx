@@ -8,6 +8,7 @@ import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector
 import Toast from '../components/Toast';
 import AnnotationEditor from '../components/AnnotationEditor';
 import SpecPanel, { Annotation } from '../components/SpecPanel';
+import VersionHistoryPanel from '../components/VersionHistoryPanel';
 import { SpecData } from '../components/SpecForm';
 
 // Strip [Attached files] block from user message display content
@@ -47,6 +48,8 @@ export default function WorkspacePage() {
   const [isMultiPage, setIsMultiPage] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
   const [activePage, setActivePage] = useState<string>('');
+
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   // Annotation state
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -391,6 +394,19 @@ export default function WorkspacePage() {
             </span>
           )}
           <button
+            type="button"
+            style={styles.historyBtn}
+            onClick={() => setShowVersionHistory(true)}
+            title="版本歷史"
+            disabled={!html}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <circle cx="7" cy="7" r="5.5"/>
+              <polyline points="7,4 7,7 9,8.5"/>
+            </svg>
+            History
+          </button>
+          <button
             style={{
               ...styles.annotateBtn,
               ...(annotationMode ? styles.annotateBtnActive : {}),
@@ -564,6 +580,20 @@ export default function WorkspacePage() {
         />
       )}
 
+      {showVersionHistory && project && (
+        <VersionHistoryPanel
+          projectId={project.id}
+          currentVersion={project.currentVersion}
+          onRestore={(html, version, isMultiPage, pages) => {
+            setHtml(html);
+            setIsMultiPage(isMultiPage);
+            setPages(pages);
+            setProject(prev => prev ? { ...prev, currentVersion: version } : null);
+          }}
+          onClose={() => setShowVersionHistory(false)}
+        />
+      )}
+
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
     </div>
   );
@@ -650,6 +680,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     fontWeight: 600,
     color: '#1e293b',
+  },
+  historyBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
   },
   annotateBtn: {
     display: 'flex',

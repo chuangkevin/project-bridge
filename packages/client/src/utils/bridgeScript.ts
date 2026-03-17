@@ -14,6 +14,33 @@ export const BRIDGE_SCRIPT = `
     return null;
   }
 
+  var hoveredEl = null;
+
+  document.addEventListener('mouseover', function(e) {
+    if (!annotationMode) return;
+    var target = findBridgeId(e.target);
+    if (hoveredEl && hoveredEl !== target) {
+      hoveredEl.style.outline = '';
+      hoveredEl.style.outlineOffset = '';
+      hoveredEl = null;
+    }
+    if (target) {
+      target.style.outline = '2px dashed #3b82f6';
+      target.style.outlineOffset = '2px';
+      hoveredEl = target;
+    }
+  }, true);
+
+  document.addEventListener('mouseout', function(e) {
+    if (!annotationMode) return;
+    var target = findBridgeId(e.target);
+    if (target && target === hoveredEl) {
+      target.style.outline = '';
+      target.style.outlineOffset = '';
+      hoveredEl = null;
+    }
+  }, true);
+
   document.addEventListener('click', function(e) {
     if (!annotationMode) return;
     e.preventDefault();
@@ -80,6 +107,11 @@ export const BRIDGE_SCRIPT = `
     } else if (e.data.type === 'set-annotation-mode') {
       annotationMode = !!e.data.enabled;
       document.body.style.cursor = annotationMode ? 'crosshair' : '';
+      if (!annotationMode && hoveredEl) {
+        hoveredEl.style.outline = '';
+        hoveredEl.style.outlineOffset = '';
+        hoveredEl = null;
+      }
     } else if (e.data.type === 'inject-styles') {
       var css = e.data.css || '';
       var existing = document.getElementById('__tweaker__');

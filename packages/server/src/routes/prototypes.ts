@@ -169,4 +169,40 @@ RULES:
   }
 });
 
+// GET /:id/prototype/versions — list all versions
+router.get('/:id/prototype/versions', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const versions = db.prepare(
+    'SELECT id, version, is_current, is_multi_page, created_at FROM prototype_versions WHERE project_id = ? ORDER BY version DESC'
+  ).all(projectId) as { id: string; version: number; is_current: number; is_multi_page: number; created_at: string }[];
+
+  return res.json({ versions });
+});
+
+// POST /:id/prototype/versions/:version/restore — restore a version
+router.post('/:id/prototype/versions/:version/restore', (req: Request, res: Response) => {
+  const { id: projectId, version } = req.params;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const target = db.prepare(
+    'SELECT * FROM prototype_versions WHERE project_id = ? AND version = ?'
+  ).get(projectId, parseInt(version as string)) as any;
+  if (!target) return res.status(404).json({ error: 'Version not found' });
+
+  db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+  db.prepare('UPDATE prototype_versions SET is_current = 1 WHERE id = ?').run(target.id);
+  db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+
+  return res.json({
+    version: target.version,
+    html: target.html,
+    isMultiPage: !!target.is_multi_page,
+    pages: JSON.parse(target.pages || '[]'),
+  });
+});
+
 export default router;
