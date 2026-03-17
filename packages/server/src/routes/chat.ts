@@ -85,8 +85,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     const shellHtml = shellRow?.shell_html || null;
     const hasShell = !!shellHtml;
 
+    // Fast-path: short imperative messages always mean "generate" — skip expensive classifier
+    const trimmed = message.trim().toLowerCase();
+    const isObviousGenerate = trimmed.length <= 20 && !trimmed.includes('?') &&
+      /產生|生成|做出|幫我做|開始|go|generate|ui|prototype|原型|設計|做個|頁面|介面/.test(trimmed);
+
     // Classify intent (four-way)
-    const intent = await classifyIntent(message.trim(), apiKey, hasShell);
+    const intent = isObviousGenerate
+      ? (hasShell ? 'in-shell' : 'full-page')
+      : await classifyIntent(message.trim(), apiKey, hasShell);
 
     // Load conversation history (last 20 messages)
     const history = db.prepare(
