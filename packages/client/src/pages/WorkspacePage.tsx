@@ -100,6 +100,9 @@ export default function WorkspacePage() {
   // Focus mode state
   const [focusMode, setFocusMode] = useState(false);
 
+  // Keyboard shortcuts help overlay state
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
   // Inline rename state
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
@@ -395,6 +398,7 @@ export default function WorkspacePage() {
       if (e.key === 'Escape') {
         if (quickRegen) { setQuickRegen(null); setEditingAnnotation(null); }
         if (showVersionHistory) setShowVersionHistory(false);
+        if (showShortcuts) setShowShortcuts(false);
       }
       // A: toggle annotation mode (when not typing in an input)
       if (e.key === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -412,10 +416,18 @@ export default function WorkspacePage() {
           setFocusMode(prev => !prev);
         }
       }
+      // ?: toggle shortcuts help overlay (when not typing in an input)
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const active = document.activeElement;
+        const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
+        if (!isTyping) {
+          setShowShortcuts(prev => !prev);
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [quickRegen, showVersionHistory, html]);
+  }, [quickRegen, showVersionHistory, showShortcuts, html]);
 
   const handleQuickRegen = useCallback(async () => {
     if (!quickRegen || !id || !quickRegen.instruction.trim()) return;
@@ -702,6 +714,15 @@ export default function WorkspacePage() {
             </svg>
             Share
           </button>
+          <button
+            type="button"
+            style={styles.shortcutsBtn}
+            onClick={() => setShowShortcuts(v => !v)}
+            title="鍵盤快捷鍵 (?)"
+            data-testid="shortcuts-btn"
+          >
+            ⌨ ?
+          </button>
         </div>
       </div>
 
@@ -784,22 +805,39 @@ export default function WorkspacePage() {
             </div>
           )}
           <div style={deviceFrame === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
-            <div style={
-              deviceFrame === 'mobile'
-                ? styles.deviceFrameMobile
-                : deviceFrame === 'tablet'
-                  ? styles.deviceFrameTablet
-                  : styles.deviceFrameDesktop
-            }>
-              <PreviewPanel
-                html={html}
-                deviceSize={deviceSize}
-                annotationMode={annotationMode}
-                onElementClick={handleElementClick}
-                onIndicatorClick={handleIndicatorClick}
-                annotations={annotationIndicators}
-              />
-            </div>
+            {!html ? (
+              <div style={styles.emptyStateContainer}>
+                <div style={styles.emptyStateCard}>
+                  <div style={styles.emptyStateIcon}>🎨</div>
+                  <div style={styles.emptyStateTitle}>尚未生成原型</div>
+                  <div style={styles.emptyStateSubtitle}>
+                    在左側聊天輸入你的需求，或上傳設計稿 PDF，AI 將生成互動式原型
+                  </div>
+                  <ul style={styles.emptyStateHints}>
+                    <li>💡 描述你想要的頁面設計</li>
+                    <li>📎 上傳設計稿 PDF 讓 AI 分析樣式</li>
+                    <li>⚡ 點擊元素可以直接修改</li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div style={
+                deviceFrame === 'mobile'
+                  ? styles.deviceFrameMobile
+                  : deviceFrame === 'tablet'
+                    ? styles.deviceFrameTablet
+                    : styles.deviceFrameDesktop
+              }>
+                <PreviewPanel
+                  html={html}
+                  deviceSize={deviceSize}
+                  annotationMode={annotationMode}
+                  onElementClick={handleElementClick}
+                  onIndicatorClick={handleIndicatorClick}
+                  annotations={annotationIndicators}
+                />
+              </div>
+            )}
           </div>
         </div>
         {!focusMode && (
@@ -930,6 +968,59 @@ export default function WorkspacePage() {
           }}
           onClose={() => setShowVersionHistory(false)}
         />
+      )}
+
+      {/* Keyboard shortcuts help overlay */}
+      {showShortcuts && (
+        <div
+          style={styles.shortcutsBackdrop}
+          onClick={() => setShowShortcuts(false)}
+          data-testid="shortcuts-backdrop"
+        >
+          <div
+            style={styles.shortcutsCard}
+            onClick={e => e.stopPropagation()}
+            data-testid="shortcuts-card"
+          >
+            <div style={styles.shortcutsHeader}>
+              <span style={styles.shortcutsTitle}>鍵盤快捷鍵</span>
+              <button
+                type="button"
+                style={styles.shortcutsClose}
+                onClick={() => setShowShortcuts(false)}
+                data-testid="shortcuts-close"
+              >
+                ✕
+              </button>
+            </div>
+            <table style={styles.shortcutsTable}>
+              <thead>
+                <tr>
+                  <th style={styles.shortcutsThKey}>按鍵</th>
+                  <th style={styles.shortcutsThFn}>功能</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={styles.shortcutsTdKey}><kbd style={styles.kbd}>A</kbd></td>
+                  <td style={styles.shortcutsTdFn}>切換標注模式</td>
+                </tr>
+                <tr>
+                  <td style={styles.shortcutsTdKey}><kbd style={styles.kbd}>F</kbd></td>
+                  <td style={styles.shortcutsTdFn}>專注模式</td>
+                </tr>
+                <tr>
+                  <td style={styles.shortcutsTdKey}><kbd style={styles.kbd}>Esc</kbd></td>
+                  <td style={styles.shortcutsTdFn}>關閉彈窗</td>
+                </tr>
+                <tr>
+                  <td style={styles.shortcutsTdKey}><kbd style={styles.kbd}>?</kbd></td>
+                  <td style={styles.shortcutsTdFn}>顯示此說明</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
@@ -1396,5 +1487,141 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '200px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+  },
+  emptyStateContainer: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    padding: '40px 24px',
+  },
+  emptyStateCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    textAlign: 'center' as const,
+    backgroundColor: '#ffffff',
+    border: '2px dashed #cbd5e1',
+    borderRadius: '16px',
+    padding: '48px 40px',
+    maxWidth: '420px',
+    width: '100%',
+  },
+  emptyStateIcon: {
+    fontSize: '48px',
+    lineHeight: 1,
+    marginBottom: '16px',
+  },
+  emptyStateTitle: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: '#1e293b',
+    marginBottom: '8px',
+  },
+  emptyStateSubtitle: {
+    fontSize: '14px',
+    color: '#64748b',
+    lineHeight: 1.6,
+    marginBottom: '20px',
+  },
+  emptyStateHints: {
+    listStyle: 'none' as const,
+    padding: 0,
+    margin: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '8px',
+    textAlign: 'left' as const,
+    fontSize: '13px',
+    color: '#475569',
+  },
+  shortcutsBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '5px 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    color: '#64748b',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  shortcutsBackdrop: {
+    position: 'fixed' as const,
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shortcutsCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    padding: '24px',
+    maxWidth: '400px',
+    width: '90%',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+    position: 'relative' as const,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  shortcutsHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '16px',
+  },
+  shortcutsTitle: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: '#1e293b',
+  },
+  shortcutsClose: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#94a3b8',
+    fontSize: '16px',
+    lineHeight: 1,
+    padding: '2px 4px',
+  },
+  shortcutsTable: {
+    width: '100%',
+    borderCollapse: 'collapse' as const,
+    fontSize: '14px',
+  },
+  shortcutsThKey: {
+    textAlign: 'left' as const,
+    padding: '6px 12px 6px 0',
+    color: '#64748b',
+    fontWeight: 600,
+    fontSize: '12px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  shortcutsThFn: {
+    textAlign: 'left' as const,
+    padding: '6px 0',
+    color: '#64748b',
+    fontWeight: 600,
+    fontSize: '12px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  shortcutsTdKey: {
+    padding: '8px 12px 8px 0',
+    verticalAlign: 'middle' as const,
+    borderBottom: '1px solid #f1f5f9',
+  },
+  shortcutsTdFn: {
+    padding: '8px 0',
+    color: '#334155',
+    verticalAlign: 'middle' as const,
+    borderBottom: '1px solid #f1f5f9',
   },
 };
