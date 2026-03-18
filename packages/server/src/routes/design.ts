@@ -2,17 +2,15 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import fs from 'fs';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import db from '../db/connection';
 import upload from '../middleware/upload';
 
 const router = Router();
 
-function getOpenAIApiKey(): string | null {
-  if (process.env.OPENAI_API_KEY) {
-    return process.env.OPENAI_API_KEY;
-  }
-  const setting = db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any;
+function getGeminiApiKey(): string | null {
+  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+  const setting = db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any;
   return setting?.value || null;
 }
 
@@ -114,32 +112,21 @@ router.post('/:id/design/summarize-direction', async (req: Request, res: Respons
       return res.status(400).json({ error: 'analyses array is required' });
     }
 
-    const apiKey = getOpenAIApiKey();
+    const apiKey = getGeminiApiKey();
     if (!apiKey) {
-      return res.status(400).json({ error: 'OpenAI API key not configured.' });
+      return res.status(400).json({ error: 'Gemini API key not configured.' });
     }
-
-    const openai = new OpenAI({ apiKey });
 
     const combined = analyses.map((a, i) => `參考圖 ${i + 1}:\n${a}`).join('\n\n---\n\n');
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: '你是一位設計顧問。根據提供的視覺參考圖分析，用繁體中文寫出 2-4 句精簡的設計方向描述，涵蓋：整體風格、主色調、排版感受、元件風格。語氣簡潔專業，像在給設計師的 brief。',
-        },
-        {
-          role: 'user',
-          content: `以下是視覺參考圖的分析結果，請總結成設計方向：\n\n${combined}`,
-        },
-      ],
-      max_tokens: 300,
-      temperature: 0.3,
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: '你是一位設計顧問。根據提供的視覺參考圖分析，用繁體中文寫出 2-4 句精簡的設計方向描述，涵蓋：整體風格、主色調、排版感受、元件風格。語氣簡潔專業，像在給設計師的 brief。',
+      generationConfig: { maxOutputTokens: 300, temperature: 0.3 },
     });
-
-    const direction = response.choices[0]?.message?.content?.trim() || '';
+    const result = await model.generateContent(`以下是視覺參考圖的分析結果，請總結成設計方向：\n\n${combined}`);
+    const direction = result.response.text().trim() || '';
     return res.json({ direction });
   } catch (err: any) {
     console.error('Error summarizing design direction:', err);
@@ -171,9 +158,9 @@ router.post('/:id/design/analyze-reference', (req: Request, res: Response, next:
         return res.status(400).json({ error: 'No file provided' });
       }
 
-      const apiKey = getOpenAIApiKey();
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
-        return res.status(400).json({ error: 'OpenAI API key not configured.' });
+        return res.status(400).json({ error: 'Gemini API key not configured.' });
       }
 
       const { path: storagePath, mimetype } = req.file;
@@ -185,31 +172,13 @@ router.post('/:id/design/analyze-reference', (req: Request, res: Response, next:
 
       const base64data = fs.readFileSync(storagePath).toString('base64');
 
-      const openai = new OpenAI({ apiKey });
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${mimetype};base64,${base64data}`,
-                  detail: 'low',
-                },
-              },
-              {
-                type: 'text',
-                text: 'Analyze this design reference image and describe in detail: 1) Color palette (list main colors with hex codes if visible), 2) Typography style (serif/sans-serif/mono, weight, size impression), 3) Spacing density (compact/normal/spacious), 4) Border radius style (sharp: 0-2px / medium: 4-8px / rounded: 12px+), 5) Shadow style (flat/subtle/prominent), 6) Overall aesthetic (minimalist/modern/playful/corporate/colorful/dark/light/etc.), 7) Any other distinctive design characteristics. Be specific and actionable so an AI can reproduce this style.',
-              },
-            ],
-          },
-        ],
-      });
-
-      const analysis = response.choices[0]?.message?.content || '';
+      const genai = new GoogleGenerativeAI(apiKey);
+      const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const result = await model.generateContent([
+        { inlineData: { mimeType: mimetype, data: base64data } },
+        { text: 'Analyze this design reference image and describe in detail: 1) Color palette (list main colors with hex codes if visible), 2) Typography style (serif/sans-serif/mono, weight, size impression), 3) Spacing density (compact/normal/spacious), 4) Border radius style (sharp: 0-2px / medium: 4-8px / rounded: 12px+), 5) Shadow style (flat/subtle/prominent), 6) Overall aesthetic (minimalist/modern/playful/corporate/colorful/dark/light/etc.), 7) Any other distinctive design characteristics. Be specific and actionable so an AI can reproduce this style.' },
+      ]);
+      const analysis = result.response.text() || '';
 
       // Delete temp file after analysis
       fs.unlink(storagePath, (unlinkErr) => {
