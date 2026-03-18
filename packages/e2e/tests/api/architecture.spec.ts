@@ -55,6 +55,25 @@ test('POST /upload with page_name — echoes page_name in response', async ({ re
   expect((await res.json()).page_name).toBe('列表頁');
 });
 
+test('GET /files/:fileId/thumbnail — returns image for uploaded file', async ({ request }) => {
+  // Upload a file first
+  const tinyPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  const uploadRes = await request.post(`${API}/api/projects/${projectId}/upload`, {
+    multipart: {
+      file: { name: 'test.png', mimeType: 'image/png', buffer: tinyPng },
+    },
+  });
+  const { id: fileId } = await uploadRes.json();
+
+  // Get thumbnail
+  const thumbRes = await request.get(`${API}/api/projects/${projectId}/files/${fileId}/thumbnail`);
+  expect(thumbRes.status()).toBe(200);
+  expect(thumbRes.headers()['content-type']).toContain('image/jpeg');
+});
+
 test('Chat generation uses arch_data pages when set', async ({ request }) => {
   // Set arch_data with explicit pages
   const archData = {
