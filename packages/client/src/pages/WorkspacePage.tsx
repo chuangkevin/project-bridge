@@ -11,6 +11,8 @@ import SpecPanel, { Annotation } from '../components/SpecPanel';
 import VersionHistoryPanel from '../components/VersionHistoryPanel';
 import TokenPanel, { DesignToken } from '../components/TokenPanel';
 import { SpecData } from '../components/SpecForm';
+import { useArchStore } from '../stores/useArchStore';
+import ArchitectureTab from '../components/ArchitectureTab';
 
 // Strip [Attached files] block from user message display content
 function stripFileContent(content: string): string {
@@ -32,6 +34,7 @@ interface Project {
   currentVersion: number | null;
   isMultiPage?: boolean;
   pages?: string[];
+  arch_data?: any;
 }
 
 export default function WorkspacePage() {
@@ -45,6 +48,9 @@ export default function WorkspacePage() {
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
+  const [activeMode, setActiveMode] = useState<'design' | 'architecture'>('design');
+  const [_pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
+  const { setArchData } = useArchStore();
   const [designActive, setDesignActive] = useState(false);
   const [isMultiPage, setIsMultiPage] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
@@ -182,6 +188,11 @@ export default function WorkspacePage() {
       setHtml(projData.currentHtml);
       setIsMultiPage(!!projData.isMultiPage);
       setPages(projData.pages || []);
+      if (projData.arch_data) {
+        setArchData(projData.arch_data);
+      } else {
+        setActiveMode('architecture'); // new projects → architecture tab first
+      }
 
       if (convRes.ok) {
         const convData = await convRes.json();
@@ -571,7 +582,54 @@ export default function WorkspacePage() {
     );
   }
 
+  const workspaceContainerStyle: React.CSSProperties = {
+    display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden'
+  };
+  const tabBarStyle: React.CSSProperties = {
+    display: 'flex', borderBottom: '1px solid #e5e7eb', background: '#fff', padding: '0 16px', flexShrink: 0
+  };
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    padding: '10px 20px', cursor: 'pointer',
+    fontWeight: active ? 600 : 400,
+    color: active ? '#8E6FA7' : '#666666',
+    background: 'none', border: 'none', borderBottom: active ? '2px solid #8E6FA7' : '2px solid transparent',
+    fontSize: 14, transition: 'all 0.15s'
+  });
+
   return (
+    <div style={workspaceContainerStyle}>
+      <div role="tablist" style={tabBarStyle}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeMode === 'design' ? 'true' : 'false'}
+          style={tabBtnStyle(activeMode === 'design')}
+          onClick={() => setActiveMode('design')}
+        >
+          Design
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeMode === 'architecture' ? 'true' : 'false'}
+          style={tabBtnStyle(activeMode === 'architecture')}
+          onClick={() => setActiveMode('architecture')}
+        >
+          Architecture
+        </button>
+      </div>
+
+      {activeMode === 'architecture' ? (
+        <ArchitectureTab
+          projectId={id!}
+          onSwitchToDesign={() => setActiveMode('design')}
+          onSwitchToDesignAndGenerate={() => {
+            setActiveMode('design');
+            setPendingChatMessage('請依照架構生成所有頁面');
+          }}
+        />
+      ) : (
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
     <div style={styles.container}>
       {/* Toolbar */}
       <div style={{ ...styles.toolbar, ...(focusMode ? { display: 'none' } : {}) }}>
@@ -1232,6 +1290,9 @@ export default function WorkspacePage() {
           </div>
         );
       })()}
+    </div>
+        </div>
+      )}
     </div>
   );
 }
