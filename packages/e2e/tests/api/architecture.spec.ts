@@ -54,3 +54,24 @@ test('POST /upload with page_name — echoes page_name in response', async ({ re
   expect(res.status()).toBe(201);
   expect((await res.json()).page_name).toBe('列表頁');
 });
+
+test('Chat generation uses arch_data pages when set', async ({ request }) => {
+  // Set arch_data with explicit pages
+  const archData = {
+    type: 'page',
+    subtype: 'website',
+    aiDecidePages: false,
+    nodes: [
+      { id: 'n1', nodeType: 'page', name: '首頁', position: { x: 0, y: 0 }, referenceFileId: null, referenceFileUrl: null },
+      { id: 'n2', nodeType: 'page', name: '列表頁', position: { x: 220, y: 0 }, referenceFileId: null, referenceFileUrl: null },
+    ],
+    edges: [{ id: 'e1', source: 'n1', target: 'n2', label: '點擊搜尋' }],
+  };
+  await request.patch(`${API}/api/projects/${projectId}/architecture`, { data: { arch_data: archData } });
+
+  // Verify the project has arch_data
+  const projRes = await request.get(`${API}/api/projects/${projectId}`);
+  const proj = await projRes.json();
+  expect(proj.arch_data).not.toBeNull();
+  expect(proj.arch_data.nodes).toHaveLength(2);
+});

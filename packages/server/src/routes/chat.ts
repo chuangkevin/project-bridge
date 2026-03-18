@@ -69,6 +69,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
+    // Read arch_data for architecture block injection
+    const archDataRaw = (project as any).arch_data;
+    const archData = archDataRaw ? JSON.parse(archDataRaw) : null;
+
     const apiKey = getOpenAIApiKey();
     if (!apiKey) {
       return res.status(400).json({ error: 'OpenAI API key not configured. Set OPENAI_API_KEY env var or configure in settings.' });
@@ -272,7 +276,53 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       designSpecPrefix += '══════════════════════════════════════════════════════\n\n';
     }
 
-    let effectiveSystemPrompt = designSpecPrefix + systemPrompt;
+    // Build architecture block
+    let architectureBlock = '';
+    if (archData) {
+      if (archData.type === 'component') {
+        architectureBlock = `\n\n=== COMPONENT ARCHITECTURE ===\nType: 元件\nName: ${archData.nodes[0]?.name || '元件'}\n`;
+        if (archData.nodes[0]?.interactions?.length) {
+          architectureBlock += 'Interactions:\n';
+          for (const i of archData.nodes[0].interactions) {
+            architectureBlock += `  ${i.label} → ${i.outcome}\n`;
+          }
+        }
+        if (archData.nodes[0]?.states?.length) {
+          architectureBlock += `States: ${archData.nodes[0].states.join(', ')}\n`;
+        }
+        architectureBlock += '================================';
+      } else if (archData.type === 'page') {
+        const nodeNames = archData.nodes.map((n: any) => n.name);
+        if (archData.aiDecidePages || nodeNames.length === 0) {
+          architectureBlock = '\n\n=== APP ARCHITECTURE ===\nType: 多頁面網站\nPages: [to be determined by you — generate a sensible set of pages]\n================================';
+        } else {
+          const navLines = archData.edges.map((e: any) => {
+            const src = archData.nodes.find((n: any) => n.id === e.source)?.name || e.source;
+            const tgt = archData.nodes.find((n: any) => n.id === e.target)?.name || e.target;
+            return `  ${src} → ${tgt}${e.label ? ` (${e.label})` : ''}`;
+          });
+          architectureBlock = `\n\n=== APP ARCHITECTURE ===\nType: 多頁面網站\nPages: ${nodeNames.join(', ')}\n`;
+          if (navLines.length) architectureBlock += `Navigation:\n${navLines.join('\n')}\n`;
+
+          // Per-page design specs
+          const perPageSpecs: string[] = [];
+          for (const node of archData.nodes) {
+            if (node.referenceFileId) {
+              const fileRow = db.prepare('SELECT visual_analysis FROM uploaded_files WHERE id = ?').get(node.referenceFileId) as any;
+              if (fileRow?.visual_analysis) {
+                perPageSpecs.push(`  [${node.name}] <<< DESIGN SPEC FOR ${node.name} — overrides global style >>>\n${fileRow.visual_analysis.slice(0, 2000)}\n  <<< END DESIGN SPEC FOR ${node.name} >>>`);
+              }
+            }
+          }
+          if (perPageSpecs.length) {
+            architectureBlock += `Per-page design specs:\n${perPageSpecs.join('\n')}\n`;
+          }
+          architectureBlock += '================================';
+        }
+      }
+    }
+
+    let effectiveSystemPrompt = designSpecPrefix + architectureBlock + systemPrompt;
 
     // Fetch global design
     const globalRow = db.prepare("SELECT * FROM global_design_profile WHERE id = 'global'").get() as any;
@@ -376,17 +426,27 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     }
 
-    // Multi-page detection — pass full userContent (includes injected PDF spec text) so the
-    // analyzer can detect pages described in uploaded design specs, not just the user's message
-    const pageStructure = (intent === 'full-page' || intent === 'in-shell')
-      ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
-      : { multiPage: false, pages: [] as string[] };
+    // Multi-page detection — use arch_data nodes if available, else run AI page structure analysis
+    let finalPages: string[];
+    let isMultiPage: boolean;
 
-    // Use existing pages if regenerating; new pages if fresh multi-page request
-    const finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
-    const isMultiPage = finalPages.length > 1;
+    if (archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0) {
+      // Use architecture data — skip AI page detection
+      finalPages = archData.nodes.map((n: any) => n.name);
+      isMultiPage = finalPages.length > 1;
+    } else {
+      // Existing logic — pass full userContent (includes injected PDF spec text) so the
+      // analyzer can detect pages described in uploaded design specs, not just the user's message
+      const pageStructure = (intent === 'full-page' || intent === 'in-shell')
+        ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
+        : { multiPage: false, pages: [] as string[] };
 
-    if (isMultiPage) {
+      // Use existing pages if regenerating; new pages if fresh multi-page request
+      finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
+      isMultiPage = finalPages.length > 1;
+    }
+
+    if (isMultiPage && !(archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0)) {
       const pageList = finalPages.map(p => `- "${p}"`).join('\n');
       effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===
 Pages to generate (ALL must have complete, content-rich HTML — zero placeholders):
