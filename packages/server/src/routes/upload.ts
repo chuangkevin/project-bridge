@@ -41,9 +41,10 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
       const extractedText = await extractText(storagePath, mimetype);
 
       const id = uuidv4();
+      const pageName: string | null = (req.body?.page_name as string) || null;
       db.prepare(
-        'INSERT INTO uploaded_files (id, project_id, original_name, mime_type, file_size, storage_path, extracted_text) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, projectId, originalname, mimetype, size, storagePath, extractedText);
+        'INSERT INTO uploaded_files (id, project_id, original_name, mime_type, file_size, storage_path, extracted_text, page_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, projectId, originalname, mimetype, size, storagePath, extractedText, pageName);
 
       // Visual analysis for PDF and image files
       const apiKey = process.env.OPENAI_API_KEY ||
@@ -123,6 +124,7 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         artStyleDetected: !!(artStyle?.detected_style),
         visualAnalysisReady,
         pageCount,
+        page_name: pageName,
       });
     } catch (uploadErr: any) {
       console.error('Upload error:', uploadErr);

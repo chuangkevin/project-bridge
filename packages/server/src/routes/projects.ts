@@ -65,6 +65,7 @@ router.get('/:id', (req: Request, res: Response) => {
       currentVersion: currentPrototype?.version || null,
       isMultiPage: !!(currentPrototype?.is_multi_page),
       pages: currentPrototype ? JSON.parse(currentPrototype.pages || '[]') : [],
+      arch_data: project.arch_data ? JSON.parse(project.arch_data) : null,
     });
   } catch (err: any) {
     console.error('Error getting project:', err);
