@@ -71,9 +71,9 @@ router.post('/:id/prototype/regenerate-component', async (req: Request, res: Res
   if (!componentHtml) return res.status(404).json({ error: 'Component not found' });
 
   // Get API key
-  const apiKey = process.env.OPENAI_API_KEY ||
-    (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
-  if (!apiKey) return res.status(400).json({ error: 'OpenAI API key not configured' });
+  const apiKey = process.env.GEMINI_API_KEY ||
+    (db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any)?.value;
+  if (!apiKey) return res.status(400).json({ error: 'Gemini API key not configured' });
 
   // Build surrounding context (200 chars before/after)
   const idx = version.html.indexOf(componentHtml);
@@ -123,25 +123,20 @@ RULES:
   res.flushHeaders();
 
   try {
-    const OpenAI = (await import('openai')).default;
-    const openai = new OpenAI({ apiKey });
-
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      stream: true,
-      max_tokens: 4096,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}` },
-      ],
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: systemPrompt,
+      generationConfig: { maxOutputTokens: 4096 },
     });
-
+    const result = await model.generateContentStream(`Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`);
     let newComponentHtml = '';
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        newComponentHtml += content;
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      if (text) {
+        newComponentHtml += text;
+        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
       }
     }
 

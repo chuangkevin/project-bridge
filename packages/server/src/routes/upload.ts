@@ -47,8 +47,8 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
       ).run(id, projectId, originalname, mimetype, size, storagePath, extractedText, pageName);
 
       // Visual analysis for PDF and image files
-      const apiKey = process.env.OPENAI_API_KEY ||
-        (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
+      const apiKey = process.env.GEMINI_API_KEY ||
+        (db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any)?.value;
 
       let visualAnalysisReady = false;
       let pageCount: number | null = null;
@@ -148,8 +148,8 @@ router.post('/:id/upload/:fileId/reanalyze', async (req: Request, res: Response)
   const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND project_id = ?').get(fileId, projectId) as any;
   if (!file) return res.status(404).json({ error: 'File not found' });
 
-  const apiKey = process.env.OPENAI_API_KEY ||
-    (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
+  const apiKey = process.env.GEMINI_API_KEY ||
+    (db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any)?.value;
   if (!apiKey) return res.status(400).json({ error: 'No API key configured' });
 
   try {

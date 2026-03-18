@@ -1,9 +1,72 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
 import db from '../db/connection';
 
+const uploadDir = path.resolve(__dirname, '../../data/uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const archUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, _file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}.png`),
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images and PDFs are allowed'));
+    }
+  },
+});
+
 const router = Router();
+
+// POST /api/projects/:id/architecture/upload — lightweight image upload (no OCR)
+router.post('/:id/architecture/upload', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  archUpload.single('file')(req, res, async (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || 'Upload error' });
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    const { mimetype, size, path: storagePath, originalname } = req.file;
+    // Use provided page_name or default to '__arch__' sentinel so these are excluded from global design spec injection
+    const pageName: string = (req.body?.page_name as string) || '__arch__';
+    const id = uuidv4();
+
+    db.prepare(
+      'INSERT INTO uploaded_files (id, project_id, original_name, mime_type, file_size, storage_path, extracted_text, page_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, projectId, originalname, mimetype, size, storagePath, '', pageName);
+
+    // Respond immediately, then trigger visual analysis in background
+    res.json({ id, mimeType: mimetype });
+
+    // Async visual analysis (non-blocking — used for per-page design spec injection)
+    setImmediate(async () => {
+      try {
+        const apiKey = process.env.GEMINI_API_KEY ||
+          (db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any)?.value;
+        if (!apiKey) return;
+        const { analyzeDesignSpec } = await import('../services/designSpecAnalyzer');
+        const imageBuffer = fs.readFileSync(storagePath);
+        const visualAnalysis = await analyzeDesignSpec([imageBuffer], apiKey);
+        if (visualAnalysis) {
+          db.prepare('UPDATE uploaded_files SET visual_analysis = ? WHERE id = ?')
+            .run(visualAnalysis, id);
+        }
+      } catch (e) {
+        console.error('[arch upload] visual analysis failed:', e);
+      }
+    });
+  });
+});
 
 // GET /api/projects/:id/architecture
 router.get('/:id/architecture', (req: Request, res: Response) => {
