@@ -69,4 +69,60 @@ test.describe('Architecture Mode', () => {
     // Flowchart should be visible
     await expect(page.getByTestId('arch-flowchart')).toBeVisible();
   });
+
+  test('Flowchart: shows nodes after wizard completion', async ({ page }) => {
+    await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: 'Architecture' }).click();
+    await page.getByTestId('wizard-option-page').click();
+    await page.getByTestId('wizard-option-website').click();
+    await page.getByTestId('wizard-option-2-3').click();
+    await page.getByTestId('wizard-chip-首頁').click();
+    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-chip-列表頁').click();
+    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-finish-view').click();
+    // Two page nodes should be visible
+    await expect(page.getByTestId('page-node-首頁')).toBeVisible();
+    await expect(page.getByTestId('page-node-列表頁')).toBeVisible();
+  });
+
+  test('Context menu: 前往此頁面 switches to Design tab', async ({ page }) => {
+    await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: 'Architecture' }).click();
+
+    // Complete wizard
+    await page.getByTestId('wizard-option-page').click();
+    await page.getByTestId('wizard-option-website').click();
+    await page.getByTestId('wizard-option-2-3').click();
+    await page.getByTestId('wizard-chip-首頁').click();
+    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-chip-列表頁').click();
+    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-finish-view').click();
+
+    // Right-click on page node and select 前往此頁面
+    // ReactFlow nodes intercept pointer events for drag; use dispatchEvent to bypass
+    await page.getByTestId('page-node-首頁').dispatchEvent('contextmenu');
+    await page.getByText('前往此頁面').dispatchEvent('click');
+
+    // Should now be in Design tab
+    await expect(page.getByRole('tab', { name: 'Design' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('Flowchart: add new page node via toolbar', async ({ page }) => {
+    await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: 'Architecture' }).click();
+    // Complete wizard first
+    await page.getByTestId('wizard-option-page').click();
+    await page.getByTestId('wizard-option-website').click();
+    await page.getByTestId('wizard-option-2-3').click();
+    await page.getByTestId('wizard-chip-首頁').click();
+    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-chip-列表頁').click();
+    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-finish-view').click();
+    // Add page
+    await page.getByTestId('add-page-btn').click();
+    await expect(page.getByText('新頁面')).toBeVisible();
+  });
 });

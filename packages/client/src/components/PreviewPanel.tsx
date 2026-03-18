@@ -21,6 +21,12 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, onEleme
     if (e.data.type === 'indicator-click' && onIndicatorClick) {
       onIndicatorClick(e.data.bridgeId);
     }
+    if (e.data.type === 'show-page' && iframeRef.current?.contentWindow) {
+      const name = e.data.name as string;
+      try {
+        iframeRef.current.contentWindow.eval(`typeof showPage === 'function' && showPage(${JSON.stringify(name)})`);
+      } catch {}
+    }
   }, [annotationMode, onElementClick, onIndicatorClick]);
 
   useEffect(() => {

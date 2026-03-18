@@ -50,7 +50,7 @@ export default function WorkspacePage() {
   const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
   const [activeMode, setActiveMode] = useState<'design' | 'architecture'>('design');
   const [_pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
-  const { setArchData } = useArchStore();
+  const { setArchData, targetPage, setTargetPage } = useArchStore();
   const [designActive, setDesignActive] = useState(false);
   const [isMultiPage, setIsMultiPage] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
@@ -230,6 +230,14 @@ export default function WorkspacePage() {
     checkDesignActive();
     checkDesignSpec();
   }, [fetchProject, fetchAnnotations, checkDesignActive, checkDesignSpec]);
+
+  // Watch targetPage from arch store — switch to design mode and navigate to the page
+  useEffect(() => {
+    if (!targetPage) return;
+    setActiveMode('design');
+    window.postMessage({ type: 'show-page', name: targetPage }, '*');
+    setTargetPage(null);
+  }, [targetPage]);
 
   // Load prompt history when quick regen popup opens
   useEffect(() => {
