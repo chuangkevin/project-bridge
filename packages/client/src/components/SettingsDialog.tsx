@@ -17,8 +17,8 @@ export default function SettingsDialog({ onClose }: Props) {
         const res = await fetch('/api/settings');
         if (!res.ok) throw new Error('Failed to fetch settings');
         const data = await res.json();
-        setEnvKeySet(data.envKeys?.OPENAI_API_KEY ?? false);
-        const keySetting = data.settings?.find((s: { key: string }) => s.key === 'openai_api_key');
+        setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
+        const keySetting = data.settings?.find((s: { key: string }) => s.key === 'gemini_api_key');
         if (keySetting) {
           setApiKey(keySetting.value);
         }
@@ -37,7 +37,7 @@ export default function SettingsDialog({ onClose }: Props) {
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'openai_api_key', value: apiKey }),
+        body: JSON.stringify({ key: 'gemini_api_key', value: apiKey }),
       });
       if (!res.ok) throw new Error('Failed to save');
       setMessage({ type: 'success', text: 'API key saved successfully' });
@@ -59,16 +59,16 @@ export default function SettingsDialog({ onClose }: Props) {
           <>
             {envKeySet && (
               <div style={styles.envNotice}>
-                OpenAI API key is set via environment variable. The value below will override it.
+                Gemini API key is set via environment variable. The value below will override it.
               </div>
             )}
-            <label style={styles.label}>OpenAI API Key</label>
+            <label style={styles.label}>Gemini API Key</label>
             <input
               type="password"
               style={styles.input}
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder="sk-..."
+              placeholder="AIza..."
               disabled={saving}
             />
             {message && (

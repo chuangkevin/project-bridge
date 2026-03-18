@@ -20,7 +20,7 @@ export default function SettingsPage() {
 
   // Generation preferences (localStorage)
   const [defaultModel, setDefaultModel] = useState<string>(
-    () => localStorage.getItem('pb-default-model') ?? 'gpt-4o'
+    () => localStorage.getItem('pb-default-model') ?? 'gemini-2.0-flash'
   );
   const [language, setLanguage] = useState<string>(
     () => localStorage.getItem('pb-language') ?? '繁體中文'
@@ -33,9 +33,9 @@ export default function SettingsPage() {
         const res = await fetch('/api/settings');
         if (!res.ok) throw new Error('Failed to fetch settings');
         const data = await res.json();
-        setEnvKeySet(data.envKeys?.OPENAI_API_KEY ?? false);
+        setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
         const keySetting = (data.settings ?? []).find(
-          (s: { key: string }) => s.key === 'openai_api_key'
+          (s: { key: string }) => s.key === 'gemini_api_key'
         );
         if (keySetting) {
           setApiKey(keySetting.value);
@@ -55,7 +55,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'openai_api_key', value: apiKey }),
+        body: JSON.stringify({ key: 'gemini_api_key', value: apiKey }),
       });
       if (!res.ok) throw new Error('Failed to save');
       setApiKeySaveState('saved');
@@ -71,18 +71,8 @@ export default function SettingsPage() {
     setTestState('testing');
     setTestMessage('');
 
-    // Quick local format check first
-    const keyToTest = apiKey.replace(/\*/g, '');
-    if (!keyToTest.startsWith('sk-') && keyToTest.length > 0) {
-      setTestState('fail');
-      setTestMessage('金鑰格式不正確，應以 sk- 開頭');
-      return;
-    }
-
-    // If the key stored is masked (contains *) or empty, we can only do a format check
     if (apiKey.includes('*') || apiKey.trim() === '') {
       if (envKeySet || apiKey.includes('*')) {
-        // Key exists (env or DB) — treat as OK
         setTestState('ok');
         setTestMessage('API 金鑰已設定');
       } else {
@@ -92,14 +82,9 @@ export default function SettingsPage() {
       return;
     }
 
-    // For a plaintext key, just validate format
-    if (apiKey.startsWith('sk-')) {
-      setTestState('ok');
-      setTestMessage('金鑰格式正確');
-    } else {
-      setTestState('fail');
-      setTestMessage('金鑰格式不正確，應以 sk- 開頭');
-    }
+    // Key is present and plaintext
+    setTestState('ok');
+    setTestMessage('金鑰格式看起來正確');
   };
 
   const handleSavePreferences = () => {
@@ -109,7 +94,7 @@ export default function SettingsPage() {
     setTimeout(() => setPrefSaveState('idle'), 2000);
   };
 
-  const apiKeyValid = apiKey.startsWith('sk-') || apiKey.includes('*') || apiKey.trim() === '';
+  const apiKeyValid = apiKey.length === 0 || !apiKey.includes(' ');
 
   return (
     <div style={styles.container}>
@@ -130,7 +115,7 @@ export default function SettingsPage() {
         {/* ── Section: API 金鑰 ─────────────────────────────── */}
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>OpenAI API 金鑰</h2>
+            <h2 style={styles.sectionTitle}>Gemini API 金鑰</h2>
             <div style={styles.sectionDivider} />
           </div>
 
@@ -140,12 +125,12 @@ export default function SettingsPage() {
             <>
               {envKeySet && (
                 <div style={styles.infoNotice}>
-                  已透過環境變數設定 OpenAI API 金鑰。以下輸入的值將覆蓋環境變數。
+                  已透過環境變數設定 Gemini API 金鑰。以下輸入的值將覆蓋環境變數。
                 </div>
               )}
 
               <label style={styles.label}>API 金鑰</label>
-              <p style={styles.hint}>OpenAI API 金鑰以 sk- 開頭</p>
+              <p style={styles.hint}>Google AI Studio API 金鑰 (aistudio.google.com)</p>
 
               <div style={styles.inputRow}>
                 <input
@@ -160,7 +145,7 @@ export default function SettingsPage() {
                     setTestState('idle');
                     setTestMessage('');
                   }}
-                  placeholder="sk-..."
+                  placeholder="AIza..."
                   disabled={apiKeySaveState === 'saving'}
                   data-testid="api-key-input"
                 />
@@ -189,7 +174,7 @@ export default function SettingsPage() {
               </div>
 
               {!apiKeyValid && (
-                <p style={styles.errorText}>金鑰格式不正確，應以 sk- 開頭</p>
+                <p style={styles.errorText}>金鑰格式不正確</p>
               )}
 
               {apiKeyError && (
@@ -258,15 +243,15 @@ export default function SettingsPage() {
           <div style={styles.prefGrid}>
             <div style={styles.prefField}>
               <label style={styles.label}>預設模型</label>
-              <p style={styles.hint}>用於原型生成的 GPT 模型</p>
+              <p style={styles.hint}>用於原型生成的 Gemini 模型</p>
               <select
                 style={styles.select}
                 value={defaultModel}
                 onChange={e => setDefaultModel(e.target.value)}
                 data-testid="default-model-select"
               >
-                <option value="gpt-4o">gpt-4o（品質優先）</option>
-                <option value="gpt-4o-mini">gpt-4o-mini（速度優先）</option>
+                <option value="gemini-2.0-flash">gemini-2.0-flash（免費、快速）</option>
+                <option value="gemini-1.5-pro">gemini-1.5-pro（品質優先）</option>
               </select>
             </div>
 
