@@ -112,10 +112,10 @@ export default function ArchWizard({ projectId, onComplete }: Props) {
     edges: finalEdges,
   });
 
-  const finish = async (finalPages: ArchNode[]) => {
+  const finish = (finalPages: ArchNode[]) => {
     const data = buildArchData(finalPages);
-    await patchArchData(projectId, data);
     onComplete(data);
+    patchArchData(projectId, data);
   };
 
   const question = (text: string) => (
