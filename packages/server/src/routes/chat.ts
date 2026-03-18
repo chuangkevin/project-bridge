@@ -25,6 +25,20 @@ function getOpenAIApiKey(): string | null {
   return setting?.value || null;
 }
 
+function formatOpenAIError(err: any): string {
+  const status = err?.status || err?.response?.status;
+  if (status === 429) {
+    const msg: string = err?.message || '';
+    if (msg.includes('quota') || msg.includes('exceeded')) {
+      return 'OpenAI API 額度已用完，請至 https://platform.openai.com/account/billing 儲值後再試。';
+    }
+    return 'OpenAI API 請求過於頻繁，請稍後再試。';
+  }
+  if (status === 401) return 'OpenAI API 金鑰無效，請至設定頁面重新輸入。';
+  if (status === 503 || status === 502) return 'OpenAI 服務暫時不可用，請稍後再試。';
+  return err?.message || 'OpenAI API 發生錯誤，請稍後再試。';
+}
+
 async function callOpenAIWithRetry(
   openai: OpenAI,
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
@@ -44,6 +58,10 @@ async function callOpenAIWithRetry(
       return stream;
     } catch (err: any) {
       lastError = err;
+      // Don't retry quota exceeded or auth errors — they won't resolve on retry
+      const status = err?.status || err?.response?.status;
+      if (status === 429 && (err?.message || '').includes('quota')) break;
+      if (status === 401) break;
       if (attempt < maxAttempts) {
         const delay = Math.pow(2, attempt - 1) * 1000;
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -129,7 +147,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       // Deduplicate by file_size — same PDF uploaded multiple times has same size
       const projectFiles = db.prepare(
         `SELECT original_name, extracted_text, file_size FROM uploaded_files
-         WHERE project_id = ? AND extracted_text IS NOT NULL
+         WHERE project_id = ? AND extracted_text IS NOT NULL AND LENGTH(extracted_text) > 100
          ORDER BY created_at DESC`
       ).all(projectId) as { original_name: string; extracted_text: string; file_size: number }[];
       const seenSizes = new Set<number>();
@@ -175,7 +193,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         }
       } catch (err: any) {
         console.error('OpenAI API error:', err);
-        res.write(`data: ${JSON.stringify({ error: err.message || 'OpenAI API error' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: formatOpenAIError(err) })}\n\n`);
         res.end();
         return;
       }
@@ -253,11 +271,19 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       ).all(...fileIds, projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
     } else {
       // Auto: only the single most recently uploaded file with visual analysis
-      specRowsEarly = db.prepare(
-        `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
-         WHERE project_id = ? AND visual_analysis IS NOT NULL
-         ORDER BY created_at DESC LIMIT 1`
-      ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+      // Skip if arch_data has per-page refs — those are already injected via architectureBlock
+      const archHasPerPageRefs = archData?.type === 'page' && !archData.aiDecidePages &&
+        archData.nodes?.some((n: any) => n.referenceFileId);
+      if (archHasPerPageRefs) {
+        specRowsEarly = [];
+      } else {
+        // Exclude architecture reference uploads (page_name = '__arch__') — those are used in architectureBlock
+        specRowsEarly = db.prepare(
+          `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
+           WHERE project_id = ? AND visual_analysis IS NOT NULL AND (page_name IS NULL OR page_name != '__arch__')
+           ORDER BY created_at DESC LIMIT 1`
+        ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+      }
     }
 
     let designSpecPrefix = '';
@@ -265,8 +291,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       designSpecPrefix = '╔══════════════════════════════════════════════════════╗\n';
       designSpecPrefix += '║  DESIGN SPEC — THIS OVERRIDES ALL DEFAULTS BELOW    ║\n';
       designSpecPrefix += '╚══════════════════════════════════════════════════════╝\n';
-      designSpecPrefix += 'Uploaded design spec files have been analyzed. You MUST use these exact visual specifications.\n';
-      designSpecPrefix += 'IGNORE the default design system colors/fonts — use the spec values instead.\n\n';
+      designSpecPrefix += 'Uploaded design spec files have been analyzed. You MUST follow the LAYOUT, component structure, and spacing from these specs.\n';
+      designSpecPrefix += 'NOTE: Brand colors (purple #8E6FA7) from the HousePrice Color Convention override spec colors — use the spec for structure/layout, not colors.\n\n';
       for (const row of specRowsEarly) {
         let name = row.original_name;
         try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep */ }
@@ -301,8 +327,29 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             const tgt = archData.nodes.find((n: any) => n.id === e.target)?.name || e.target;
             return `  ${src} → ${tgt}${e.label ? ` (${e.label})` : ''}`;
           });
-          architectureBlock = `\n\n=== APP ARCHITECTURE ===\nType: 多頁面網站\nPages: ${nodeNames.join(', ')}\n`;
-          if (navLines.length) architectureBlock += `Navigation:\n${navLines.join('\n')}\n`;
+          const pageDescriptions = archData.nodes.map((n: any) =>
+            n.viewport ? `${n.name} (${n.viewport === 'mobile' ? '手機版' : '電腦版'})` : n.name
+          );
+          architectureBlock = `\n\n=== APP ARCHITECTURE ===\nType: 多頁面網站\nPages: ${pageDescriptions.join(', ')}\n`;
+          if (navLines.length) {
+            architectureBlock += `Navigation edges (define which page leads to which):\n${navLines.join('\n')}\n`;
+
+            // Convert edges to per-page navigation requirements
+            const outgoingEdges: Record<string, string[]> = {};
+            for (const e of archData.edges) {
+              const src = archData.nodes.find((n: any) => n.id === e.source)?.name;
+              const tgt = archData.nodes.find((n: any) => n.id === e.target)?.name;
+              if (src && tgt) {
+                if (!outgoingEdges[src]) outgoingEdges[src] = [];
+                outgoingEdges[src].push(tgt);
+              }
+            }
+            architectureBlock += `\nPage navigation requirements (MUST implement exactly — do NOT invent links not listed here):\n`;
+            for (const [pageName, targets] of Object.entries(outgoingEdges)) {
+              architectureBlock += `- Page "${pageName}": clickable elements (cards, buttons, links) MUST call showPage('${targets[0]}')${targets.length > 1 ? ` or showPage('${targets.slice(1).join("' / showPage('")}')` : ''} as appropriate\n`;
+            }
+            architectureBlock += `Pages with NO outgoing edges should have a back/home button that returns to the first page.\n`;
+          }
 
           // Per-page design specs
           const perPageSpecs: string[] = [];
@@ -310,7 +357,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             if (node.referenceFileId) {
               const fileRow = db.prepare('SELECT visual_analysis FROM uploaded_files WHERE id = ?').get(node.referenceFileId) as any;
               if (fileRow?.visual_analysis) {
-                perPageSpecs.push(`  [${node.name}] <<< DESIGN SPEC FOR ${node.name} — overrides global style >>>\n${fileRow.visual_analysis.slice(0, 2000)}\n  <<< END DESIGN SPEC FOR ${node.name} >>>`);
+                const viewportLabel = node.viewport ? ` [${node.viewport === 'mobile' ? '手機版' : '電腦版'}]` : '';
+                const mobileHint = node.viewport === 'mobile' ? ' MOBILE LAYOUT — must be single column, touch-friendly, max-width 480px' : node.viewport === 'desktop' ? ' DESKTOP LAYOUT' : '';
+                perPageSpecs.push(`  [${node.name}]${viewportLabel}${mobileHint} <<< DESIGN SPEC FOR ${node.name} — implement exactly this layout >>>\n${fileRow.visual_analysis.slice(0, 4000)}\n  <<< END DESIGN SPEC FOR ${node.name} >>>`);
               }
             }
           }
@@ -323,6 +372,19 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     let effectiveSystemPrompt = designSpecPrefix + architectureBlock + systemPrompt;
+
+    // Inject project design convention (DB first, fallback to file)
+    const globalRowForConvention = db.prepare("SELECT design_convention FROM global_design_profile WHERE id = 'global'").get() as any;
+    let designConvention = globalRowForConvention?.design_convention || '';
+    if (!designConvention) {
+      const colorConventionPath = path.resolve(__dirname, '../../../../docs/colorConvention.md');
+      if (fs.existsSync(colorConventionPath)) {
+        designConvention = fs.readFileSync(colorConventionPath, 'utf-8');
+      }
+    }
+    if (designConvention) {
+      effectiveSystemPrompt += `\n\n=== PROJECT DESIGN SYSTEM (HousePrice Color Convention) ===\n${designConvention.slice(0, 4000)}\n====================================`;
+    }
 
     // Fetch global design
     const globalRow = db.prepare("SELECT * FROM global_design_profile WHERE id = 'global'").get() as any;
@@ -393,7 +455,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // Design spec analysis reminder (already injected at top — this just reinforces at end)
     if (specRowsEarly.length > 0) {
-      effectiveSystemPrompt += '\n\n[REMINDER: Design spec was injected at the top. Use the spec colors and component patterns — NOT the defaults above.]';
+      effectiveSystemPrompt += '\n\n[REMINDER: Design spec was injected at the top. Follow the spec LAYOUT and component patterns. Use HousePrice purple #8E6FA7 as primary color, not spec colors.]';
     }
 
     // Art style injection
@@ -446,7 +508,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       isMultiPage = finalPages.length > 1;
     }
 
-    if (isMultiPage && !(archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0)) {
+    if (isMultiPage) {
       const pageList = finalPages.map(p => `- "${p}"`).join('\n');
       effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===
 Pages to generate (ALL must have complete, content-rich HTML — zero placeholders):
@@ -456,7 +518,7 @@ Navigation rules:
 1. Define a global JS function: function showPage(name) { document.querySelectorAll('.page').forEach(p=>p.style.display='none'); document.getElementById('page-'+name)?.style.setProperty('display','block'); document.querySelectorAll('[data-nav]').forEach(l=>l.classList.toggle('active',l.dataset.nav===name)); }
 2. Each page div: <div class="page" id="page-[name]" data-page="[name]"> — first page has style="display:block", rest style="display:none"
 3. Each nav link: <a href="#" data-nav="[name]" onclick="showPage('[name]');return false;">[name]</a>
-4. If there is a list page with cards/items that lead to a detail page, each card must have: onclick="showPage('[detail-page-name]');return false;"
+4. REQUIRED: Follow the architecture navigation requirements above EXACTLY — each page's clickable elements must call showPage() to navigate to the target page defined in the architecture edges. Do NOT invent navigation paths not specified in the architecture.
 5. Call showPage on init: document.addEventListener('DOMContentLoaded', function(){ showPage('${finalPages[0]}'); });
 
 CRITICAL: Every page must have FULL content — no placeholder text, no empty divs, no "此處將顯示..." comments.
@@ -491,7 +553,7 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       }
     } catch (err: any) {
       console.error('OpenAI API error:', err);
-      res.write(`data: ${JSON.stringify({ error: err.message || 'OpenAI API error' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ error: formatOpenAIError(err) })}\n\n`);
       res.end();
       return;
     }

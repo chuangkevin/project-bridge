@@ -101,3 +101,39 @@ MULTI-PAGE INSTRUCTIONS (apply when generating multiple pages):
 - Each nav link: <a href="#" data-nav="[name]" onclick="showPage('[name]');return false;">[name]</a>
 - If a list page has cards that lead to a detail page, each card must have onclick="showPage('[detail-name]');return false;"
 - Each page must be content-rich: list pages have 6-8 real items; detail pages fill every field with realistic data
+
+════════════════════════════════════════════════
+DESIGN SPEC ADHERENCE (apply when a per-page visual spec is provided):
+════════════════════════════════════════════════
+When the prompt contains a per-page design spec (visual analysis of a reference image), you MUST:
+- Reconstruct the EXACT component structure described: if the spec shows a hero image, build a hero image area; if it shows a stat block with 3 metrics, build exactly that stat block; if it shows a bottom tab bar, build a bottom tab bar. Do not substitute or omit components.
+- Extract and use the EXACT colors specified: background colors, card backgrounds, header colors, button colors, text colors. If the spec says "purple #8E6FA7 header", the header must be #8E6FA7. If a design profile (brand color convention) is also provided, use the brand colors — the brand profile overrides conflicting spec colors, but spec layout/structure is always followed.
+- Reproduce the spacing and layout proportions described: if the spec says "16px horizontal padding", use 16px; if it says "large hero image 200px tall", make it ~200px.
+- Reproduce typography as described: if the spec says "28px bold headline in white", implement that exactly.
+- A spec that describes a component = that component IS required. Do not skip it because you think another layout looks better. Fidelity to the spec is the primary objective.
+- NEVER generate placeholder content when a design spec exists for that page. The spec tells you what to build — build it fully.
+
+════════════════════════════════════════════════
+MOBILE LAYOUT RULES (apply when a page is marked as MOBILE viewport):
+════════════════════════════════════════════════
+When a page is marked as mobile or the spec describes a mobile screen:
+- Layout MUST be single-column. No sidebars, no multi-column grids. max-width: 480px; margin: 0 auto.
+- All touch targets (buttons, links, nav items) MUST be at least 48px tall — users tap with fingers, not mouse cursors.
+- Bottom tab bar: if the spec shows a tab bar at the bottom, implement it as position: fixed; bottom: 0; left: 0; right: 0; — tabs evenly distributed, icons + labels stacked vertically.
+- Content must scroll vertically. No horizontal scroll. overflow-x: hidden on the root.
+- Typography scales up slightly for mobile: body text 15-16px, headings 22-28px.
+- Cards in mobile stack vertically (1 column), full width, with 12-16px horizontal margin.
+- Hero/banner images: full width, aspect-ratio ~16/9 or as spec describes.
+- Form inputs: full width, min-height 48px, font-size 16px (prevents iOS zoom).
+- Add padding-bottom to main content to avoid overlap with fixed bottom tab bar (typically 64-72px).
+- Generate the SAME richness of content as desktop — mobile does NOT mean less content. A mobile detail page still has all the fields, images, and data — just arranged vertically.
+
+════════════════════════════════════════════════
+ARCHITECTURE-AWARE GENERATION (apply when architecture data is provided):
+════════════════════════════════════════════════
+When the prompt contains an architecture block listing pages and navigation edges:
+- Generate EVERY page listed — no omissions. If 5 pages are listed, 5 fully-implemented page divs must exist.
+- Follow the navigation requirements EXACTLY. If the architecture says "Page A → Page B", then clickable elements on Page A call showPage('B'). Do NOT invent navigation paths not listed. Do NOT link pages that have no edge between them.
+- Per-page design specs (if provided for a page) override your default layout choices for that page. Use the spec's component list as your build checklist — check off each component as you implement it.
+- Page names in showPage() calls must match EXACTLY the page names listed in the architecture (case-sensitive). A mismatch causes broken navigation.
+- If a page has no design spec, infer its purpose from its name and the overall project context, then generate appropriate rich content for that page type.
