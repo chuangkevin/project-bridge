@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface PageStructure {
   multiPage: boolean;
@@ -6,15 +6,11 @@ export interface PageStructure {
 }
 
 export async function analyzePageStructure(message: string, apiKey: string): Promise<PageStructure> {
-  const openai = new OpenAI({ apiKey });
-
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are analyzing a UI generation request to detect if it describes multiple pages/screens.
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: `You are analyzing a UI generation request to detect if it describes multiple pages/screens.
 
 Return JSON only: {"multiPage": boolean, "pages": string[]}
 
@@ -31,15 +27,15 @@ Examples:
 - "請閱讀文件，生成對應 UI，如果有子頁面請生成" with doc describing 生活圈列表 and 生活圈詳情 → {"multiPage": true, "pages": ["生活圈列表", "生活圈詳情"]}
 - spec mentions "列表頁" and "詳細頁" → {"multiPage": true, "pages": ["列表頁", "詳細頁"]}
 - "create a dashboard with home, analytics, and settings pages" → {"multiPage": true, "pages": ["Home", "Analytics", "Settings"]}`,
-        },
-        { role: 'user', content: message.slice(0, 8000) }, // limit to avoid token overflow
-      ],
-      max_tokens: 200,
-      temperature: 0,
-      response_format: { type: 'json_object' },
+      generationConfig: {
+        maxOutputTokens: 200,
+        temperature: 0,
+        responseMimeType: 'application/json',
+      },
     });
 
-    const content = response.choices[0]?.message?.content || '{}';
+    const result = await model.generateContent(message.slice(0, 8000));
+    const content = result.response.text();
     const parsed = JSON.parse(content);
     return {
       multiPage: !!parsed.multiPage,

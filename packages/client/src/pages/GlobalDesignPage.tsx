@@ -37,6 +37,8 @@ export default function GlobalDesignPage() {
   const [saving, setSaving] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [designConvention, setDesignConvention] = useState('');
+  const [activeTab, setActiveTab] = useState<'design' | 'convention'>('design');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevAllDoneRef = useRef(false);
 
@@ -51,6 +53,7 @@ export default function GlobalDesignPage() {
           if (data.profile.tokens) {
             setTokens({ ...DEFAULT_TOKENS, ...data.profile.tokens });
           }
+          setDesignConvention(data.profile.design_convention || '');
         }
       } catch { /* silently fail */ }
     }
@@ -130,7 +133,7 @@ export default function GlobalDesignPage() {
       const res = await fetch('/api/global-design', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description, referenceAnalysis, tokens }),
+        body: JSON.stringify({ description, referenceAnalysis, tokens, design_convention: designConvention }),
       });
       if (!res.ok) throw new Error('Save failed');
       setToastMsg('全域設計已儲存，所有繼承的專案下次生成將套用');
@@ -139,7 +142,15 @@ export default function GlobalDesignPage() {
     } finally {
       setSaving(false);
     }
-  }, [description, references, tokens]);
+  }, [description, references, tokens, designConvention]);
+
+  const handleResetConvention = async () => {
+    const res = await fetch('/api/global-design/reset-convention', { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      setDesignConvention(data.content);
+    }
+  };
 
   const updateToken = <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => {
     setTokens(prev => ({ ...prev, [key]: value }));
@@ -159,7 +170,38 @@ export default function GlobalDesignPage() {
       </div>
 
       <div style={styles.scrollArea}>
-        {/* Design Direction */}
+        {/* Tab bar */}
+        <div style={styles.tabBar}>
+          <button type="button" onClick={() => setActiveTab('design')} style={{ ...styles.tabBtn, borderBottom: activeTab === 'design' ? '2px solid #8E6FA7' : '2px solid transparent', fontWeight: activeTab === 'design' ? 600 : 400, color: activeTab === 'design' ? '#8E6FA7' : '#666' }}>
+            全域設計
+          </button>
+          <button type="button" onClick={() => setActiveTab('convention')} style={{ ...styles.tabBtn, borderBottom: activeTab === 'convention' ? '2px solid #8E6FA7' : '2px solid transparent', fontWeight: activeTab === 'convention' ? 600 : 400, color: activeTab === 'convention' ? '#8E6FA7' : '#666' }}>
+            設計準則
+          </button>
+        </div>
+
+        {activeTab === 'convention' && (
+          <div>
+            <p style={styles.conventionHint}>
+              此內容會自動注入到每次 AI 生成的 system prompt 中。支援 Markdown 格式。
+            </p>
+            <textarea
+              value={designConvention}
+              onChange={e => setDesignConvention(e.target.value)}
+              style={styles.conventionTextarea}
+              placeholder="輸入設計準則..."
+              title="設計準則"
+            />
+            <div style={styles.conventionActions}>
+              <button type="button" onClick={handleResetConvention} style={styles.resetBtn}>
+                重置為預設檔案
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'design' && (
+        <>{/* Design Direction */}
         <div style={styles.section}>
           <div style={styles.sectionLabelRow}>
             <label style={styles.sectionLabel}>設計方向</label>
@@ -266,6 +308,7 @@ export default function GlobalDesignPage() {
             </div>
           </div>
         </div>
+        </>)}
       </div>
 
       <div style={styles.footer}>
@@ -317,4 +360,10 @@ const styles: Record<string, React.CSSProperties> = {
   radioText: { fontSize: '12px', color: '#1e293b' },
   footer: { padding: '16px 32px', borderTop: '1px solid #e2e8f0', backgroundColor: '#ffffff', maxWidth: '640px', margin: '0 auto', width: '100%', boxSizing: 'border-box' },
   saveBtn: { width: '100%', padding: '10px 16px', backgroundColor: '#7c3aed', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
+  tabBar: { display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: '8px' },
+  tabBtn: { padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px' } as React.CSSProperties,
+  conventionHint: { fontSize: '13px', color: '#666', marginBottom: '12px' },
+  conventionTextarea: { width: '100%', height: '480px', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: 'monospace', fontSize: '13px', resize: 'vertical' as const, boxSizing: 'border-box' as const },
+  conventionActions: { display: 'flex', gap: '8px', marginTop: '12px' },
+  resetBtn: { padding: '8px 16px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#ffffff', cursor: 'pointer', fontSize: '13px', fontFamily: 'inherit' },
 };

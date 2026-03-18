@@ -6,14 +6,20 @@ import './ArchFlowchart.css';
 interface ArchPageNodeData {
   name: string;
   referenceFileUrl: string | null;
+  viewport?: 'mobile' | 'desktop' | null;
   onRename: (id: string, name: string) => void;
   onUploadRef: (id: string) => void;
   onDelete: (id: string) => void;
+  onViewportChange: (id: string, v: 'mobile' | 'desktop' | null) => void;
 }
 
 export default function ArchPageNode({ id, data }: { id: string; data: ArchPageNodeData }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { setTargetPage } = useArchStore();
+
+  const handleViewportChange = (v: 'mobile' | 'desktop' | null) => {
+    data.onViewportChange(id, data.viewport === v ? null : v);
+  };
 
   return (
     <div
@@ -47,6 +53,18 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
         >
           {data.name}
         </p>
+        <div className="arch-page-node__viewport-toggle">
+          {(['mobile', 'desktop'] as const).map(v => (
+            <button
+              key={v}
+              type="button"
+              className={`arch-page-node__viewport-btn${data.viewport === v ? ' arch-page-node__viewport-btn--active' : ''}`}
+              onClick={() => handleViewportChange(v)}
+            >
+              {v === 'mobile' ? '📱 手機' : '💻 電腦'}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className="arch-page-node__upload-btn"

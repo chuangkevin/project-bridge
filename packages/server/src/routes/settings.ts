@@ -3,7 +3,7 @@ import db from '../db/connection';
 
 const router = Router();
 
-const SENSITIVE_KEYS = ['openai_api_key'];
+const SENSITIVE_KEYS = ['gemini_api_key', 'openai_api_key'];
 
 function maskValue(key: string, value: string): string {
   if (SENSITIVE_KEYS.includes(key) && value.length > 4) {
@@ -26,6 +26,7 @@ router.get('/', (_req: Request, res: Response) => {
     const result: any = {
       settings: masked,
       envKeys: {
+        GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
         OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
       },
     };

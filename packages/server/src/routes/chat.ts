@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 import db from '../db/connection';
@@ -17,59 +17,18 @@ const systemPrompt = fs.readFileSync(
 
 const qaSystemPrompt = `You are a helpful assistant for a UI prototype tool. Answer questions about uploaded specifications, design requirements, and prototype based on the conversation history. Be concise and specific.`;
 
-function getOpenAIApiKey(): string | null {
-  if (process.env.OPENAI_API_KEY) {
-    return process.env.OPENAI_API_KEY;
-  }
-  const setting = db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any;
+function getGeminiApiKey(): string | null {
+  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+  const setting = db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any;
   return setting?.value || null;
 }
 
-function formatOpenAIError(err: any): string {
-  const status = err?.status || err?.response?.status;
-  if (status === 429) {
-    const msg: string = err?.message || '';
-    if (msg.includes('quota') || msg.includes('exceeded')) {
-      return 'OpenAI API 額度已用完，請至 https://platform.openai.com/account/billing 儲值後再試。';
-    }
-    return 'OpenAI API 請求過於頻繁，請稍後再試。';
-  }
-  if (status === 401) return 'OpenAI API 金鑰無效，請至設定頁面重新輸入。';
-  if (status === 503 || status === 502) return 'OpenAI 服務暫時不可用，請稍後再試。';
-  return err?.message || 'OpenAI API 發生錯誤，請稍後再試。';
-}
-
-async function callOpenAIWithRetry(
-  openai: OpenAI,
-  messages: OpenAI.Chat.ChatCompletionMessageParam[],
-  maxAttempts = 3,
-  model = 'gpt-4o'
-): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
-  let lastError: any;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const stream = await openai.chat.completions.create({
-        model,
-        messages,
-        stream: true,
-        max_tokens: 16384,
-      });
-      return stream;
-    } catch (err: any) {
-      lastError = err;
-      // Don't retry quota exceeded or auth errors — they won't resolve on retry
-      const status = err?.status || err?.response?.status;
-      if (status === 429 && (err?.message || '').includes('quota')) break;
-      if (status === 401) break;
-      if (attempt < maxAttempts) {
-        const delay = Math.pow(2, attempt - 1) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
-
-  throw lastError;
+function formatGeminiError(err: any): string {
+  const msg: string = err?.message || '';
+  if (msg.includes('API_KEY_INVALID') || msg.includes('401')) return 'Gemini API 金鑰無效，請至設定頁面重新輸入。';
+  if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')) return 'Gemini API 請求過於頻繁，請稍後再試。';
+  if (msg.includes('503') || msg.includes('unavailable')) return 'Gemini 服務暫時不可用，請稍後再試。';
+  return msg || 'Gemini API 發生錯誤，請稍後再試。';
 }
 
 // POST /api/projects/:id/chat — SSE chat with AI
@@ -91,9 +50,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     const archDataRaw = (project as any).arch_data;
     const archData = archDataRaw ? JSON.parse(archDataRaw) : null;
 
-    const apiKey = getOpenAIApiKey();
+    const apiKey = getGeminiApiKey();
     if (!apiKey) {
-      return res.status(400).json({ error: 'OpenAI API key not configured. Set OPENAI_API_KEY env var or configure in settings.' });
+      return res.status(400).json({ error: 'Gemini API key not configured. Set GEMINI_API_KEY env var or configure in settings.' });
     }
 
     // Set SSE headers
@@ -171,29 +130,30 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     if (intent === 'question') {
       // Q&A path
-      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        { role: 'system', content: qaSystemPrompt },
-        ...history.map(h => ({
-          role: h.role as 'user' | 'assistant',
-          content: h.content,
-        })),
-        { role: 'user', content: userContent },
-      ];
-
-      const openai = new OpenAI({ apiKey });
-
       try {
-        const stream = await callOpenAIWithRetry(openai, messages, 3, 'gpt-4o-mini');
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content;
-          if (content) {
-            fullResponse += content;
-            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        const genai = new GoogleGenerativeAI(apiKey);
+        const model = genai.getGenerativeModel({
+          model: 'gemini-2.0-flash',
+          systemInstruction: qaSystemPrompt,
+          generationConfig: { maxOutputTokens: 4096 },
+        });
+        const chatSession = model.startChat({
+          history: history.slice(0, -0).map(h => ({
+            role: h.role === 'assistant' ? 'model' as const : 'user' as const,
+            parts: [{ text: h.content }],
+          })),
+        });
+        const result = await chatSession.sendMessageStream(userContent);
+        for await (const chunk of result.stream) {
+          const text = chunk.text();
+          if (text) {
+            fullResponse += text;
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
           }
         }
       } catch (err: any) {
-        console.error('OpenAI API error:', err);
-        res.write(`data: ${JSON.stringify({ error: formatOpenAIError(err) })}\n\n`);
+        console.error('Gemini API error:', err);
+        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
         res.end();
         return;
       }
@@ -227,7 +187,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       ).all(projectId) as { id: string; storage_path: string; mime_type: string; original_name: string; file_size: number }[];
 
       if (missingAnalysis.length > 0) {
-        const apiKey2 = getOpenAIApiKey();
+        const apiKey2 = getGeminiApiKey();
         if (apiKey2) {
           // Fire-and-forget: trigger analysis in background, don't await
           import('../services/pdfPageRenderer').then(async ({ renderPdfPages }) => {
@@ -528,32 +488,33 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     // Build messages for generation
     // Strip HTML from assistant history to avoid token explosion
     const trimmedHistory = history.slice(-10).map(h => ({
-      role: h.role as 'user' | 'assistant',
-      content: h.role === 'assistant' && h.content.trim().startsWith('<')
-        ? '[前一次生成的原型 HTML — 已省略以節省 tokens]'
-        : h.content.length > 800 ? h.content.slice(0, 800) + '…' : h.content,
+      role: h.role === 'assistant' ? 'model' as const : 'user' as const,
+      parts: [{
+        text: h.role === 'assistant' && h.content.trim().startsWith('<')
+          ? '[前一次生成的原型 HTML — 已省略以節省 tokens]'
+          : h.content.length > 800 ? h.content.slice(0, 800) + '…' : h.content,
+      }],
     }));
 
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: effectiveSystemPrompt },
-      ...trimmedHistory,
-      { role: 'user', content: userContent },
-    ];
-
-    const openai = new OpenAI({ apiKey });
-
     try {
-      const stream = await callOpenAIWithRetry(openai, messages);
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          fullResponse += content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      const genai = new GoogleGenerativeAI(apiKey);
+      const model = genai.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        systemInstruction: effectiveSystemPrompt,
+        generationConfig: { maxOutputTokens: 16384 },
+      });
+      const chatSession = model.startChat({ history: trimmedHistory });
+      const result = await chatSession.sendMessageStream(userContent);
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) {
+          fullResponse += text;
+          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
         }
       }
     } catch (err: any) {
-      console.error('OpenAI API error:', err);
-      res.write(`data: ${JSON.stringify({ error: formatOpenAIError(err) })}\n\n`);
+      console.error('Gemini API error:', err);
+      res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
       res.end();
       return;
     }

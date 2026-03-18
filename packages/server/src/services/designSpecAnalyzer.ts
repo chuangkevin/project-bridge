@@ -1,44 +1,55 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const COMPONENT_EXTRACTION_PROMPT = `Analyze these UI design spec images and extract the following component specifications. Be specific and actionable — a developer will use this to recreate these components in HTML/CSS:
+const COMPONENT_EXTRACTION_PROMPT = `You are analyzing a UI design reference image. A developer will use your analysis to recreate this design in HTML/CSS. Be precise and only describe what you actually see.
 
-1. COLOR PALETTE: List all colors with hex values (background, primary, secondary, accent, text, border colors)
-2. CARD / LIST ITEM: Describe layout structure, padding, shadow, border, image placement, title/subtitle arrangement
-3. SEARCH BAR: Describe shape, border style, placeholder text style, icon position, background color
-4. TAGS / CHIPS / BADGES: Describe shape (pill/square), colors, font size, padding, how they group
-5. NAVIGATION: Describe top nav or sidebar structure, active state styling, spacing
-6. TYPOGRAPHY: Identify heading sizes, body text size, font weight patterns, line height
-7. LAYOUT / GRID: Describe column count, card grid spacing, section padding patterns
-8. INTERACTIVE STATES: Any visible hover/selected/active states
+STEP 1 — DEVICE & LAYOUT:
+- Is this mobile (single column, <480px) or desktop (multi-column, full-width)?
+- What is the overall page structure (e.g. header + scrollable content + fixed bottom nav)?
 
-Format your response as a structured list matching the above categories. Be specific with measurements and colors where visible.`;
+STEP 2 — COLOR PALETTE (look carefully at actual pixel colors):
+- Dominant background color (hex)
+- Primary brand color used for headers, buttons, active states (hex)
+- Secondary/accent colors (hex)
+- Text colors: primary and secondary (hex)
+- Border/divider color (hex)
+
+STEP 3 — VISIBLE COMPONENTS (only describe what is actually present in the image):
+For each component you can see, describe: layout, dimensions/spacing, colors, border-radius, shadows, typography.
+Common components to look for: hero image, navigation bar, cards, list items, search bar, tags/chips, stats blocks, map, tab bar, buttons.
+
+STEP 4 — TYPOGRAPHY:
+- Font sizes for headings, subheadings, body text
+- Font weight patterns
+- Line height
+
+STEP 5 — SPACING & LAYOUT DETAILS:
+- Horizontal padding of content areas
+- Gap between sections
+- Card/item spacing
+- Border radius values
+
+Be specific with hex colors — do not guess. If a color looks purple, say purple and give the closest hex. Do not invent components that are not visible.`;
 
 export async function analyzeDesignSpec(images: Buffer[], apiKey: string): Promise<string> {
   if (images.length === 0) return '';
 
-  const openai = new OpenAI({ apiKey });
+  const genai = new GoogleGenerativeAI(apiKey);
+  const model = genai.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+    generationConfig: { maxOutputTokens: 3000 },
+  });
 
-  const imageMessages = images.map(buf => ({
-    type: 'image_url' as const,
-    image_url: {
-      url: `data:image/png;base64,${buf.toString('base64')}`,
-      detail: 'low' as const,
+  const imageParts = images.map(buf => ({
+    inlineData: {
+      mimeType: 'image/png' as const,
+      data: buf.toString('base64'),
     },
   }));
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: COMPONENT_EXTRACTION_PROMPT },
-          ...imageMessages,
-        ],
-      },
-    ],
-    max_tokens: 1500,
-  });
+  const result = await model.generateContent([
+    ...imageParts,
+    { text: COMPONENT_EXTRACTION_PROMPT },
+  ]);
 
-  return response.choices[0]?.message?.content || '';
+  return result.response.text() || '';
 }

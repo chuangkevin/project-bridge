@@ -49,7 +49,7 @@ export default function WorkspacePage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
   const [activeMode, setActiveMode] = useState<'design' | 'architecture'>('design');
-  const [_pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
+  const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
   const { setArchData, targetPage, setTargetPage } = useArchStore();
   const [designActive, setDesignActive] = useState(false);
   const [isMultiPage, setIsMultiPage] = useState(false);
@@ -188,9 +188,9 @@ export default function WorkspacePage() {
       setHtml(projData.currentHtml);
       setIsMultiPage(!!projData.isMultiPage);
       setPages(projData.pages || []);
-      if (projData.arch_data) {
-        setArchData(projData.arch_data);
-      } else {
+      // Always reset arch store to this project's data (prevents bleed from previous project)
+      setArchData(projData.arch_data ?? null);
+      if (!projData.arch_data) {
         setActiveMode('architecture'); // new projects → architecture tab first
       }
 
@@ -267,7 +267,7 @@ export default function WorkspacePage() {
     setActivePage(page);
     const iframe = document.querySelector('iframe');
     if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'navigate-page', page }, '*');
+      iframe.contentWindow.postMessage({ type: 'show-page', name: page }, '*');
     }
   }, []);
 
@@ -600,31 +600,44 @@ export default function WorkspacePage() {
     padding: '10px 20px', cursor: 'pointer',
     fontWeight: active ? 600 : 400,
     color: active ? '#8E6FA7' : '#666666',
-    background: 'none', border: 'none', borderBottom: active ? '2px solid #8E6FA7' : '2px solid transparent',
+    background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: active ? '2px solid #8E6FA7' : '2px solid transparent',
     fontSize: 14, transition: 'all 0.15s'
   });
 
   return (
     <div style={workspaceContainerStyle}>
-      <div role="tablist" style={tabBarStyle}>
+      <div style={{ ...tabBarStyle, alignItems: 'center' }}>
         <button
           type="button"
-          role="tab"
-          aria-selected={activeMode === 'design' ? 'true' : 'false'}
-          style={tabBtnStyle(activeMode === 'design')}
-          onClick={() => setActiveMode('design')}
+          onClick={() => navigate('/')}
+          style={{ background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', cursor: 'pointer', padding: '6px 12px', color: '#666', display: 'flex', alignItems: 'center', gap: 4, marginRight: 8, fontSize: 13, flexShrink: 0 }}
         >
-          Design
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M10 12L6 8l4-4" />
+          </svg>
+          專案列表
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeMode === 'architecture' ? 'true' : 'false'}
-          style={tabBtnStyle(activeMode === 'architecture')}
-          onClick={() => setActiveMode('architecture')}
-        >
-          Architecture
-        </button>
+        <span style={{ color: '#e5e7eb', marginRight: 8, fontSize: 16 }}>|</span>
+        <div role="tablist" style={{ display: 'flex' }}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === 'design'}
+            style={tabBtnStyle(activeMode === 'design')}
+            onClick={() => setActiveMode('design')}
+          >
+            Design
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === 'architecture'}
+            style={tabBtnStyle(activeMode === 'architecture')}
+            onClick={() => setActiveMode('architecture')}
+          >
+            Architecture
+          </button>
+        </div>
       </div>
 
       {activeMode === 'architecture' ? (
@@ -979,6 +992,8 @@ export default function WorkspacePage() {
                 messages={messages}
                 onNewMessages={handleNewMessages}
                 onHtmlGenerated={handleHtmlGenerated}
+                pendingMessage={pendingChatMessage}
+                onPendingMessageConsumed={() => setPendingChatMessage(null)}
               />
             ) : leftTab === 'design' ? (
               <DesignPanel
@@ -1309,7 +1324,7 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100vh',
+    height: '100%',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   loadingContainer: {

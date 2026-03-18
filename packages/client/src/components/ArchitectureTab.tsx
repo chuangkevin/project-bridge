@@ -8,7 +8,7 @@ interface Props {
   onSwitchToDesignAndGenerate?: () => void;
 }
 
-export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchToDesignAndGenerate: _onSwitchToDesignAndGenerate }: Props) {
+export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchToDesignAndGenerate }: Props) {
   const { archData, setArchData } = useArchStore();
 
   const handleWizardComplete = (data: ArchData) => {
@@ -39,8 +39,20 @@ export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchT
             to { opacity: 1; transform: translateY(0); }
           }
         `}</style>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8DFD0' }}>
+          <button
+            type="button"
+            onClick={onSwitchToDesign}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8E6FA7', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M10 12L6 8l4-4" />
+            </svg>
+            返回 Design
+          </button>
+        </div>
         <div style={centeredStyle} data-testid="arch-wizard">
-          <ArchWizard projectId={projectId} onComplete={handleWizardComplete} />
+          <ArchWizard projectId={projectId} onComplete={handleWizardComplete} onSkip={onSwitchToDesign} />
         </div>
       </div>
     );
@@ -51,6 +63,7 @@ export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchT
       <ArchFlowchart
         projectId={projectId}
         onSwitchToDesign={onSwitchToDesign}
+        onGenerate={onSwitchToDesignAndGenerate}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export type Intent = 'full-page' | 'in-shell' | 'component' | 'question';
 
@@ -7,19 +7,15 @@ export async function classifyIntent(
   apiKey: string,
   hasShell: boolean = false
 ): Promise<Intent> {
-  const openai = new OpenAI({ apiKey });
-
   const shellContext = hasShell
     ? `This project has a platform shell (existing nav/sidebar/header). When the user asks to add a page, sub-page, detail page, list page, or feature, prefer "in-shell". Only use "full-page" if the user explicitly asks for a complete standalone page.`
     : `This project has NO platform shell, so "in-shell" is not available.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `Classify the user message into one of four intents. Reply with ONLY one word.
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: `Classify the user message into one of four intents. Reply with ONLY one word.
 
 Intents:
 - "question": asking about specs, design, existing prototype, or general questions
@@ -40,21 +36,17 @@ Messages like "沒有子頁面嗎", "顏色不對嗎", "為什麼是藍色" endi
 Only classify as "question" if the message is clearly asking for information (contains ?, 什麼, 如何, explain, what, how, 幾個, 多少) with NO fix/generate intent.
 
 Reply ONLY with: question, component, full-page, or in-shell`,
-        },
-        { role: 'user', content: message },
-      ],
-      max_tokens: 5,
-      temperature: 0,
+      generationConfig: { maxOutputTokens: 5, temperature: 0 },
     });
 
-    const result = response.choices[0]?.message?.content?.trim().toLowerCase();
+    const result = await model.generateContent(message);
+    const text = result.response.text().trim().toLowerCase();
 
-    if (result === 'question') return 'question';
-    if (result === 'component') return 'component';
-    if (result === 'in-shell' && hasShell) return 'in-shell';
-    if (result === 'full-page') return 'full-page';
+    if (text === 'question') return 'question';
+    if (text === 'component') return 'component';
+    if (text === 'in-shell' && hasShell) return 'in-shell';
+    if (text === 'full-page') return 'full-page';
 
-    // Default: if shell exists → in-shell, else full-page
     return hasShell ? 'in-shell' : 'full-page';
   } catch {
     return hasShell ? 'in-shell' : 'full-page';

@@ -56,33 +56,24 @@ export async function extractImagesFromDocument(filePath: string, mimeType: stri
 }
 
 export async function analyzeArtStyle(images: Buffer[], apiKey: string): Promise<string> {
-  const OpenAI = (await import('openai')).default;
-  const openai = new OpenAI({ apiKey });
+  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  const genai = new GoogleGenerativeAI(apiKey);
+  const model = genai.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+    generationConfig: { maxOutputTokens: 150 },
+  });
 
-  const imageMessages = images.map(buf => ({
-    type: 'image_url' as const,
-    image_url: {
-      url: `data:image/png;base64,${buf.toString('base64')}`,
-      detail: 'low' as const,
+  const imageParts = images.map(buf => ({
+    inlineData: {
+      mimeType: 'image/png' as const,
+      data: buf.toString('base64'),
     },
   }));
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.',
-          },
-          ...imageMessages,
-        ],
-      },
-    ],
-    max_tokens: 150,
-  });
+  const result = await model.generateContent([
+    ...imageParts,
+    { text: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.' },
+  ]);
 
-  return response.choices[0]?.message?.content?.trim() || '';
+  return result.response.text().trim() || '';
 }

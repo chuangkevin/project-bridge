@@ -32,6 +32,8 @@ interface Props {
   messages: ChatMessage[];
   onNewMessages: (userMsg: ChatMessage, assistantMsg: ChatMessage) => void;
   onHtmlGenerated: (data: { html: string; isMultiPage: boolean; pages: string[] }) => void;
+  pendingMessage?: string | null;
+  onPendingMessageConsumed?: () => void;
 }
 
 const HISTORY_KEY = 'pb-prompt-history';
@@ -57,7 +59,7 @@ function saveHistory(history: string[]) {
   }
 }
 
-export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated }: Props) {
+export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed }: Props) {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -216,8 +218,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     e.target.value = '';
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
+  const sendMessage = async (text: string) => {
     if (!text || streaming) return;
 
     // Update prompt history
@@ -366,6 +367,17 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
 
   const [localUserMsg, setLocalUserMsg] = useState<ChatMessage | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+
+  const handleSend = () => sendMessage(input.trim());
+
+  // Auto-send pendingMessage when set from outside (e.g. Architecture → Generate)
+  useEffect(() => {
+    if (pendingMessage && !streaming) {
+      sendMessage(pendingMessage);
+      onPendingMessageConsumed?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

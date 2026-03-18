@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ReactFlow,
   addEdge,
@@ -24,17 +24,21 @@ const nodeTypes = {
 interface Props {
   projectId: string;
   onSwitchToDesign: () => void;
+  onGenerate?: () => void;
 }
 
-export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
+export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate }: Props) {
   const { archData, patchArchData } = useArchStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pasteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingUploadNodeId = useRef<string | null>(null);
+  const [pasteActive, setPasteActive] = useState(false);
 
   // Use stable refs for node handlers to avoid TDZ errors when initializing nodes
   const handleRenameRef = useRef<(nodeId: string, newName: string) => void>(() => {});
   const handleUploadRefRef = useRef<(nodeId: string) => void>(() => {});
   const handleDeleteNodeRef = useRef<(nodeId: string) => void>(() => {});
+  const handleViewportChangeRef = useRef<(nodeId: string, v: 'mobile' | 'desktop' | null) => void>(() => {});
 
   const toRfNodes = (nodes: ArchNode[]): Node[] =>
     nodes.map(n => ({
@@ -45,10 +49,12 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
         name: n.name,
         referenceFileUrl: n.referenceFileUrl,
         referenceFileId: n.referenceFileId,
+        viewport: n.viewport || null,
         states: n.states || [],
         onRename: (nodeId: string, newName: string) => handleRenameRef.current(nodeId, newName),
         onUploadRef: (nodeId: string) => handleUploadRefRef.current(nodeId),
         onDelete: (nodeId: string) => handleDeleteNodeRef.current(nodeId),
+        onViewportChange: (nodeId: string, v: 'mobile' | 'desktop' | null) => handleViewportChangeRef.current(nodeId, v),
       },
     }));
 
@@ -75,6 +81,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
         position: n.position,
         referenceFileId: (n.data.referenceFileId as string) || null,
         referenceFileUrl: (n.data.referenceFileUrl as string) || null,
+        viewport: (n.data.viewport as 'mobile' | 'desktop' | null) || null,
         states: (n.data.states as string[]) || [],
       })),
       edges: updatedEdges.map(e => ({ id: e.id, source: e.source, target: e.target, label: String(e.label || '') })),
@@ -102,22 +109,23 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
   }, [edges, saveChanges]);
   handleDeleteNodeRef.current = handleDeleteNode;
 
-  const handleUploadRef = useCallback((nodeId: string) => {
-    pendingUploadNodeId.current = nodeId;
-    fileInputRef.current?.click();
-  }, []);
-  handleUploadRefRef.current = handleUploadRef;
+  const handleViewportChange = useCallback((nodeId: string, v: 'mobile' | 'desktop' | null) => {
+    setNodes(nds => {
+      const updated = nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, viewport: v } } : n);
+      saveChanges(updated, edges);
+      return updated;
+    });
+  }, [edges, saveChanges]);
+  handleViewportChangeRef.current = handleViewportChange;
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !pendingUploadNodeId.current) return;
-    const nodeId = pendingUploadNodeId.current;
+  const uploadFile = useCallback(async (file: File, nodeId: string) => {
     const nodeName = nodes.find(n => n.id === nodeId)?.data.name as string || '';
     const form = new FormData();
     form.append('file', file);
     form.append('page_name', nodeName);
-    const res = await fetch(`/api/projects/${projectId}/upload`, { method: 'POST', body: form });
+    const res = await fetch(`/api/projects/${projectId}/architecture/upload`, { method: 'POST', body: form });
     const data = await res.json();
+    if (!data.id) return;
     const thumbnailUrl = `/api/projects/${projectId}/files/${data.id}/thumbnail`;
     setNodes(nds => {
       const updated = nds.map(n =>
@@ -126,8 +134,32 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
       saveChanges(updated, edges);
       return updated;
     });
+  }, [nodes, edges, projectId, saveChanges, setNodes]);
+
+  const handleUploadRef = useCallback((nodeId: string) => {
+    pendingUploadNodeId.current = nodeId;
+    setPasteActive(true);
+    setTimeout(() => pasteTextareaRef.current?.focus(), 50);
+  }, []);
+  handleUploadRefRef.current = handleUploadRef;
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !pendingUploadNodeId.current) return;
+    await uploadFile(file, pendingUploadNodeId.current);
     e.target.value = '';
+    setPasteActive(false);
   };
+
+  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(i => i.type.startsWith('image/'));
+    if (!imageItem || !pendingUploadNodeId.current) return;
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    setPasteActive(false);
+    await uploadFile(file, pendingUploadNodeId.current);
+  }, [uploadFile]);
 
   const onConnect = useCallback((connection: Connection) => {
     const newEdge = { ...connection, id: `edge-${Date.now()}` };
@@ -159,6 +191,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
         onRename: (nodeId: string, newName: string) => handleRenameRef.current(nodeId, newName),
         onUploadRef: (nodeId: string) => handleUploadRefRef.current(nodeId),
         onDelete: (nodeId: string) => handleDeleteNodeRef.current(nodeId),
+        onViewportChange: (nodeId: string, v: 'mobile' | 'desktop' | null) => handleViewportChangeRef.current(nodeId, v),
       },
     };
     setNodes(nds => {
@@ -177,7 +210,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
         <button type="button" className="arch-flowchart-toolbar-btn" onClick={() => useArchStore.getState().setArchData(null)}>
           重新引導
         </button>
-        <button type="button" className="arch-flowchart-toolbar-btn-primary" onClick={onSwitchToDesign}>
+        <button type="button" className="arch-flowchart-toolbar-btn-primary" onClick={onGenerate ?? onSwitchToDesign}>
           開始生成 ▶
         </button>
       </div>
@@ -206,6 +239,36 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign }: Props) {
         className="arch-flowchart-hidden"
         onChange={handleFileChange}
       />
+
+      {pasteActive && (
+        <div className="arch-paste-overlay" onClick={() => setPasteActive(false)}>
+          <div className="arch-paste-modal" onClick={e => e.stopPropagation()}>
+            <p className="arch-paste-title">貼上或選擇參考圖</p>
+            <p className="arch-paste-hint">按 Ctrl+V 貼上截圖，或點下方選擇檔案</p>
+            <textarea
+              ref={pasteTextareaRef}
+              className="arch-paste-textarea"
+              onPaste={handlePaste}
+              readOnly
+              placeholder="Ctrl+V 貼上圖片..."
+            />
+            <button
+              type="button"
+              className="arch-paste-browse-btn"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              選擇檔案
+            </button>
+            <button
+              type="button"
+              className="arch-paste-cancel-btn"
+              onClick={() => setPasteActive(false)}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

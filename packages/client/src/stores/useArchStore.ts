@@ -9,6 +9,7 @@ export interface ArchNode {
   referenceFileUrl: string | null;
   interactions?: Array<{ label: string; outcome: string }>;
   states?: string[];
+  viewport?: 'mobile' | 'desktop' | null;
 }
 
 export interface ArchEdge {
