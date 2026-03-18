@@ -1,4 +1,6 @@
-import { useArchStore } from '../stores/useArchStore';
+import { useArchStore, ArchData } from '../stores/useArchStore';
+import ArchWizard from './ArchWizard';
+import ArchFlowchart from './ArchFlowchart';
 
 interface Props {
   projectId: string;
@@ -7,17 +9,49 @@ interface Props {
 }
 
 export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchToDesignAndGenerate: _onSwitchToDesignAndGenerate }: Props) {
-  const { archData } = useArchStore();
+  const { archData, setArchData } = useArchStore();
+
+  const handleWizardComplete = (data: ArchData) => {
+    setArchData(data);
+  };
+
+  const containerStyle: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    background: '#FAF4EB',
+  };
+
+  const centeredStyle: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  if (!archData) {
+    return (
+      <div style={containerStyle}>
+        <style>{`
+          @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
+        <div style={centeredStyle} data-testid="arch-wizard">
+          <ArchWizard projectId={projectId} onComplete={handleWizardComplete} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      data-testid="arch-wizard"
-      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF4EB', flexDirection: 'column', gap: 16 }}
-    >
-      <p style={{ fontSize: 18, color: '#5B3977', fontWeight: 600 }}>Architecture Mode</p>
-      <p style={{ color: '#8C8C8C', fontSize: 14 }}>projectId: {projectId} | archData: {archData ? 'loaded' : 'none'}</p>
-      <button onClick={onSwitchToDesign} style={{ padding: '8px 20px', background: '#8E6FA7', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-        Back to Design
-      </button>
+    <div style={containerStyle}>
+      <ArchFlowchart
+        projectId={projectId}
+        onSwitchToDesign={onSwitchToDesign}
+      />
     </div>
   );
 }

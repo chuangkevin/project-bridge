@@ -32,4 +32,41 @@ test.describe('Architecture Mode', () => {
     await expect(archTab).toBeVisible();
     await expect(page.getByTestId('arch-wizard')).toBeVisible();
   });
+
+  test('Wizard Q1: shows page/component choice', async ({ page }) => {
+    await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: 'Architecture' }).click();
+    await expect(page.getByTestId('wizard-question')).toBeVisible();
+    await expect(page.getByTestId('wizard-option-page')).toBeVisible();
+    await expect(page.getByTestId('wizard-option-component')).toBeVisible();
+  });
+
+  test('Wizard: selecting 頁面 advances to Q2', async ({ page }) => {
+    await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: 'Architecture' }).click();
+    await page.getByTestId('wizard-option-page').click();
+    // Q2: type selection
+    await expect(page.getByTestId('wizard-option-website')).toBeVisible();
+  });
+
+  test('Wizard: completing flow shows flowchart', async ({ page }) => {
+    await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: 'Architecture' }).click();
+    // Q1: page
+    await page.getByTestId('wizard-option-page').click();
+    // Q2: website
+    await page.getByTestId('wizard-option-website').click();
+    // Q3: 2-3 pages
+    await page.getByTestId('wizard-option-2-3').click();
+    // Q4a: first page name
+    await page.getByTestId('wizard-chip-首頁').click();
+    await page.getByTestId('wizard-next').click();
+    // Q4b: second page name
+    await page.getByTestId('wizard-chip-列表頁').click();
+    await page.getByTestId('wizard-next').click();
+    // Q_last
+    await page.getByTestId('wizard-finish-view').click();
+    // Flowchart should be visible
+    await expect(page.getByTestId('arch-flowchart')).toBeVisible();
+  });
 });
