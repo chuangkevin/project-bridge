@@ -8,6 +8,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from '../services/geminiKeys';
+import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 
 const router = Router();
 
@@ -679,6 +680,14 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       } else if (html.toLowerCase().includes('<head ')) {
         html = html.replace(/(<head[^>]*>)/i, '$1<base target="_blank">');
       }
+    }
+
+    // Sanitize AI output — fix duplicate styles, truncation, missing showPage
+    html = sanitizeGeneratedHtml(html, isMultiPage);
+
+    // Inject convention color overrides if active
+    if (designConvention) {
+      html = injectConventionColors(html, designConvention);
     }
 
     // Only create prototype version if response looks like HTML
