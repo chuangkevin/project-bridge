@@ -5,3 +5,11 @@ dist
 data/
 test-results/
 .claude/settings.local.json
+
+# Test artifacts
+*.traineddata
+.playwright-mcp/
+packages/server/test-output.html
+packages/server/test-e2e-generate.js
+*.png
+!packages/client/public/*.png
