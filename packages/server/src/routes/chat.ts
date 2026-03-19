@@ -7,6 +7,7 @@ import db from '../db/connection';
 import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
+import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from '../services/geminiKeys';
 
 const router = Router();
 
@@ -17,10 +18,72 @@ const systemPrompt = fs.readFileSync(
 
 const qaSystemPrompt = `You are a helpful assistant for a UI prototype tool. Answer questions about uploaded specifications, design requirements, and prototype based on the conversation history. Be concise and specific.`;
 
-function getGeminiApiKey(): string | null {
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
-  const setting = db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any;
-  return setting?.value || null;
+// getGeminiApiKey is now imported from ../services/geminiKeys
+
+/** Format structured analysis result into a compact prompt block */
+function formatAnalysisForPrompt(analysis: any, fileName: string): string {
+  let block = `=== DOCUMENT ANALYSIS: ${fileName} (${analysis.documentType}) ===\n`;
+  block += `Summary: ${analysis.summary}\n\n`;
+
+  for (const page of (analysis.pages || [])) {
+    const vp = page.viewport === 'mobile' ? ' [MOBILE]' : page.viewport === 'desktop' ? ' [DESKTOP]' : '';
+    block += `--- Page: ${page.name}${vp} ---\n`;
+    if (page.components?.length) block += `Components: ${page.components.join(', ')}\n`;
+    if (page.layout) block += `Layout: ${page.layout}\n`;
+    if (page.interactions?.length) block += `Interactions:\n${page.interactions.map((i: string) => `  - ${i}`).join('\n')}\n`;
+    if (page.dataFields?.length) block += `Data Fields: ${page.dataFields.join(', ')}\n`;
+    if (page.businessRules?.length) block += `Business Rules:\n${page.businessRules.map((r: string) => `  - ${r}`).join('\n')}\n`;
+    if (page.navigationTo?.length) block += `Navigation → ${page.navigationTo.join(', ')}\n`;
+    block += '\n';
+  }
+
+  if (analysis.globalStyles) {
+    const gs = analysis.globalStyles;
+    block += `Global Styles: primary=${gs.primaryColor}, secondary=${gs.secondaryColor}, bg=${gs.backgroundColor}\n`;
+  }
+  if (analysis.globalRules?.length) {
+    block += `Global Rules:\n${analysis.globalRules.map((r: string) => `  - ${r}`).join('\n')}\n`;
+  }
+
+  // Skills output — enriched understanding for better generation
+  if (analysis.explore) {
+    const e = analysis.explore;
+    block += `\n--- DEEP UNDERSTANDING (from explore skill) ---\n`;
+    block += `Domain: ${e.domain}\n`;
+    if (e.userPersonas?.length) block += `Users: ${e.userPersonas.join('; ')}\n`;
+    if (e.coreUserFlow) block += `Core Flow: ${e.coreUserFlow}\n`;
+    if (e.edgeCases?.length) block += `Edge Cases to Handle:\n${e.edgeCases.map((c: string) => `  - ${c}`).join('\n')}\n`;
+    if (e.architectureDiagram) block += `Architecture:\n${e.architectureDiagram}\n`;
+  }
+
+  if (analysis.designProposal) {
+    const dp = analysis.designProposal;
+    block += `\n--- DESIGN DIRECTION (from design proposal skill) ---\n`;
+    if (dp.designDirection) block += `Direction: ${dp.designDirection}\n`;
+    if (dp.layoutStrategy) block += `Layout: ${dp.layoutStrategy}\n`;
+    if (dp.componentPatterns?.length) {
+      block += `Patterns:\n${dp.componentPatterns.map((p: any) => `  - ${p.pattern}: ${p.usage}`).join('\n')}\n`;
+    }
+    if (dp.interactionDesign?.length) {
+      block += `Interactions:\n${dp.interactionDesign.map((i: any) => `  - ${i.element}: ${i.behavior}`).join('\n')}\n`;
+    }
+    if (dp.microCopyGuidelines?.length) {
+      block += `Micro-copy:\n${dp.microCopyGuidelines.map((m: string) => `  - ${m}`).join('\n')}\n`;
+    }
+  }
+
+  if (analysis.uxReview?.issues?.length) {
+    const critical = analysis.uxReview.issues.filter((i: any) => i.severity === 'critical');
+    if (critical.length > 0) {
+      block += `\n--- UX FIXES REQUIRED ---\n`;
+      for (const issue of critical) {
+        block += `  ⚠ [${issue.page}] ${issue.issue} → ${issue.suggestion}\n`;
+      }
+    }
+  }
+
+  block += `=== END DOCUMENT ANALYSIS ===`;
+  return block;
 }
 
 function formatGeminiError(err: any): string {
@@ -103,23 +166,30 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     } else {
       // Auto-inject project uploaded files even if not explicitly attached
-      // Deduplicate by file_size — same PDF uploaded multiple times has same size
+      // Priority: analysis_result (structured) > extracted_text (raw)
       const projectFiles = db.prepare(
-        `SELECT original_name, extracted_text, file_size FROM uploaded_files
-         WHERE project_id = ? AND extracted_text IS NOT NULL AND LENGTH(extracted_text) > 100
+        `SELECT original_name, extracted_text, analysis_result, analysis_status, file_size FROM uploaded_files
+         WHERE project_id = ? AND (extracted_text IS NOT NULL AND LENGTH(extracted_text) > 100 OR analysis_result IS NOT NULL)
          ORDER BY created_at DESC`
-      ).all(projectId) as { original_name: string; extracted_text: string; file_size: number }[];
+      ).all(projectId) as { original_name: string; extracted_text: string; analysis_result: string | null; analysis_status: string | null; file_size: number }[];
       const seenSizes = new Set<number>();
       const uniqueFiles = projectFiles.filter(f => {
         if (seenSizes.has(f.file_size)) return false;
         seenSizes.add(f.file_size);
         return true;
-      }).slice(0, 1); // Only most recent unique file — prevents old uploads from overriding new intent
+      }).slice(0, 1);
       if (uniqueFiles.length > 0) {
         const fileParts = uniqueFiles.map(f => {
-          // Fix Latin-1 encoded filenames from older uploads
           let name = f.original_name;
           try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep original */ }
+
+          // Use structured analysis if available
+          if (f.analysis_result) {
+            try {
+              const analysis = JSON.parse(f.analysis_result);
+              return formatAnalysisForPrompt(analysis, name);
+            } catch { /* fall through to raw text */ }
+          }
           return `--- ${name} ---\n${f.extracted_text.slice(0, 4000)}\n--- end ---`;
         }).join('\n');
         userContent = `[Project design specs (auto-loaded from uploaded files)]\n${fileParts}\n\n${userContent}`;
@@ -133,7 +203,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       try {
         const genai = new GoogleGenerativeAI(apiKey);
         const model = genai.getGenerativeModel({
-          model: 'gemini-2.0-flash',
+          model: getGeminiModel(),
           systemInstruction: qaSystemPrompt,
           generationConfig: { maxOutputTokens: 4096 },
         });
@@ -151,6 +221,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
           }
         }
+        try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'chat-qa', resp.usageMetadata); } catch {}
       } catch (err: any) {
         console.error('Gemini API error:', err);
         res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
@@ -222,27 +293,26 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // First, load design spec analysis — inject BEFORE base system prompt so it overrides defaults
     // Scope: if user explicitly attached fileIds, use only those; otherwise use only the MOST RECENT file.
     // This prevents old uploaded files from previous sessions from polluting new generations.
-    let specRowsEarly: { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+    let specRowsEarly: { original_name: string; visual_analysis: string; analysis_result: string | null; component_label: string | null; file_size: number }[];
     if (Array.isArray(fileIds) && fileIds.length > 0) {
       const placeholders = fileIds.map(() => '?').join(',');
       specRowsEarly = db.prepare(
-        `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
-         WHERE id IN (${placeholders}) AND project_id = ? AND visual_analysis IS NOT NULL`
-      ).all(...fileIds, projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+        `SELECT original_name, visual_analysis, analysis_result, component_label, file_size FROM uploaded_files
+         WHERE id IN (${placeholders}) AND project_id = ? AND (visual_analysis IS NOT NULL OR analysis_result IS NOT NULL)`
+      ).all(...fileIds, projectId) as typeof specRowsEarly;
     } else {
-      // Auto: only the single most recently uploaded file with visual analysis
+      // Auto: only the single most recently uploaded file with analysis
       // Skip if arch_data has per-page refs — those are already injected via architectureBlock
       const archHasPerPageRefs = archData?.type === 'page' && !archData.aiDecidePages &&
         archData.nodes?.some((n: any) => n.referenceFileId);
       if (archHasPerPageRefs) {
         specRowsEarly = [];
       } else {
-        // Exclude architecture reference uploads (page_name = '__arch__') — those are used in architectureBlock
         specRowsEarly = db.prepare(
-          `SELECT original_name, visual_analysis, component_label, file_size FROM uploaded_files
-           WHERE project_id = ? AND visual_analysis IS NOT NULL AND (page_name IS NULL OR page_name != '__arch__')
+          `SELECT original_name, visual_analysis, analysis_result, component_label, file_size FROM uploaded_files
+           WHERE project_id = ? AND (visual_analysis IS NOT NULL OR analysis_result IS NOT NULL) AND (page_name IS NULL OR page_name != '__arch__')
            ORDER BY created_at DESC LIMIT 1`
-        ).all(projectId) as { original_name: string; visual_analysis: string; component_label: string | null; file_size: number }[];
+        ).all(projectId) as typeof specRowsEarly;
       }
     }
 
@@ -256,8 +326,20 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       for (const row of specRowsEarly) {
         let name = row.original_name;
         try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep */ }
-        const analysis = row.visual_analysis.length > 3000 ? row.visual_analysis.slice(0, 3000) + '…' : row.visual_analysis;
-        designSpecPrefix += `--- Spec: ${name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${analysis}\n\n`;
+
+        // Prefer structured analysis_result over raw visual_analysis
+        if (row.analysis_result) {
+          try {
+            const analysis = JSON.parse(row.analysis_result);
+            designSpecPrefix += formatAnalysisForPrompt(analysis, name) + '\n\n';
+            continue;
+          } catch { /* fall through */ }
+        }
+        // Fallback to raw visual_analysis
+        if (row.visual_analysis) {
+          const analysis = row.visual_analysis.length > 3000 ? row.visual_analysis.slice(0, 3000) + '…' : row.visual_analysis;
+          designSpecPrefix += `--- Spec: ${name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${analysis}\n\n`;
+        }
       }
       designSpecPrefix += '══════════════════════════════════════════════════════\n\n';
     }
@@ -457,15 +539,34 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       finalPages = archData.nodes.map((n: any) => n.name);
       isMultiPage = finalPages.length > 1;
     } else {
-      // Existing logic — pass full userContent (includes injected PDF spec text) so the
-      // analyzer can detect pages described in uploaded design specs, not just the user's message
-      const pageStructure = (intent === 'full-page' || intent === 'in-shell')
-        ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
-        : { multiPage: false, pages: [] as string[] };
+      // Check if analysis_result has page names — use those directly to avoid extra AI call
+      const analysisPages: string[] = [];
+      if (specRowsEarly.length > 0) {
+        for (const row of specRowsEarly) {
+          if (row.analysis_result) {
+            try {
+              const analysis = JSON.parse(row.analysis_result);
+              if (analysis.pages?.length > 1) {
+                analysisPages.push(...analysis.pages.map((p: any) => p.name));
+              }
+            } catch { /* ignore */ }
+          }
+        }
+      }
 
-      // Use existing pages if regenerating; new pages if fresh multi-page request
-      finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
-      isMultiPage = finalPages.length > 1;
+      if (analysisPages.length > 1) {
+        // Use pages from structured analysis — skip AI page detection
+        finalPages = analysisPages;
+        isMultiPage = true;
+      } else {
+        // Fallback: run AI page structure analysis
+        const pageStructure = (intent === 'full-page' || intent === 'in-shell')
+          ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
+          : { multiPage: false, pages: [] as string[] };
+
+        finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
+        isMultiPage = finalPages.length > 1;
+      }
     }
 
     if (isMultiPage) {
@@ -499,9 +600,9 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     try {
       const genai = new GoogleGenerativeAI(apiKey);
       const model = genai.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: getGeminiModel(),
         systemInstruction: effectiveSystemPrompt,
-        generationConfig: { maxOutputTokens: 16384 },
+        generationConfig: { maxOutputTokens: 65536 },
       });
       const chatSession = model.startChat({ history: trimmedHistory });
       const result = await chatSession.sendMessageStream(userContent);
@@ -512,6 +613,7 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
           res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
         }
       }
+      try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
     } catch (err: any) {
       console.error('Gemini API error:', err);
       res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
