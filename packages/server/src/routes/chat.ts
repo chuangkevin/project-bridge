@@ -9,6 +9,7 @@ import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyle
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from '../services/geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
+import { validatePrototype, logValidation } from '../services/prototypeValidator';
 
 const router = Router();
 
@@ -688,6 +689,17 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     // Inject convention color overrides if active
     if (designConvention) {
       html = injectConventionColors(html, designConvention);
+    }
+
+    // Validate prototype quality (non-blocking — logs warnings only)
+    {
+      // Get analysis_result for validation if available
+      const latestAnalysis = specRowsEarly.length > 0 && specRowsEarly[0].analysis_result
+        ? (() => { try { return JSON.parse(specRowsEarly[0].analysis_result); } catch { return null; } })()
+        : null;
+      const conventionPrimary = designConvention.match(/#([89a-fA-F][0-9a-fA-F]{5})/)?.[0] || null;
+      const validationResult = validatePrototype(html, latestAnalysis, conventionPrimary, isMultiPage);
+      logValidation(validationResult, projectId as string);
     }
 
     // Only create prototype version if response looks like HTML
