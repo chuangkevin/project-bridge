@@ -1,104 +1,143 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+interface KeyInfo {
+  suffix: string;
+  todayCalls: number;
+  todayTokens: number;
+  totalCalls: number;
+  totalTokens: number;
+}
+
+interface UsageStats {
+  today: { calls: number; tokens: number };
+  week: { calls: number; tokens: number };
+  month: { calls: number; tokens: number };
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
 
 export default function SettingsPage() {
   const navigate = useNavigate();
 
-  // API key state
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [apiKeySaveState, setApiKeySaveState] = useState<SaveState>('idle');
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  // Key management
+  const [keys, setKeys] = useState<KeyInfo[]>([]);
+  const [model, setModel] = useState('gemini-2.5-flash');
+  const [newKey, setNewKey] = useState('');
+  const [addState, setAddState] = useState<'idle' | 'adding' | 'error'>('idle');
+  const [addError, setAddError] = useState('');
   const [loading, setLoading] = useState(true);
   const [envKeySet, setEnvKeySet] = useState(false);
 
-  // Test connection state
-  const [testState, setTestState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
-  const [testMessage, setTestMessage] = useState('');
+  // Usage stats
+  const [usage, setUsage] = useState<UsageStats | null>(null);
 
-  // Generation preferences (localStorage)
-  const [defaultModel, setDefaultModel] = useState<string>(
-    () => localStorage.getItem('pb-default-model') ?? 'gemini-2.0-flash'
+  // Model preference
+  const [selectedModel, setSelectedModel] = useState(
+    () => localStorage.getItem('pb-default-model') ?? 'gemini-2.5-flash'
   );
-  const [language, setLanguage] = useState<string>(
+  const [language, setLanguage] = useState(
     () => localStorage.getItem('pb-language') ?? '繁體中文'
   );
-  const [prefSaveState, setPrefSaveState] = useState<SaveState>('idle');
+
+  const fetchKeys = async () => {
+    try {
+      const res = await fetch('/api/settings/api-keys');
+      if (res.ok) {
+        const data = await res.json();
+        setKeys(data.keys || []);
+        setModel(data.model || 'gemini-2.5-flash');
+      }
+    } catch { /* ignore */ }
+  };
+
+  const fetchUsage = async () => {
+    try {
+      const res = await fetch('/api/settings/token-usage');
+      if (res.ok) setUsage(await res.json());
+    } catch { /* ignore */ }
+  };
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const res = await fetch('/api/settings');
-        if (!res.ok) throw new Error('Failed to fetch settings');
-        const data = await res.json();
-        setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
-        const keySetting = (data.settings ?? []).find(
-          (s: { key: string }) => s.key === 'gemini_api_key'
-        );
-        if (keySetting) {
-          setApiKey(keySetting.value);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
         }
-      } catch {
-        setApiKeyError('無法載入設定');
-      } finally {
-        setLoading(false);
-      }
+      } catch { /* ignore */ }
+      await Promise.all([fetchKeys(), fetchUsage()]);
+      if (!cancelled) setLoading(false);
     })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSaveApiKey = async () => {
-    setApiKeySaveState('saving');
-    setApiKeyError(null);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'gemini_api_key', value: apiKey }),
-      });
-      if (!res.ok) throw new Error('Failed to save');
-      setApiKeySaveState('saved');
-      setTimeout(() => setApiKeySaveState('idle'), 2000);
-    } catch {
-      setApiKeySaveState('error');
-      setApiKeyError('儲存失敗，請重試');
-      setTimeout(() => setApiKeySaveState('idle'), 2000);
-    }
-  };
-
-  const handleTestConnection = async () => {
-    setTestState('testing');
-    setTestMessage('');
-
-    if (apiKey.includes('*') || apiKey.trim() === '') {
-      if (envKeySet || apiKey.includes('*')) {
-        setTestState('ok');
-        setTestMessage('API 金鑰已設定');
-      } else {
-        setTestState('fail');
-        setTestMessage('尚未設定 API 金鑰');
-      }
+  const handleAddKey = async () => {
+    const trimmed = newKey.trim();
+    if (!trimmed || !trimmed.startsWith('AIza')) {
+      setAddError('API Key 必須以 AIza 開頭');
+      setAddState('error');
       return;
     }
-
-    // Key is present and plaintext
-    setTestState('ok');
-    setTestMessage('金鑰格式看起來正確');
+    setAddState('adding');
+    setAddError('');
+    try {
+      const res = await fetch('/api/settings/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAddError(data.error || '新增失敗');
+        setAddState('error');
+        return;
+      }
+      setKeys(data.keys || []);
+      setNewKey('');
+      setAddState('idle');
+      fetchUsage();
+    } catch {
+      setAddError('網路錯誤');
+      setAddState('error');
+    }
   };
 
-  const handleSavePreferences = () => {
-    localStorage.setItem('pb-default-model', defaultModel);
-    localStorage.setItem('pb-language', language);
-    setPrefSaveState('saved');
-    setTimeout(() => setPrefSaveState('idle'), 2000);
+  const handleDeleteKey = async (suffix: string) => {
+    if (keys.length <= 1) return; // Don't delete the last key
+    try {
+      const res = await fetch(`/api/settings/api-keys/${suffix}`, { method: 'DELETE' });
+      if (res.ok) {
+        const data = await res.json();
+        setKeys(data.keys || []);
+      }
+    } catch { /* ignore */ }
   };
 
-  const apiKeyValid = apiKey.length === 0 || !apiKey.includes(' ');
+  const handleSaveModel = async (newModel: string) => {
+    setSelectedModel(newModel);
+    localStorage.setItem('pb-default-model', newModel);
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'gemini_model', value: newModel }),
+    });
+  };
+
+  const handleSaveLanguage = (lang: string) => {
+    setLanguage(lang);
+    localStorage.setItem('pb-language', lang);
+  };
 
   return (
     <div style={styles.container}>
-      {/* Header */}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <button style={styles.backBtn} onClick={() => navigate('/')} title="返回首頁">
@@ -112,11 +151,12 @@ export default function SettingsPage() {
 
       <main style={styles.main}>
 
-        {/* ── Section: API 金鑰 ─────────────────────────────── */}
+        {/* ── Section: API Key Management ──────────────── */}
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Gemini API 金鑰</h2>
+            <h2 style={styles.sectionTitle}>Gemini API Keys</h2>
             <div style={styles.sectionDivider} />
+            <span style={styles.badge}>{keys.length} keys</span>
           </div>
 
           {loading ? (
@@ -125,115 +165,119 @@ export default function SettingsPage() {
             <>
               {envKeySet && (
                 <div style={styles.infoNotice}>
-                  已透過環境變數設定 Gemini API 金鑰。以下輸入的值將覆蓋環境變數。
+                  已透過環境變數設定 Gemini API 金鑰。
                 </div>
               )}
 
-              <label style={styles.label}>API 金鑰</label>
-              <p style={styles.hint}>Google AI Studio API 金鑰 (aistudio.google.com)</p>
+              {/* Key table */}
+              {keys.length > 0 && (
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Key</th>
+                        <th style={{ ...styles.th, textAlign: 'right' }}>Today</th>
+                        <th style={{ ...styles.th, textAlign: 'right' }}>Total Calls</th>
+                        <th style={{ ...styles.th, textAlign: 'right' }}>Total Tokens</th>
+                        <th style={{ ...styles.th, width: '40px' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {keys.map((k, i) => (
+                        <tr key={k.suffix} style={i % 2 === 0 ? {} : styles.evenRow}>
+                          <td style={styles.td}>
+                            <code style={styles.keySuffix}>...{k.suffix}</code>
+                          </td>
+                          <td style={{ ...styles.td, textAlign: 'right' }}>
+                            <span style={styles.statNum}>{k.todayCalls}</span>
+                            <span style={styles.statLabel}> calls</span>
+                          </td>
+                          <td style={{ ...styles.td, textAlign: 'right' }}>
+                            <span style={styles.statNum}>{k.totalCalls}</span>
+                          </td>
+                          <td style={{ ...styles.td, textAlign: 'right' }}>
+                            <span style={styles.statNum}>{formatTokens(k.totalTokens)}</span>
+                          </td>
+                          <td style={styles.td}>
+                            <button
+                              style={{
+                                ...styles.deleteBtn,
+                                ...(keys.length <= 1 ? styles.btnDisabled : {}),
+                              }}
+                              onClick={() => handleDeleteKey(k.suffix)}
+                              disabled={keys.length <= 1}
+                              title={keys.length <= 1 ? '至少保留一組 Key' : '刪除此 Key'}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-              <div style={styles.inputRow}>
+              {/* Add new key */}
+              <div style={{ ...styles.inputRow, marginTop: '12px' }}>
                 <input
-                  type={showKey ? 'text' : 'password'}
-                  style={{
-                    ...styles.input,
-                    ...(!apiKeyValid ? styles.inputError : {}),
-                  }}
-                  value={apiKey}
-                  onChange={e => {
-                    setApiKey(e.target.value);
-                    setTestState('idle');
-                    setTestMessage('');
-                  }}
-                  placeholder="AIza..."
-                  disabled={apiKeySaveState === 'saving'}
-                  data-testid="api-key-input"
+                  type="text"
+                  style={styles.input}
+                  value={newKey}
+                  onChange={e => { setNewKey(e.target.value); setAddState('idle'); setAddError(''); }}
+                  placeholder="貼上新的 API Key (AIza...)"
+                  disabled={addState === 'adding'}
+                  onKeyDown={e => e.key === 'Enter' && handleAddKey()}
                 />
-                <button
-                  type="button"
-                  style={styles.iconBtn}
-                  onClick={() => setShowKey(v => !v)}
-                  title={showKey ? '隱藏金鑰' : '顯示金鑰'}
-                  data-testid="toggle-key-visibility"
-                >
-                  {showKey ? (
-                    // eye-off icon
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
-                      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  ) : (
-                    // eye icon
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-
-              {!apiKeyValid && (
-                <p style={styles.errorText}>金鑰格式不正確</p>
-              )}
-
-              {apiKeyError && (
-                <p style={styles.errorText}>{apiKeyError}</p>
-              )}
-
-              <div style={styles.actionRow}>
-                <button
-                  type="button"
-                  style={{
-                    ...styles.secondaryBtn,
-                    ...(testState === 'testing' ? styles.btnDisabled : {}),
-                  }}
-                  onClick={handleTestConnection}
-                  disabled={testState === 'testing'}
-                  data-testid="test-connection-btn"
-                >
-                  {testState === 'testing' ? '測試中...' : '測試連線'}
-                </button>
-
-                {testState !== 'idle' && testState !== 'testing' && (
-                  <span
-                    style={{
-                      ...styles.testResult,
-                      color: testState === 'ok' ? '#16a34a' : '#ef4444',
-                    }}
-                    data-testid="test-result"
-                  >
-                    {testState === 'ok' ? '✓ ' : '✗ '}{testMessage}
-                  </span>
-                )}
-
-                <div style={styles.spacer} />
-
                 <button
                   style={{
                     ...styles.primaryBtn,
-                    ...(apiKeySaveState === 'saving' ? styles.btnDisabled : {}),
-                    ...(apiKeySaveState === 'saved' ? styles.btnSaved : {}),
-                    ...(apiKeySaveState === 'error' ? styles.btnError : {}),
+                    ...(addState === 'adding' ? styles.btnDisabled : {}),
                   }}
-                  onClick={handleSaveApiKey}
-                  disabled={apiKeySaveState === 'saving'}
-                  data-testid="save-api-key-btn"
+                  onClick={handleAddKey}
+                  disabled={addState === 'adding'}
                 >
-                  {apiKeySaveState === 'saving'
-                    ? '儲存中...'
-                    : apiKeySaveState === 'saved'
-                    ? '✓ 已儲存'
-                    : apiKeySaveState === 'error'
-                    ? '儲存失敗'
-                    : '儲存金鑰'}
+                  {addState === 'adding' ? '驗證中...' : '+ 新增'}
                 </button>
               </div>
+              {addError && <p style={styles.errorText}>{addError}</p>}
             </>
           )}
         </section>
 
-        {/* ── Section: 生成偏好 ─────────────────────────────── */}
+        {/* ── Section: Token Usage ─────────────────────── */}
+        <section style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>Token Usage</h2>
+            <div style={styles.sectionDivider} />
+          </div>
+
+          {usage ? (
+            <div style={styles.usageGrid}>
+              <div style={styles.usageCard}>
+                <div style={styles.usageLabel}>Today</div>
+                <div style={styles.usageNum}>{usage.today.calls}</div>
+                <div style={styles.usageSub}>calls / {formatTokens(usage.today.tokens)} tokens</div>
+              </div>
+              <div style={styles.usageCard}>
+                <div style={styles.usageLabel}>7 Days</div>
+                <div style={styles.usageNum}>{usage.week.calls}</div>
+                <div style={styles.usageSub}>calls / {formatTokens(usage.week.tokens)} tokens</div>
+              </div>
+              <div style={styles.usageCard}>
+                <div style={styles.usageLabel}>30 Days</div>
+                <div style={styles.usageNum}>{usage.month.calls}</div>
+                <div style={styles.usageSub}>calls / {formatTokens(usage.month.tokens)} tokens</div>
+              </div>
+            </div>
+          ) : (
+            <p style={styles.loadingText}>載入中...</p>
+          )}
+        </section>
+
+        {/* ── Section: Generation Preferences ─────────── */}
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
             <h2 style={styles.sectionTitle}>生成偏好</h2>
@@ -242,17 +286,18 @@ export default function SettingsPage() {
 
           <div style={styles.prefGrid}>
             <div style={styles.prefField}>
-              <label style={styles.label}>預設模型</label>
-              <p style={styles.hint}>用於原型生成的 Gemini 模型</p>
+              <label style={styles.label}>AI Model</label>
+              <p style={styles.hint}>用於所有 AI 呼叫的 Gemini 模型</p>
               <select
                 style={styles.select}
-                value={defaultModel}
-                onChange={e => setDefaultModel(e.target.value)}
-                data-testid="default-model-select"
+                value={selectedModel}
+                onChange={e => handleSaveModel(e.target.value)}
               >
-                <option value="gemini-2.0-flash">gemini-2.0-flash（免費、快速）</option>
-                <option value="gemini-1.5-pro">gemini-1.5-pro（品質優先）</option>
+                <option value="gemini-2.5-flash">gemini-2.5-flash (推薦)</option>
+                <option value="gemini-2.5-pro">gemini-2.5-pro (品質優先)</option>
+                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
               </select>
+              <p style={styles.hint}>目前 Server 使用: {model}</p>
             </div>
 
             <div style={styles.prefField}>
@@ -261,27 +306,12 @@ export default function SettingsPage() {
               <select
                 style={styles.select}
                 value={language}
-                onChange={e => setLanguage(e.target.value)}
-                data-testid="language-select"
+                onChange={e => handleSaveLanguage(e.target.value)}
               >
                 <option value="繁體中文">繁體中文</option>
                 <option value="English">English</option>
               </select>
             </div>
-          </div>
-
-          <div style={styles.actionRow}>
-            <div style={styles.spacer} />
-            <button
-              style={{
-                ...styles.primaryBtn,
-                ...(prefSaveState === 'saved' ? styles.btnSaved : {}),
-              }}
-              onClick={handleSavePreferences}
-              data-testid="save-preferences-btn"
-            >
-              {prefSaveState === 'saved' ? '✓ 已儲存' : '儲存偏好'}
-            </button>
           </div>
         </section>
 
@@ -291,204 +321,44 @@ export default function SettingsPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#f8fafc',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0 32px',
-    height: '56px',
-    backgroundColor: '#ffffff',
-    borderBottom: '1px solid #e2e8f0',
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  headerTitle: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: 600,
-    color: '#1e293b',
-  },
-  backBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    color: '#475569',
-    cursor: 'pointer',
-    padding: 0,
-  },
-  main: {
-    maxWidth: '640px',
-    margin: '0 auto',
-    padding: '32px 24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '32px',
-  },
-  section: {
-    backgroundColor: '#ffffff',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    padding: '24px',
-  },
-  sectionHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '20px',
-  },
-  sectionTitle: {
-    margin: 0,
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#1e293b',
-    whiteSpace: 'nowrap',
-  },
-  sectionDivider: {
-    flex: 1,
-    height: '1px',
-    backgroundColor: '#e2e8f0',
-  },
-  loadingText: {
-    color: '#64748b',
-    fontSize: '14px',
-    margin: 0,
-  },
-  infoNotice: {
-    padding: '10px 12px',
-    backgroundColor: '#eff6ff',
-    border: '1px solid #bfdbfe',
-    borderRadius: '8px',
-    fontSize: '13px',
-    color: '#1e40af',
-    marginBottom: '16px',
-  },
-  label: {
-    display: 'block',
-    fontSize: '14px',
-    fontWeight: 500,
-    color: '#475569',
-    marginBottom: '2px',
-  },
-  hint: {
-    margin: '0 0 8px',
-    fontSize: '12px',
-    color: '#94a3b8',
-  },
-  inputRow: {
-    display: 'flex',
-    gap: '8px',
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    padding: '10px 12px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    fontSize: '14px',
-    outline: 'none',
-    boxSizing: 'border-box',
-    color: '#1e293b',
-    backgroundColor: '#ffffff',
-    fontFamily: 'monospace',
-  },
-  inputError: {
-    borderColor: '#fca5a5',
-    backgroundColor: '#fff5f5',
-  },
-  iconBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '40px',
-    height: '40px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    color: '#64748b',
-    cursor: 'pointer',
-    flexShrink: 0,
-    padding: 0,
-  },
-  errorText: {
-    margin: '6px 0 0',
-    fontSize: '12px',
-    color: '#ef4444',
-  },
-  actionRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginTop: '16px',
-  },
-  spacer: {
-    flex: 1,
-  },
-  testResult: {
-    fontSize: '13px',
-    fontWeight: 500,
-  },
-  primaryBtn: {
-    padding: '9px 20px',
-    border: 'none',
-    borderRadius: '8px',
-    backgroundColor: '#3b82f6',
-    color: '#ffffff',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'background-color 0.15s',
-    minWidth: '100px',
-  },
-  secondaryBtn: {
-    padding: '9px 16px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    color: '#475569',
-    fontSize: '14px',
-    fontWeight: 500,
-    cursor: 'pointer',
-  },
-  btnDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-  },
-  btnSaved: {
-    backgroundColor: '#16a34a',
-  },
-  btnError: {
-    backgroundColor: '#ef4444',
-  },
-  prefGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '20px',
-  },
-  prefField: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  select: {
-    padding: '10px 12px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    fontSize: '14px',
-    color: '#1e293b',
-    backgroundColor: '#ffffff',
-    cursor: 'pointer',
-    outline: 'none',
-    appearance: 'auto',
-  },
+  container: { minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+  header: { display: 'flex', alignItems: 'center', padding: '0 32px', height: '56px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0' },
+  headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
+  headerTitle: { margin: 0, fontSize: '18px', fontWeight: 600, color: '#1e293b' },
+  backBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#fff', color: '#475569', cursor: 'pointer', padding: 0 },
+  main: { maxWidth: '720px', margin: '0 auto', padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: '24px' },
+  section: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '24px' },
+  sectionHeader: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' },
+  sectionTitle: { margin: 0, fontSize: '15px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' },
+  sectionDivider: { flex: 1, height: '1px', backgroundColor: '#e2e8f0' },
+  badge: { padding: '2px 8px', borderRadius: '10px', backgroundColor: '#f1f5f9', fontSize: '12px', fontWeight: 500, color: '#64748b' },
+  loadingText: { color: '#64748b', fontSize: '14px', margin: 0 },
+  infoNotice: { padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '13px', color: '#1e40af', marginBottom: '12px' },
+  label: { display: 'block', fontSize: '14px', fontWeight: 500, color: '#475569', marginBottom: '2px' },
+  hint: { margin: '0 0 8px', fontSize: '12px', color: '#94a3b8' },
+  inputRow: { display: 'flex', gap: '8px', alignItems: 'center' },
+  input: { flex: 1, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', outline: 'none', color: '#1e293b', backgroundColor: '#fff', fontFamily: 'monospace', boxSizing: 'border-box' as const },
+  errorText: { margin: '6px 0 0', fontSize: '12px', color: '#ef4444' },
+  primaryBtn: { padding: '9px 20px', border: 'none', borderRadius: '8px', backgroundColor: '#3b82f6', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'background-color 0.15s', minWidth: '80px', whiteSpace: 'nowrap' as const },
+  btnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
+  // Table
+  tableWrap: { overflowX: 'auto' as const, borderRadius: '8px', border: '1px solid #e2e8f0' },
+  table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
+  th: { padding: '8px 12px', textAlign: 'left' as const, fontWeight: 600, color: '#64748b', fontSize: '12px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' },
+  td: { padding: '10px 12px', borderBottom: '1px solid #f1f5f9' },
+  evenRow: { backgroundColor: '#f8fafc' },
+  keySuffix: { backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
+  statNum: { fontWeight: 600, color: '#1e293b' },
+  statLabel: { color: '#94a3b8', fontSize: '12px' },
+  deleteBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: '#fff', color: '#ef4444', cursor: 'pointer', padding: 0, transition: 'background-color 0.15s' },
+  // Usage cards
+  usageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' },
+  usageCard: { padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' as const },
+  usageLabel: { fontSize: '12px', fontWeight: 500, color: '#94a3b8', marginBottom: '4px' },
+  usageNum: { fontSize: '28px', fontWeight: 700, color: '#1e293b' },
+  usageSub: { fontSize: '12px', color: '#64748b', marginTop: '2px' },
+  // Preferences
+  prefGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
+  prefField: { display: 'flex', flexDirection: 'column' as const },
+  select: { padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#1e293b', backgroundColor: '#fff', cursor: 'pointer', outline: 'none' },
 };
