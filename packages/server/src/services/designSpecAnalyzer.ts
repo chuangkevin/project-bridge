@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getGeminiModel, trackUsage } from './geminiKeys';
 
 const COMPONENT_EXTRACTION_PROMPT = `You are analyzing a UI design reference image. A developer will use your analysis to recreate this design in HTML/CSS. Be precise and only describe what you actually see.
 
@@ -35,7 +36,7 @@ export async function analyzeDesignSpec(images: Buffer[], apiKey: string): Promi
 
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: getGeminiModel(),
     generationConfig: { maxOutputTokens: 3000 },
   });
 
@@ -50,6 +51,7 @@ export async function analyzeDesignSpec(images: Buffer[], apiKey: string): Promi
     ...imageParts,
     { text: COMPONENT_EXTRACTION_PROMPT },
   ]);
+  try { trackUsage(apiKey, getGeminiModel(), 'visual-analysis', result.response.usageMetadata); } catch {}
 
   return result.response.text() || '';
 }

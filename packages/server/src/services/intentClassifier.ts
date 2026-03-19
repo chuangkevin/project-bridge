@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getGeminiModel, trackUsage } from './geminiKeys';
 
 export type Intent = 'full-page' | 'in-shell' | 'component' | 'question';
 
@@ -14,7 +15,7 @@ export async function classifyIntent(
   try {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: getGeminiModel(),
       systemInstruction: `Classify the user message into one of four intents. Reply with ONLY one word.
 
 Intents:
@@ -40,6 +41,7 @@ Reply ONLY with: question, component, full-page, or in-shell`,
     });
 
     const result = await model.generateContent(message);
+    try { trackUsage(apiKey, getGeminiModel(), 'intent-classify', result.response.usageMetadata); } catch {}
     const text = result.response.text().trim().toLowerCase();
 
     if (text === 'question') return 'question';

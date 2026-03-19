@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import db from '../db/connection';
 import { extractComponent, replaceComponent } from '../services/componentExtractor';
+import { getGeminiApiKey, getGeminiModel, trackUsage } from '../services/geminiKeys';
 
 const router = Router();
 
@@ -71,8 +72,7 @@ router.post('/:id/prototype/regenerate-component', async (req: Request, res: Res
   if (!componentHtml) return res.status(404).json({ error: 'Component not found' });
 
   // Get API key
-  const apiKey = process.env.GEMINI_API_KEY ||
-    (db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any)?.value;
+  const apiKey = getGeminiApiKey();
   if (!apiKey) return res.status(400).json({ error: 'Gemini API key not configured' });
 
   // Build surrounding context (200 chars before/after)
@@ -126,7 +126,7 @@ RULES:
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: getGeminiModel(),
       systemInstruction: systemPrompt,
       generationConfig: { maxOutputTokens: 4096 },
     });
@@ -139,6 +139,7 @@ RULES:
         res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
       }
     }
+    try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'component-regen', resp.usageMetadata); } catch {}
 
     // Strip markdown fences if AI wrapped in code block
     newComponentHtml = newComponentHtml.trim();

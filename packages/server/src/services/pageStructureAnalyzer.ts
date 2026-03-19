@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getGeminiModel, trackUsage } from './geminiKeys';
 
 export interface PageStructure {
   multiPage: boolean;
@@ -9,7 +10,7 @@ export async function analyzePageStructure(message: string, apiKey: string): Pro
   try {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: getGeminiModel(),
       systemInstruction: `You are analyzing a UI generation request to detect if it describes multiple pages/screens.
 
 Return JSON only: {"multiPage": boolean, "pages": string[]}
@@ -35,6 +36,7 @@ Examples:
     });
 
     const result = await model.generateContent(message.slice(0, 8000));
+    try { trackUsage(apiKey, getGeminiModel(), 'page-structure', result.response.usageMetadata); } catch {}
     const content = result.response.text();
     const parsed = JSON.parse(content);
     return {

@@ -1,4 +1,5 @@
 import yauzl from 'yauzl';
+import { getGeminiModel, trackUsage } from './geminiKeys';
 
 export async function extractImagesFromDocument(filePath: string, mimeType: string): Promise<Buffer[]> {
   const ext = mimeType.toLowerCase();
@@ -59,7 +60,7 @@ export async function analyzeArtStyle(images: Buffer[], apiKey: string): Promise
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genai = new GoogleGenerativeAI(apiKey);
   const model = genai.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: getGeminiModel(),
     generationConfig: { maxOutputTokens: 150 },
   });
 
@@ -74,6 +75,7 @@ export async function analyzeArtStyle(images: Buffer[], apiKey: string): Promise
     ...imageParts,
     { text: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.' },
   ]);
+  try { trackUsage(apiKey, getGeminiModel(), 'art-style', result.response.usageMetadata); } catch {}
 
   return result.response.text().trim() || '';
 }
