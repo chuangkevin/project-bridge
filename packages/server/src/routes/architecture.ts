@@ -5,6 +5,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
 import db from '../db/connection';
+import { getGeminiApiKey } from '../services/geminiKeys';
 
 const uploadDir = path.resolve(__dirname, '../../data/uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -48,21 +49,14 @@ router.post('/:id/architecture/upload', (req: Request, res: Response) => {
     // Respond immediately, then trigger visual analysis in background
     res.json({ id, mimeType: mimetype });
 
-    // Async visual analysis (non-blocking — used for per-page design spec injection)
+    // Async document analysis agent (non-blocking — replaces old visual-only analysis)
     setImmediate(async () => {
       try {
-        const apiKey = process.env.GEMINI_API_KEY ||
-          (db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any)?.value;
-        if (!apiKey) return;
-        const { analyzeDesignSpec } = await import('../services/designSpecAnalyzer');
-        const imageBuffer = fs.readFileSync(storagePath);
-        const visualAnalysis = await analyzeDesignSpec([imageBuffer], apiKey);
-        if (visualAnalysis) {
-          db.prepare('UPDATE uploaded_files SET visual_analysis = ? WHERE id = ?')
-            .run(visualAnalysis, id);
-        }
+        db.prepare("UPDATE uploaded_files SET analysis_status = 'pending' WHERE id = ?").run(id);
+        const { analyzeDocument } = await import('../services/documentAnalysisAgent');
+        await analyzeDocument(id, storagePath, mimetype, '');
       } catch (e) {
-        console.error('[arch upload] visual analysis failed:', e);
+        console.error('[arch upload] document analysis failed:', e);
       }
     });
   });

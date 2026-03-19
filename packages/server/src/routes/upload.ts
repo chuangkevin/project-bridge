@@ -7,6 +7,7 @@ import { extractText } from '../services/textExtractor';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { renderPdfPages } from '../services/pdfPageRenderer';
 import { analyzeDesignSpec } from '../services/designSpecAnalyzer';
+import { getGeminiApiKey } from '../services/geminiKeys';
 
 const router = Router();
 
@@ -47,8 +48,7 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
       ).run(id, projectId, originalname, mimetype, size, storagePath, extractedText, pageName);
 
       // Visual analysis for PDF and image files
-      const apiKey = process.env.GEMINI_API_KEY ||
-        (db.prepare("SELECT value FROM settings WHERE key = 'gemini_api_key'").get() as any)?.value;
+      const apiKey = getGeminiApiKey();
 
       let visualAnalysisReady = false;
       let pageCount: number | null = null;
@@ -110,6 +110,16 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
             // non-fatal, continue
           }
         }
+      }
+
+      // Fire-and-forget: Document Analysis Agent (structured analysis)
+      if (apiKey && (isPdf || isImage)) {
+        db.prepare("UPDATE uploaded_files SET analysis_status = 'pending' WHERE id = ?").run(id);
+        import('../services/documentAnalysisAgent').then(({ analyzeDocument }) => {
+          analyzeDocument(id, storagePath, mimetype, extractedText).catch(err => {
+            console.warn('[upload] Document analysis agent failed:', err.message);
+          });
+        }).catch(() => {});
       }
 
       // Fetch art style if just detected
@@ -181,6 +191,18 @@ router.post('/:id/upload/:fileId/reanalyze', async (req: Request, res: Response)
     console.error('[reanalyze] error:', err);
     return res.status(500).json({ error: err.message || 'Analysis failed' });
   }
+});
+
+// GET /:id/upload/:fileId/analysis-status — poll analysis agent progress
+router.get('/:id/upload/:fileId/analysis-status', (req: Request, res: Response) => {
+  const file = db.prepare(
+    'SELECT analysis_status, analysis_result FROM uploaded_files WHERE id = ? AND project_id = ?'
+  ).get(req.params.fileId, req.params.id) as any;
+  if (!file) return res.status(404).json({ error: 'File not found' });
+  return res.json({
+    status: file.analysis_status || 'not_started',
+    result: file.analysis_result ? JSON.parse(file.analysis_result) : null,
+  });
 });
 
 // PATCH /:id/upload/:fileId/label — set component label for uploaded file
