@@ -19,23 +19,35 @@ test.describe('匯出功能', () => {
     }
   });
 
-  /** 生成原型 */
-  async function generatePrototype(page: import('@playwright/test').Page) {
+  /** Navigate to project workspace, skip wizard, switch to design tab, and generate a prototype */
+  async function setupPrototype(page: import('@playwright/test').Page) {
+    await page.goto(`/project/${projectId}`);
+
+    // Skip the architecture wizard
+    await page.getByRole('button', { name: /跳過/ }).click();
+
+    // Switch to design tab
+    await page.getByRole('tab', { name: '設計' }).click();
+
+    // Type a prompt and send
     const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
     await textarea.fill('建立一個包含導航列、主要內容區和頁尾的著陸頁');
     await page.getByTestId('send-btn').click();
 
+    // Wait for the iframe preview to appear (prototype generated)
     const iframe = page.locator('iframe');
     await expect(iframe).toBeVisible({ timeout: 60000 });
+
+    // Wait for generation to finish
     await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
   }
 
   test('點擊匯出 → 驗證框架選項', async ({ page }) => {
-    await page.goto(`/project/${projectId}`);
-    await generatePrototype(page);
+    test.setTimeout(120000);
+    await setupPrototype(page);
 
-    // 點擊匯出按鈕
-    await page.getByText('匯出').click();
+    // 點擊匯出按鈕 (button with title="匯出選項")
+    await page.getByRole('button', { name: '匯出' }).click();
 
     // 驗證匯出選單出現
     await expect(page.getByText('匯出為框架專案')).toBeVisible({ timeout: 3000 });
@@ -49,28 +61,21 @@ test.describe('匯出功能', () => {
   });
 
   test('選擇 React → 驗證匯出開始', async ({ page }) => {
-    await page.goto(`/project/${projectId}`);
-    await generatePrototype(page);
+    test.setTimeout(120000);
+    await setupPrototype(page);
 
     // 打開匯出選單
-    await page.getByText('匯出').click();
+    await page.getByRole('button', { name: '匯出' }).click();
     await expect(page.getByText('匯出為框架專案')).toBeVisible();
 
     // 監聽匯出 API 請求
     const exportPromise = page.waitForResponse(
-      resp => resp.url().includes('/export') && resp.request().method() === 'POST',
+      resp => resp.url().includes('/export-code') && resp.request().method() === 'POST',
       { timeout: 30000 },
     ).catch(() => null);
 
     // 選擇 React
     await page.getByTestId('export-react').click();
-
-    // 按鈕文字應變更（顯示處理中狀態）或顏色改變
-    // React 按鈕應變為紫色（正在匯出）
-    const reactBtn = page.getByTestId('export-react');
-    await expect(reactBtn).toHaveCSS('color', 'rgb(167, 139, 250)', { timeout: 5000 }).catch(() => {
-      // 可能已完成
-    });
 
     // 等待匯出回應
     const response = await exportPromise;
@@ -79,23 +84,36 @@ test.describe('匯出功能', () => {
     }
   });
 
-  test('匯出回應包含檔案', async ({ page, request }) => {
-    await page.goto(`/project/${projectId}`);
-    await generatePrototype(page);
+  test('匯出回應包含檔案', async ({ request }) => {
+    // Seed a prototype version via chat API so export-code has HTML to work with
+    // First, send a chat message to generate a prototype
+    const chatRes = await request.post(`${API}/api/projects/${projectId}/chat`, {
+      data: {
+        message: '建立一個簡單的著陸頁',
+        conversationHistory: [],
+      },
+    });
 
-    // 直接透過 API 測試匯出
+    // The chat endpoint is SSE, so we need to check the project for HTML after
+    // Wait briefly for generation
+    await new Promise(r => setTimeout(r, 5000));
+
+    // Check if the project now has HTML
     const projectRes = await request.get(`${API}/api/projects/${projectId}`);
     const project = await projectRes.json();
 
-    if (project.html) {
-      const exportRes = await request.post(`${API}/api/projects/${projectId}/export`, {
-        data: { framework: 'react', html: project.html },
+    if (project.currentHtml) {
+      // Test export-code API directly
+      const exportRes = await request.post(`${API}/api/projects/${projectId}/export-code`, {
+        data: { framework: 'react' },
       });
 
       if (exportRes.ok()) {
         const data = await exportRes.json();
-        // 回應應包含 files 陣列
+        // 回應應包含 framework, files, totalFiles
+        expect(data).toHaveProperty('framework', 'react');
         expect(data).toHaveProperty('files');
+        expect(data).toHaveProperty('totalFiles');
         expect(Array.isArray(data.files)).toBeTruthy();
         expect(data.files.length).toBeGreaterThan(0);
 
@@ -109,18 +127,28 @@ test.describe('匯出功能', () => {
   });
 
   test('匯出 HTML', async ({ page }) => {
-    await page.goto(`/project/${projectId}`);
-    await generatePrototype(page);
+    test.setTimeout(120000);
+    await setupPrototype(page);
 
     // 打開匯出選單
-    await page.getByText('匯出').click();
+    await page.getByRole('button', { name: '匯出' }).click();
+    await expect(page.getByText('匯出為框架專案')).toBeVisible();
+
+    // 監聽匯出 API 請求
+    const exportPromise = page.waitForResponse(
+      resp => resp.url().includes('/export-code') && resp.request().method() === 'POST',
+      { timeout: 30000 },
+    ).catch(() => null);
 
     // 點擊 HTML 匯出
     const htmlExportBtn = page.getByTestId('export-html');
     await expect(htmlExportBtn).toBeVisible();
     await htmlExportBtn.click();
 
-    // HTML 匯出通常會觸發下載或複製
-    await page.waitForTimeout(2000);
+    // 等待匯出回應
+    const response = await exportPromise;
+    if (response) {
+      expect(response.status()).toBeLessThan(500);
+    }
   });
 });

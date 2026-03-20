@@ -12,6 +12,9 @@ const hasSpecPdf = fs.existsSync(specPdfPath);
 test.describe('完整端對端流程', () => {
   let projectId: string;
 
+  // Full pipeline timeout: 5 minutes
+  test.setTimeout(300000);
+
   test.afterAll(async ({ request }) => {
     // 清理：刪除測試專案
     if (projectId) {
@@ -36,6 +39,9 @@ test.describe('完整端對端流程', () => {
     expect(idMatch).toBeTruthy();
     projectId = idMatch![1];
 
+    // 建立專案後會進入架構圖 wizard，跳過它
+    await page.getByRole('button', { name: /跳過/ }).click();
+
     // 驗證專案名稱顯示
     await expect(page.getByText(PROJECT_NAME)).toBeVisible();
   });
@@ -46,17 +52,15 @@ test.describe('完整端對端流程', () => {
 
     await page.goto(`/project/${projectId}`);
 
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
+
     // 上傳 PDF
-    const fileInput = page.getByTestId('file-input');
+    const fileInput = page.getByTestId('attach-file-btn');
     await fileInput.setInputFiles(specPdfPath);
 
-    // 驗證檔案晶片出現
-    await expect(page.getByTestId('file-chip')).toBeVisible({ timeout: 10000 });
-
     // 驗證分析開始
-    const analysisBadge = page.getByTestId('analysis-badge');
-    const readyBadge = page.getByTestId('analysis-ready-badge');
-    await expect(analysisBadge.or(readyBadge)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('◌ 分析中...')).toBeVisible({ timeout: 15000 });
   });
 
   test('步驟 3：等待分析完成', async ({ page }) => {
@@ -65,14 +69,11 @@ test.describe('完整端對端流程', () => {
 
     await page.goto(`/project/${projectId}`);
 
-    // 等待分析徽章（可能已完成）
-    const readyBadge = page.getByTestId('analysis-ready-badge');
-    const fileChip = page.getByTestId('file-chip');
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
 
-    // 如果有檔案晶片，等待分析完成
-    if (await fileChip.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await expect(readyBadge).toBeVisible({ timeout: 60000 });
-    }
+    // 等待分析完成徽章
+    await expect(page.getByText('✓ 分析完成')).toBeVisible({ timeout: 60000 });
   });
 
   test('步驟 4：查看分析預覽', async ({ page }) => {
@@ -81,9 +82,12 @@ test.describe('完整端對端流程', () => {
 
     await page.goto(`/project/${projectId}`);
 
-    const previewBtn = page.getByTestId('analysis-preview-btn');
-    if (await previewBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await previewBtn.click();
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
+
+    const analysisComplete = page.getByText('✓ 分析完成');
+    if (await analysisComplete.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await analysisComplete.click();
       await page.waitForTimeout(1000);
       // 面板應該開啟
     }
@@ -97,35 +101,18 @@ test.describe('完整端對端流程', () => {
     // 切到架構圖分頁
     await page.getByRole('tab', { name: '架構圖' }).click();
 
-    // 如果精靈出現，快速完成
-    const wizard = page.getByTestId('arch-wizard');
-    if (await wizard.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await page.getByTestId('wizard-option-page').click();
-      await page.getByTestId('wizard-option-website').click();
-      await page.getByTestId('wizard-option-2-3').click();
-
-      // 完成精靈
-      const nextBtn = page.getByTestId('wizard-next');
-      if (await nextBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await nextBtn.click();
-      }
-
-      // 等待到達流程圖或完成頁
-      const finishView = page.getByTestId('wizard-finish-view');
-      if (await finishView.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await finishView.click();
-      }
+    // 如果精靈出現，跳過它
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
     }
 
-    // 嘗試從分析匯入
-    const flowchart = page.getByTestId('arch-flowchart');
-    if (await flowchart.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const importBtn = page.getByTestId('import-analysis-btn');
-      if (await importBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        page.on('dialog', dialog => dialog.accept('取代'));
-        await importBtn.click();
-        await page.waitForTimeout(3000);
-      }
+    // 嘗試從分析匯入（架構工具列中的按鈕）
+    const importBtn = page.getByRole('button', { name: '📥 從分析匯入' });
+    if (await importBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      page.on('dialog', dialog => dialog.accept('取代'));
+      await importBtn.click();
+      await page.waitForTimeout(3000);
     }
   });
 
@@ -134,6 +121,12 @@ test.describe('完整端對端流程', () => {
 
     await page.goto(`/project/${projectId}`);
     await page.getByRole('tab', { name: '架構圖' }).click();
+
+    // 如果精靈出現，跳過它
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
 
     const flowchart = page.getByTestId('arch-flowchart');
     if (!(await flowchart.isVisible({ timeout: 5000 }).catch(() => false))) {
@@ -152,6 +145,12 @@ test.describe('完整端對端流程', () => {
       });
       await page.reload();
       await page.getByRole('tab', { name: '架構圖' }).click();
+
+      // 跳過 wizard again after reload
+      const skipBtn2 = page.getByRole('button', { name: /跳過/ });
+      if (await skipBtn2.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await skipBtn2.click();
+      }
     }
 
     await expect(page.getByTestId('arch-flowchart')).toBeVisible({ timeout: 10000 });
@@ -175,30 +174,31 @@ test.describe('完整端對端流程', () => {
 
   test('步驟 7：生成原型（並行管線）', async ({ page }) => {
     test.skip(!projectId, '前一步驟未成功建立專案');
-    test.setTimeout(120000); // 生成可能需要較長時間
 
     await page.goto(`/project/${projectId}`);
 
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
+
+    const textarea = page.getByPlaceholder(/描述你的 UI/);
     await textarea.fill('請依照架構生成所有頁面，使用現代化設計風格');
     await page.getByTestId('send-btn').click();
 
-    // 等待生成進度出現
-    const progress = page.getByTestId('generation-progress');
-    await expect(progress).toBeVisible({ timeout: 30000 });
+    // 等待生成完成
+    await expect(page.getByText('已生成原型')).toBeVisible({ timeout: 120000 });
 
     // 等待 iframe 出現
     const iframe = page.locator('iframe');
-    await expect(iframe).toBeVisible({ timeout: 90000 });
-
-    // 等待生成完成
-    await expect(progress).not.toBeVisible({ timeout: 60000 });
+    await expect(iframe).toBeVisible({ timeout: 30000 });
   });
 
   test('步驟 8：驗證所有頁面存在', async ({ page }) => {
     test.skip(!projectId, '前一步驟未成功建立專案');
 
     await page.goto(`/project/${projectId}`);
+
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 等待頁面載入
     await page.waitForTimeout(3000);
@@ -228,6 +228,9 @@ test.describe('完整端對端流程', () => {
 
     await page.goto(`/project/${projectId}`);
 
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
+
     const iframe = page.locator('iframe');
     if (!(await iframe.isVisible({ timeout: 10000 }).catch(() => false))) {
       test.skip(true, '無原型可標注');
@@ -236,6 +239,9 @@ test.describe('完整端對端流程', () => {
 
     // 啟用標注模式
     await page.getByTestId('annotate-toggle').click();
+
+    // 驗證標注模式 banner 出現
+    await expect(page.getByText('✏️ 標注模式')).toBeVisible({ timeout: 5000 });
 
     // 在 iframe 中點擊元素
     const frameLocator = page.frameLocator('iframe');
@@ -262,13 +268,16 @@ test.describe('完整端對端流程', () => {
 
     await page.goto(`/project/${projectId}`);
 
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
+
     const iframe = page.locator('iframe');
     if (!(await iframe.isVisible({ timeout: 10000 }).catch(() => false))) {
       test.skip(true, '無原型可微調');
       return;
     }
 
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    const textarea = page.getByPlaceholder(/描述你的 UI/);
     await textarea.fill('把標題文字改成深藍色，按鈕加上 hover 效果');
     await page.getByTestId('send-btn').click();
 
@@ -285,6 +294,9 @@ test.describe('完整端對端流程', () => {
 
     await page.goto(`/project/${projectId}`);
 
+    // 切換到設計分頁
+    await page.getByRole('tab', { name: '設計' }).click();
+
     const iframe = page.locator('iframe');
     if (!(await iframe.isVisible({ timeout: 10000 }).catch(() => false))) {
       test.skip(true, '無原型可匯出');
@@ -295,9 +307,9 @@ test.describe('完整端對端流程', () => {
     await page.getByText('匯出').click();
     await expect(page.getByText('匯出為框架專案')).toBeVisible({ timeout: 3000 });
 
-    // 監聽匯出回應
+    // 監聽匯出回應 (POST /api/projects/:id/export-code)
     const exportPromise = page.waitForResponse(
-      resp => resp.url().includes('/export') && resp.request().method() === 'POST',
+      resp => resp.url().includes('/export-code') && resp.request().method() === 'POST',
       { timeout: 30000 },
     ).catch(() => null);
 

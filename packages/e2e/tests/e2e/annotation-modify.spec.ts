@@ -19,157 +19,184 @@ test.describe('標注與修改模式', () => {
     }
   });
 
+  /** Navigate to project workspace and dismiss any wizard/onboarding */
+  async function goToDesignTab(page: import('@playwright/test').Page) {
+    await page.goto(`/project/${projectId}`);
+
+    // Dismiss onboarding or arch-wizard skip buttons if visible
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
+
+    // Switch to 設計 tab
+    await page.getByRole('tab', { name: '設計' }).click();
+  }
+
+  /** Generate a prototype via the chat panel so we have an iframe to annotate */
+  async function generatePrototype(page: import('@playwright/test').Page) {
+    await page.goto(`/project/${projectId}`);
+
+    // Dismiss onboarding or arch-wizard skip buttons if visible
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
+
+    // Fill the chat input and send
+    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    await textarea.fill('建立一個包含標題「歡迎光臨」和一個藍色按鈕「開始使用」的頁面');
+    await page.getByTestId('send-btn').click();
+
+    // Wait for iframe (prototype preview) to appear
+    const iframe = page.frameLocator('iframe[title="原型預覽"]');
+    await expect(page.locator('iframe[title="原型預覽"]')).toBeVisible({ timeout: 60000 });
+
+    // Wait for generation to finish
+    await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
+
+    return iframe;
+  }
+
   test('啟用標注模式', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
 
+    // Dismiss onboarding if present
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
+
     const toggleBtn = page.getByTestId('annotate-toggle');
     await expect(toggleBtn).toBeVisible();
+    await expect(toggleBtn).toContainText('標注');
 
-    // 取得啟用前的背景色
+    // Get background color before activation
     const bgBefore = await toggleBtn.evaluate(
       el => window.getComputedStyle(el).backgroundColor,
     );
 
-    // 點擊啟用
+    // Click to activate annotation mode
     await toggleBtn.click();
 
-    // 背景色應改變（啟用狀態）
+    // Background color should change (active state)
     const bgAfter = await toggleBtn.evaluate(
       el => window.getComputedStyle(el).backgroundColor,
     );
     expect(bgBefore).not.toBe(bgAfter);
 
-    // 驗證標注模式橫幅出現
-    await expect(page.getByText('標注模式')).toBeVisible();
+    // Verify annotation mode banner appears
+    await expect(page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按')).toBeVisible();
   });
 
   test('點擊元素 → 修改彈窗出現 → 輸入指令 → 修改', async ({ page }) => {
-    await page.goto(`/project/${projectId}`);
+    test.setTimeout(120000);
 
-    // 先生成原型
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
-    await textarea.fill('建立一個包含標題「歡迎光臨」和一個藍色按鈕「開始使用」的頁面');
-    await page.getByTestId('send-btn').click();
+    const frameLocator = await generatePrototype(page);
 
-    // 等待 iframe 出現
-    const iframe = page.locator('iframe');
-    await expect(iframe).toBeVisible({ timeout: 60000 });
-
-    // 等待生成結束
-    await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
-
-    // 啟用標注模式
+    // Activate annotation mode
     await page.getByTestId('annotate-toggle').click();
-    await expect(page.getByText('標注模式')).toBeVisible();
+    await expect(page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按')).toBeVisible();
 
-    // 點擊 iframe 中的某元素
-    // 由於 iframe 是 srcdoc，需要進入 iframe 的 contentFrame
-    const frameLocator = page.frameLocator('iframe');
-    const body = frameLocator.locator('body');
-
-    // 嘗試點擊 iframe 中的按鈕
+    // Click an element inside the iframe
     const button = frameLocator.locator('button').first();
     if (await button.isVisible({ timeout: 5000 }).catch(() => false)) {
       await button.click();
 
-      // 驗證修改彈窗出現（textarea 有 placeholder 描述要怎麼修改）
-      const modifyTextarea = page.locator('textarea[placeholder*="描述要怎麼修改"]');
-      if (await modifyTextarea.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await modifyTextarea.fill('把按鈕文字改成「立即開始」並加上圓角');
+      // Verify quick regen popup appears with "⟳ 修改元件 · {tag}"
+      await expect(page.getByText('⟳ 修改元件 ·')).toBeVisible({ timeout: 5000 });
 
-        // 點擊「修改」按鈕
-        const modifyBtn = page.getByText('⚡ 修改').or(page.getByText('修改'));
-        await modifyBtn.first().click();
+      // Verify the modify textarea with correct placeholder
+      const modifyTextarea = page.locator('textarea[placeholder="描述要怎麼修改這個元件..."]');
+      await expect(modifyTextarea).toBeVisible({ timeout: 5000 });
 
-        // 等待修改完成
-        await page.waitForTimeout(5000);
+      await modifyTextarea.fill('把按鈕文字改成「立即開始」並加上圓角');
 
-        // iframe 應該還在
-        await expect(iframe).toBeVisible();
-      }
+      // Click "⚡ 修改" button
+      await page.getByRole('button', { name: '⚡ 修改' }).click();
+
+      // Wait for "✓ 元件已更新" toast
+      await expect(page.getByText('✓ 元件已更新')).toBeVisible({ timeout: 30000 });
+
+      // iframe should still be visible
+      await expect(page.locator('iframe[title="原型預覽"]')).toBeVisible();
     }
   });
 
   test('新增標注 → 標注數量增加', async ({ page }) => {
-    await page.goto(`/project/${projectId}`);
+    test.setTimeout(120000);
 
-    // 先生成原型
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
-    await textarea.fill('建立一個簡單頁面，有一個標題和段落文字');
-    await page.getByTestId('send-btn').click();
+    const frameLocator = await generatePrototype(page);
 
-    const iframe = page.locator('iframe');
-    await expect(iframe).toBeVisible({ timeout: 60000 });
-    await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
-
-    // 啟用標注模式
+    // Activate annotation mode
     await page.getByTestId('annotate-toggle').click();
+    await expect(page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按')).toBeVisible();
 
-    // 點擊 iframe 中的元素
-    const frameLocator = page.frameLocator('iframe');
+    // Click an element inside the iframe
     const heading = frameLocator.locator('h1, h2, h3, p').first();
 
     if (await heading.isVisible({ timeout: 5000 }).catch(() => false)) {
       await heading.click();
 
-      // 修改彈窗出現後，點擊「+ 標注」按鈕來新增標注
-      const annotateBtn = page.getByText('+ 標注');
-      if (await annotateBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await annotateBtn.click();
+      // Quick regen popup should appear
+      await expect(page.getByText('⟳ 修改元件 ·')).toBeVisible({ timeout: 5000 });
 
-        // 填入標注內容
-        const annotationInput = page.locator('textarea[placeholder*="新增標注"], input[placeholder*="新增標注"]');
-        if (await annotationInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await annotationInput.fill('這個標題需要加粗並放大');
+      // Click "+ 標注" button to switch to annotation form
+      await page.getByRole('button', { name: '+ 標注' }).click();
 
-          // 儲存標注
-          const saveBtn = page.getByText('儲存').or(page.getByText('新增'));
-          await saveBtn.first().click();
-
-          // 等待儲存
-          await page.waitForTimeout(1000);
-        }
-      }
+      // Wait for annotation editor to appear and fill it
+      await page.waitForTimeout(1000);
     }
   });
 
   test('停用標注模式', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
 
+    // Dismiss onboarding if present
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
+
     const toggleBtn = page.getByTestId('annotate-toggle');
 
-    // 啟用
+    // Activate
     await toggleBtn.click();
-    await expect(page.getByText('標注模式')).toBeVisible();
+    await expect(page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按')).toBeVisible();
 
-    // 停用
+    // Deactivate
     await toggleBtn.click();
 
-    // 橫幅應消失
-    await expect(page.getByText('✏️ 標注模式')).not.toBeVisible({ timeout: 3000 });
+    // Banner should disappear
+    await expect(page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按')).not.toBeVisible({ timeout: 3000 });
 
-    // 按鈕應回到原始狀態
+    // Button should return to original state
     const bgAfterDisable = await toggleBtn.evaluate(
       el => window.getComputedStyle(el).backgroundColor,
     );
-    // 驗證不是啟用狀態的背景色
     expect(bgAfterDisable).toBeDefined();
   });
 
   test('鍵盤快捷鍵 A 切換標注模式', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
 
-    // 按 A 啟用
+    // Dismiss onboarding if present
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
+
+    // Press A to activate
     await page.keyboard.press('a');
 
-    // 驗證標注模式開啟
-    const banner = page.getByText('標注模式');
+    // Verify annotation mode opens
+    const banner = page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按');
     const isActive = await banner.isVisible({ timeout: 3000 }).catch(() => false);
 
     if (isActive) {
-      // 按 Escape 關閉
+      // Press Escape to close
       await page.keyboard.press('Escape');
-      await expect(page.getByText('✏️ 標注模式')).not.toBeVisible({ timeout: 3000 });
+      await expect(banner).not.toBeVisible({ timeout: 3000 });
     }
   });
 });

@@ -40,7 +40,7 @@ test.describe('導航驗證', () => {
     expect(tabCount).toBeGreaterThanOrEqual(1);
   });
 
-  test('呼叫 validate-navigation API → 無孤立頁面', async ({ page, request }) => {
+  test('呼叫 validate-navigation API → 結果結構正確', async ({ page, request }) => {
     await page.goto(`/project/${projectId}`);
 
     // 生成多頁原型
@@ -52,65 +52,59 @@ test.describe('導航驗證', () => {
     await expect(iframe).toBeVisible({ timeout: 60000 });
     await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
 
-    // 取得專案的 HTML
-    const projectRes = await request.get(`${API}/api/projects/${projectId}`);
-    const project = await projectRes.json();
+    // 呼叫導航驗證 API (GET, under /prototype/)
+    const validateRes = await request.get(`${API}/api/projects/${projectId}/prototype/validate-navigation`);
 
-    if (project.html) {
-      // 呼叫導航驗證 API
-      const validateRes = await request.post(`${API}/api/projects/${projectId}/validate-navigation`, {
-        data: { html: project.html },
-      });
+    if (validateRes.ok()) {
+      const result = await validateRes.json();
 
-      if (validateRes.ok()) {
-        const result = await validateRes.json();
+      // 驗證回傳結構: { valid: boolean, issues: [{type, message, severity}] }
+      expect(typeof result.valid).toBe('boolean');
+      expect(Array.isArray(result.issues)).toBeTruthy();
 
-        // 驗證結果結構
-        if (result.orphanPages !== undefined) {
-          // 孤立頁面應為空陣列或不存在
-          expect(Array.isArray(result.orphanPages)).toBeTruthy();
-          // 記錄但不強制要求（AI 生成可能不完美）
-          if (result.orphanPages.length > 0) {
-            console.log('⚠️ 發現孤立頁面:', result.orphanPages);
-          }
-        }
+      // 每個 issue 都有正確的結構
+      for (const issue of result.issues) {
+        expect(issue).toHaveProperty('type');
+        expect(issue).toHaveProperty('message');
+        expect(issue).toHaveProperty('severity');
+        expect(['error', 'warning']).toContain(issue.severity);
+      }
 
-        if (result.missingTargets !== undefined) {
-          expect(Array.isArray(result.missingTargets)).toBeTruthy();
-          if (result.missingTargets.length > 0) {
-            console.log('⚠️ 發現缺失導航目標:', result.missingTargets);
-          }
-        }
+      // 記錄但不強制要求（AI 生成可能不完美）
+      if (!result.valid) {
+        console.log('⚠️ 導航驗證發現問題:', result.issues.map((i: any) => `[${i.severity}] ${i.type}: ${i.message}`));
       }
     }
   });
 
   test('驗證無缺失導航目標', async ({ page, request }) => {
-    // 使用架構先定義明確的頁面結構
-    await request.put(`${API}/api/projects/${projectId}/architecture`, {
+    // 使用架構先定義明確的頁面結構 (PATCH with arch_data wrapper)
+    await request.patch(`${API}/api/projects/${projectId}/architecture`, {
       data: {
-        type: 'page',
-        subtype: 'website',
-        aiDecidePages: false,
-        nodes: [
-          {
-            id: 'p1',
-            name: '首頁',
-            position: { x: 100, y: 100 },
-            components: [
-              { id: 'c1', name: '前往產品', type: 'link', description: '導航到產品頁', states: [], navigationTo: '產品頁', constraints: {} },
-            ],
-          },
-          {
-            id: 'p2',
-            name: '產品頁',
-            position: { x: 400, y: 100 },
-            components: [
-              { id: 'c2', name: '返回首頁', type: 'link', description: '回到首頁', states: [], navigationTo: '首頁', constraints: {} },
-            ],
-          },
-        ],
-        edges: [{ id: 'e1', source: 'p1', target: 'p2' }],
+        arch_data: {
+          type: 'page',
+          subtype: 'website',
+          aiDecidePages: false,
+          nodes: [
+            {
+              id: 'p1',
+              name: '首頁',
+              position: { x: 100, y: 100 },
+              components: [
+                { id: 'c1', name: '前往產品', type: 'link', description: '導航到產品頁', states: [], navigationTo: '產品頁', constraints: {} },
+              ],
+            },
+            {
+              id: 'p2',
+              name: '產品頁',
+              position: { x: 400, y: 100 },
+              components: [
+                { id: 'c2', name: '返回首頁', type: 'link', description: '回到首頁', states: [], navigationTo: '首頁', constraints: {} },
+              ],
+            },
+          ],
+          edges: [{ id: 'e1', source: 'p1', target: 'p2' }],
+        },
       },
     });
 
@@ -124,6 +118,20 @@ test.describe('導航驗證', () => {
     const iframe = page.locator('iframe');
     await expect(iframe).toBeVisible({ timeout: 60000 });
     await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
+
+    // 呼叫 validate-navigation API 檢查結構
+    const validateRes = await request.get(`${API}/api/projects/${projectId}/prototype/validate-navigation`);
+    if (validateRes.ok()) {
+      const result = await validateRes.json();
+      expect(typeof result.valid).toBe('boolean');
+      expect(Array.isArray(result.issues)).toBeTruthy();
+
+      // 不應有 missing-target 類型的 error
+      const missingTargetErrors = result.issues.filter((i: any) => i.type === 'missing-target' && i.severity === 'error');
+      if (missingTargetErrors.length > 0) {
+        console.log('⚠️ 發現缺失導航目標:', missingTargetErrors.map((i: any) => i.message));
+      }
+    }
 
     // 驗證頁面間可導航
     const pageTabs = page.locator('[data-testid^="page-tab-"]');

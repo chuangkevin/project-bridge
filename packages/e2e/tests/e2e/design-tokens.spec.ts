@@ -19,9 +19,22 @@ test.describe('Design Tokens 面板', () => {
     }
   });
 
+  /** Skip wizard and navigate to design tab */
+  async function skipWizardAndGoToDesign(page: import('@playwright/test').Page) {
+    // Skip the ArchWizard if visible
+    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
+    // Click the 設計 tab
+    await page.getByRole('tab', { name: '設計' }).click();
+  }
+
   /** 生成原型以便 Tokens 按鈕可用 */
   async function generatePrototype(page: import('@playwright/test').Page) {
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    await skipWizardAndGoToDesign(page);
+
+    const textarea = page.locator('textarea[placeholder="描述你的 UI...（可貼上截圖）"]');
     await textarea.fill('建立一個有藍色主題的簡單頁面');
     await page.getByTestId('send-btn').click();
 
@@ -39,9 +52,9 @@ test.describe('Design Tokens 面板', () => {
     await expect(tokensBtn).toBeEnabled();
     await tokensBtn.click();
 
-    // 驗證面板出現（含「編輯器」分頁）
-    await expect(page.getByText('編輯器')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('CSS 變數')).toBeVisible();
+    // 驗證面板出現（含「編輯器」和「CSS 變數」分頁按鈕）
+    await expect(page.getByRole('button', { name: '編輯器' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: 'CSS 變數' })).toBeVisible();
   });
 
   test('切換到編輯器分頁', async ({ page }) => {
@@ -51,13 +64,14 @@ test.describe('Design Tokens 面板', () => {
     await page.getByTestId('tokens-btn').click();
 
     // 點擊「編輯器」分頁
-    await page.getByText('編輯器').click();
+    await page.getByRole('button', { name: '編輯器' }).click();
 
-    // 應顯示 Colors、Typography 等區段或編譯按鈕
+    // 應顯示 Colors 區段、重新編譯按鈕、或初始編譯按鈕
     const colorsSection = page.getByText('Colors');
-    const compileBtn = page.getByText('編譯 Tokens').or(page.getByText('重新編譯'));
+    const recompileBtn = page.getByRole('button', { name: '重新編譯' });
+    const compileBtn = page.getByRole('button', { name: '編譯 Tokens' });
 
-    await expect(colorsSection.or(compileBtn)).toBeVisible({ timeout: 10000 });
+    await expect(colorsSection.or(recompileBtn).or(compileBtn)).toBeVisible({ timeout: 10000 });
   });
 
   test('驗證色票顯示', async ({ page }) => {
@@ -67,7 +81,7 @@ test.describe('Design Tokens 面板', () => {
     await page.getByTestId('tokens-btn').click();
 
     // 切到 CSS 變數分頁
-    await page.getByText('CSS 變數').click();
+    await page.getByRole('button', { name: 'CSS 變數' }).click();
 
     // 等待載入
     await page.waitForTimeout(2000);
@@ -88,7 +102,7 @@ test.describe('Design Tokens 面板', () => {
     await generatePrototype(page);
 
     await page.getByTestId('tokens-btn').click();
-    await page.getByText('編輯器').click();
+    await page.getByRole('button', { name: '編輯器' }).click();
 
     // 等待設計 tokens 載入
     await page.waitForTimeout(3000);
@@ -121,7 +135,7 @@ test.describe('Design Tokens 面板', () => {
       }
     } else {
       // 沒有 tokens，需要先編譯
-      const compileBtn = page.getByText('編譯 Tokens');
+      const compileBtn = page.getByRole('button', { name: '編譯 Tokens' });
       if (await compileBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
         await compileBtn.click();
         await page.waitForTimeout(5000);
@@ -134,7 +148,7 @@ test.describe('Design Tokens 面板', () => {
     await generatePrototype(page);
 
     await page.getByTestId('tokens-btn').click();
-    await page.getByText('編輯器').click();
+    await page.getByRole('button', { name: '編輯器' }).click();
 
     // 等待載入
     await page.waitForTimeout(3000);
@@ -144,7 +158,7 @@ test.describe('Design Tokens 面板', () => {
 
     // 如果沒有 design tokens，先編譯
     if (!(await urlInput.isVisible({ timeout: 3000 }).catch(() => false))) {
-      const compileBtn = page.getByText('編譯 Tokens');
+      const compileBtn = page.getByRole('button', { name: '編譯 Tokens' });
       if (await compileBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
         await compileBtn.click();
         await page.waitForTimeout(5000);
@@ -155,7 +169,7 @@ test.describe('Design Tokens 面板', () => {
       await urlInput.fill('https://buy.houseprice.tw/living/');
 
       // 點擊「提取」
-      const extractBtn = page.getByText('提取');
+      const extractBtn = page.getByRole('button', { name: '提取' });
       await extractBtn.click();
 
       // 等待提取完成（可能需要較長時間）
@@ -163,7 +177,7 @@ test.describe('Design Tokens 面板', () => {
 
       // 應有 crawled URL 計數或 toast
       const urlCount = page.getByText(/URL\(s\) crawled/);
-      const toast = page.locator('[style*="backgroundColor: rgb(34, 197, 94)"]'); // green toast
+      const toast = page.getByText('Style extracted');
       await expect(urlCount.or(toast)).toBeVisible({ timeout: 15000 }).catch(() => {
         // 可能提取失敗，這是可以接受的
       });
@@ -175,12 +189,12 @@ test.describe('Design Tokens 面板', () => {
     await generatePrototype(page);
 
     await page.getByTestId('tokens-btn').click();
-    await page.getByText('編輯器').click();
+    await page.getByRole('button', { name: '編輯器' }).click();
 
     await page.waitForTimeout(3000);
 
     // 點擊重新編譯（或初始編譯）
-    const compileBtn = page.getByText('重新編譯').or(page.getByText('編譯 Tokens'));
+    const compileBtn = page.getByRole('button', { name: '重新編譯' }).or(page.getByRole('button', { name: '編譯 Tokens' }));
     if (await compileBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       await compileBtn.click();
 
@@ -201,19 +215,19 @@ test.describe('Design Tokens 面板', () => {
     await generatePrototype(page);
 
     await page.getByTestId('tokens-btn').click();
-    await page.getByText('編輯器').click();
+    await page.getByRole('button', { name: '編輯器' }).click();
 
     await page.waitForTimeout(3000);
 
     // 先確保有 tokens（編譯如需要）
-    const compileBtn = page.getByText('重新編譯').or(page.getByText('編譯 Tokens'));
+    const compileBtn = page.getByRole('button', { name: '重新編譯' }).or(page.getByRole('button', { name: '編譯 Tokens' }));
     if (await compileBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await compileBtn.click();
       await page.waitForTimeout(5000);
     }
 
     // 點擊儲存
-    const saveBtn = page.getByText('儲存').first();
+    const saveBtn = page.getByRole('button', { name: '儲存' });
     if (await saveBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await saveBtn.click();
 

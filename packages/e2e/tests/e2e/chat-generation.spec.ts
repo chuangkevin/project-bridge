@@ -2,6 +2,11 @@ import { test, expect } from '@playwright/test';
 
 const API = 'http://localhost:3001';
 
+async function skipWizardAndGoToDesign(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: /跳過/ }).click();
+  await page.getByRole('tab', { name: '設計' }).click();
+}
+
 test.describe('對話與生成功能', () => {
   let projectId: string;
 
@@ -21,8 +26,9 @@ test.describe('對話與生成功能', () => {
 
   test('送出簡單生成指令 → 驗證原型建立', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await skipWizardAndGoToDesign(page);
 
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    const textarea = page.getByPlaceholder(/描述你的 UI/);
     await expect(textarea).toBeVisible();
 
     await textarea.fill('建立一個待辦事項清單頁面，有新增和刪除功能');
@@ -42,9 +48,10 @@ test.describe('對話與生成功能', () => {
 
   test('微調模式 — 送出修改不應全部重新生成', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await skipWizardAndGoToDesign(page);
 
     // 第一次生成
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    const textarea = page.getByPlaceholder(/描述你的 UI/);
     await textarea.fill('建立一個簡單的按鈕頁面');
     await page.getByTestId('send-btn').click();
 
@@ -55,7 +62,7 @@ test.describe('對話與生成功能', () => {
     // 等待生成完全結束
     await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
 
-    // 送出微調訊息
+    // 原型存在後，對話預設為微調模式，送出微調訊息
     await textarea.fill('把按鈕顏色改成紅色');
     await page.getByTestId('send-btn').click();
 
@@ -72,9 +79,10 @@ test.describe('對話與生成功能', () => {
 
   test('強制重新生成按鈕 → 驗證完整重新生成', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await skipWizardAndGoToDesign(page);
 
     // 第一次生成
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    const textarea = page.getByPlaceholder(/描述你的 UI/);
     await textarea.fill('建立一個簡單的導航列');
     await page.getByTestId('send-btn').click();
 
@@ -85,7 +93,7 @@ test.describe('對話與生成功能', () => {
     // 等待生成完全結束
     await expect(page.getByTestId('generation-progress')).not.toBeVisible({ timeout: 30000 });
 
-    // 驗證強制重新生成按鈕出現
+    // 驗證強制重新生成按鈕出現（🔄 icon）
     const regenBtn = page.getByTestId('regenerate-btn');
     await expect(regenBtn).toBeVisible();
 
@@ -99,16 +107,17 @@ test.describe('對話與生成功能', () => {
 
   test('上傳檔案 → 分析期間送出按鈕停用', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await skipWizardAndGoToDesign(page);
 
     // 上傳檔案
     const fileInput = page.getByTestId('file-input');
     await fileInput.setInputFiles('../../docs/需求文件/新好房【網B後台】批次自動刷新設定_規格書.pdf');
 
-    // 驗證檔案晶片出現
+    // 驗證檔案晶片出現，顯示「◌ 分析中...」
     await expect(page.getByTestId('file-chip')).toBeVisible({ timeout: 10000 });
 
     // 輸入文字
-    const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
+    const textarea = page.getByPlaceholder(/描述你的 UI/);
     await textarea.fill('根據上傳的規格書生成原型');
 
     // 如果分析尚未完成，送出按鈕應該被停用
@@ -117,17 +126,18 @@ test.describe('對話與生成功能', () => {
 
     // 檢查分析中狀態
     if (await analysisBadge.isVisible({ timeout: 2000 }).catch(() => false)) {
-      // 分析中 → 送出按鈕應被停用
+      // 分析中（◌ 分析中...）→ 送出按鈕應被停用
       await expect(sendBtn).toBeDisabled();
     }
 
-    // 等待分析完成
+    // 等待分析完成（✓ 分析完成）
     const readyBadge = page.getByTestId('analysis-ready-badge');
     await expect(readyBadge.or(analysisBadge)).toBeVisible({ timeout: 30000 });
   });
 
   test('逐檔分析徽章（分析中... → 分析完成）', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await skipWizardAndGoToDesign(page);
 
     // 上傳檔案
     const fileInput = page.getByTestId('file-input');
@@ -136,11 +146,11 @@ test.describe('對話與生成功能', () => {
     // 驗證檔案晶片出現
     await expect(page.getByTestId('file-chip')).toBeVisible({ timeout: 10000 });
 
-    // 驗證分析徽章出現 — 初始應為「分析中...」
+    // 驗證分析徽章出現 — 初始應為「◌ 分析中...」
     const analysisBadge = page.getByTestId('analysis-badge');
     const readyBadge = page.getByTestId('analysis-ready-badge');
 
-    // 首先應該看到「分析中...」或直接完成
+    // 首先應該看到「◌ 分析中...」或直接完成「✓ 分析完成」
     const firstBadge = analysisBadge.or(readyBadge);
     await expect(firstBadge.first()).toBeVisible({ timeout: 15000 });
 
@@ -153,28 +163,23 @@ test.describe('對話與生成功能', () => {
     }
   });
 
-  test('點擊分析徽章 → 驗證預覽面板開啟', async ({ page }) => {
+  test('點擊分析完成徽章 → 驗證預覽面板開啟', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await skipWizardAndGoToDesign(page);
 
     // 上傳檔案
     const fileInput = page.getByTestId('file-input');
     await fileInput.setInputFiles('../../docs/需求文件/新好房【網B後台】批次自動刷新設定_規格書.pdf');
 
-    // 等待分析完成
+    // 等待分析完成（✓ 分析完成）
     const readyBadge = page.getByTestId('analysis-ready-badge');
     await expect(readyBadge).toBeVisible({ timeout: 60000 });
 
-    // 點擊預覽按鈕
-    const previewBtn = page.getByTestId('analysis-preview-btn');
-    if (await previewBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await previewBtn.click();
+    // 點擊「✓ 分析完成」徽章開啟分析預覽
+    await readyBadge.click();
 
-      // 驗證分析預覽面板出現
-      // AnalysisPreviewPanel 應該在畫面上
-      await page.waitForTimeout(500);
-      // 面板應該有分析內容
-      const panelVisible = await page.locator('[class*="analysis"], [data-testid*="analysis-preview"]').isVisible().catch(() => false);
-      expect(panelVisible || true).toBeTruthy(); // 寬鬆驗證
-    }
+    // 驗證分析預覽面板出現
+    const previewPanel = page.getByTestId('analysis-preview-panel');
+    await expect(previewPanel).toBeVisible({ timeout: 5000 });
   });
 });
