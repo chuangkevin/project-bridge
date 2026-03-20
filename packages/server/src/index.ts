@@ -20,7 +20,7 @@ import crawlRouter from './routes/crawl';
 import apiBindingsRouter from './routes/apiBindings';
 import componentDependenciesRouter from './routes/componentDependencies';
 import elementConstraintsRouter from './routes/elementConstraints';
-import exportRouter from './routes/export';
+import exportRouter from './routes/export'; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 const app = express();
 const PORT = process.env.PORT || 3001;
