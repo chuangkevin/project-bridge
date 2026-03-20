@@ -1,0 +1,14 @@
+node_modules
+dist
+*.db
+.env
+data/
+test-results/
+packages/e2e/
+packages/server/data/bridge.db
+docs/
+openspec/
+.claude/
+.playwright-mcp/
+*.traineddata
+*.png
