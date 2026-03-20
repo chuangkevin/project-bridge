@@ -20,6 +20,7 @@ import crawlRouter from './routes/crawl';
 import apiBindingsRouter from './routes/apiBindings';
 import componentDependenciesRouter from './routes/componentDependencies';
 import elementConstraintsRouter from './routes/elementConstraints';
+import exportRouter from './routes/export';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,6 +46,7 @@ app.use('/api/projects', crawlRouter);
 app.use('/api/projects', apiBindingsRouter);
 app.use('/api/projects', componentDependenciesRouter);
 app.use('/api/projects', elementConstraintsRouter);
+app.use('/api/projects', exportRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
