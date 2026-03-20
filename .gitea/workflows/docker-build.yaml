@@ -50,28 +50,19 @@ jobs:
           git clone --branch main https://${GIT_USER}:${GIT_TOKEN}@gitea.housefun.com.tw/HF_RD/argo-app.git argo-app
           ls argo-app/
 
-      - name: Create project-bridge directory if not exists
+      - name: Sync K8s Manifests to Argo App Repo
         run: |
+          # Copy k8s manifests from project to argo-app
           mkdir -p argo-app/project-bridge
+          cp k8s/deployment.yaml argo-app/project-bridge/
+          cp k8s/service.yaml argo-app/project-bridge/
+          cp k8s/pvc.yaml argo-app/project-bridge/
+          cp k8s/secret.yaml argo-app/project-bridge/
+          cp k8s/kustomization.yaml argo-app/project-bridge/
 
       - name: Update Image Tag in Kustomization
         run: |
           cd argo-app/project-bridge
-
-          # Create kustomization.yaml if not exists
-          if [ ! -f kustomization.yaml ]; then
-            cat > kustomization.yaml << 'EOF'
-          apiVersion: kustomize.config.k8s.io/v1beta1
-          kind: Kustomization
-          resources:
-            - deployment.yaml
-            - service.yaml
-          images:
-            - name: srvhpgit1:32050/project-bridge
-              newTag: latest
-          EOF
-          fi
-
           git config user.email "gitea-actions@gitea.local"
           git config user.name "Gitea Bot"
           sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" kustomization.yaml
