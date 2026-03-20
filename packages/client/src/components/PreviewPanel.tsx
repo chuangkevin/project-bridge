@@ -1,21 +1,28 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { BRIDGE_SCRIPT } from '../utils/bridgeScript';
 
+export type InteractionMode = 'browse' | 'annotate' | 'api-binding';
+
 interface Props {
   html: string | null;
   deviceSize: 'desktop' | 'tablet' | 'mobile';
   annotationMode?: boolean;
+  interactionMode?: InteractionMode;
   onElementClick?: (data: { bridgeId: string; tagName: string; textContent: string; rect: { x: number; y: number; width: number; height: number } }) => void;
   onIndicatorClick?: (bridgeId: string) => void;
   annotations?: { bridgeId: string; number: number }[];
+  apiBindings?: { bridgeId: string }[];
 }
 
-export default function PreviewPanel({ html, deviceSize, annotationMode, onElementClick, onIndicatorClick, annotations }: Props) {
+export default function PreviewPanel({ html, deviceSize, annotationMode, interactionMode, onElementClick, onIndicatorClick, annotations, apiBindings }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Derive effective mode: interactionMode takes priority over boolean annotationMode
+  const effectiveMode: InteractionMode = interactionMode || (annotationMode ? 'annotate' : 'browse');
 
   const handleMessage = useCallback((e: MessageEvent) => {
     if (!e.data || !e.data.type) return;
-    if (e.data.type === 'element-click' && annotationMode && onElementClick) {
+    if (e.data.type === 'element-click' && (effectiveMode === 'annotate' || effectiveMode === 'api-binding') && onElementClick) {
       onElementClick(e.data);
     }
     if (e.data.type === 'indicator-click' && onIndicatorClick) {
@@ -27,7 +34,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, onEleme
         iframeRef.current.contentWindow.eval(`typeof showPage === 'function' && showPage(${JSON.stringify(name)})`);
       } catch {}
     }
-  }, [annotationMode, onElementClick, onIndicatorClick]);
+  }, [effectiveMode, onElementClick, onIndicatorClick]);
 
   useEffect(() => {
     window.addEventListener('message', handleMessage);
@@ -38,8 +45,15 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, onEleme
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage({ type: 'set-annotation-mode', enabled: !!annotationMode }, '*');
-  }, [annotationMode]);
+    iframe.contentWindow.postMessage({ type: 'set-annotation-mode', enabled: effectiveMode === 'annotate' }, '*');
+  }, [effectiveMode]);
+
+  // Send API binding mode state to iframe
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: 'set-api-binding-mode', enabled: effectiveMode === 'api-binding' }, '*');
+  }, [effectiveMode]);
 
   // Send annotation indicators to iframe
   useEffect(() => {
@@ -48,6 +62,15 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, onEleme
     iframe.contentWindow.postMessage({ type: 'show-indicators', annotations }, '*');
   }, [annotations]);
 
+  // Send API binding indicators to iframe
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow || !apiBindings) return;
+    if (effectiveMode === 'api-binding') {
+      iframe.contentWindow.postMessage({ type: 'show-api-indicators', bindings: apiBindings }, '*');
+    }
+  }, [apiBindings, effectiveMode]);
+
   // Resend indicators after iframe loads
   const handleIframeLoad = useCallback(() => {
     const iframe = iframeRef.current;
@@ -55,10 +78,16 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, onEleme
     if (annotations && annotations.length > 0) {
       iframe.contentWindow.postMessage({ type: 'show-indicators', annotations }, '*');
     }
-    if (annotationMode) {
+    if (effectiveMode === 'annotate') {
       iframe.contentWindow.postMessage({ type: 'set-annotation-mode', enabled: true }, '*');
     }
-  }, [annotations, annotationMode]);
+    if (effectiveMode === 'api-binding') {
+      iframe.contentWindow.postMessage({ type: 'set-api-binding-mode', enabled: true }, '*');
+      if (apiBindings && apiBindings.length > 0) {
+        iframe.contentWindow.postMessage({ type: 'show-api-indicators', bindings: apiBindings }, '*');
+      }
+    }
+  }, [annotations, apiBindings, effectiveMode]);
 
   if (!html) {
     return (
