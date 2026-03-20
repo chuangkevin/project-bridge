@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import db from '../db/connection';
 import {
@@ -7,6 +7,41 @@ import {
 } from '../services/geminiKeys';
 
 const router = Router();
+
+// ─── Auth middleware for settings routes ────────────
+function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  // If no password is set, allow access (first-time setup)
+  const hash = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_password_hash') as { value: string } | undefined;
+  if (!hash) {
+    next();
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: '未授權，請先登入' });
+    return;
+  }
+
+  const token = authHeader.slice(7);
+  const storedToken = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_session_token') as { value: string } | undefined;
+  const expiry = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_session_expiry') as { value: string } | undefined;
+
+  if (!storedToken || token !== storedToken.value) {
+    res.status(401).json({ error: '無效的 Token，請重新登入' });
+    return;
+  }
+
+  if (expiry && new Date(expiry.value) < new Date()) {
+    res.status(401).json({ error: 'Token 已過期，請重新登入' });
+    return;
+  }
+
+  next();
+}
+
+// Apply auth middleware to all settings routes
+router.use(requireAuth);
 
 const SENSITIVE_KEYS = ['gemini_api_key', 'gemini_api_keys', 'openai_api_key'];
 
