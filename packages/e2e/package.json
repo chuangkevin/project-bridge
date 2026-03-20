@@ -3,7 +3,12 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
-    "test:ui": "playwright test --ui"
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:smoke": "playwright test --project=smoke",
+    "test:e2e": "playwright test --project=e2e",
+    "test:report": "playwright test && playwright show-report",
+    "report": "playwright show-report"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0"
