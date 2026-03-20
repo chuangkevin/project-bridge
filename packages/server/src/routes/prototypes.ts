@@ -212,11 +212,51 @@ RULES:
 });
 
 // GET /:id/prototype/tokens — extract CSS custom property tokens from current prototype
+// Prefers design_tokens JSON when available, falls back to HTML parsing
 router.get('/:id/prototype/tokens', (req: Request, res: Response) => {
   const projectId = req.params.id;
-  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  const project = db.prepare('SELECT id, design_tokens FROM projects WHERE id = ?').get(projectId) as any;
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
+  // Prefer design_tokens from compiler
+  if (project.design_tokens) {
+    try {
+      const dt = JSON.parse(project.design_tokens);
+      const tokens: { name: string; value: string }[] = [];
+      // Colors
+      if (dt.colors) {
+        for (const [key, value] of Object.entries(dt.colors)) {
+          tokens.push({ name: `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`, value: value as string });
+        }
+      }
+      // Typography
+      if (dt.typography) {
+        tokens.push({ name: '--font-family', value: dt.typography.fontFamily || '' });
+        for (const level of ['h1', 'h2', 'h3', 'body', 'small']) {
+          const t = dt.typography[level];
+          if (t) {
+            tokens.push({ name: `--font-${level}-size`, value: t.size });
+            tokens.push({ name: `--font-${level}-weight`, value: t.weight });
+          }
+        }
+      }
+      // Spacing
+      if (dt.spacing) {
+        for (const [key, value] of Object.entries(dt.spacing)) {
+          tokens.push({ name: `--spacing-${key}`, value: value as string });
+        }
+      }
+      // Border radius
+      if (dt.borderRadius) {
+        for (const [key, value] of Object.entries(dt.borderRadius)) {
+          tokens.push({ name: `--radius-${key}`, value: value as string });
+        }
+      }
+      return res.json({ tokens });
+    } catch { /* fall through to HTML parsing */ }
+  }
+
+  // Fallback: parse from HTML
   const version = db.prepare(
     'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
   ).get(projectId) as { html: string } | undefined;
@@ -225,7 +265,6 @@ router.get('/:id/prototype/tokens', (req: Request, res: Response) => {
     return res.json({ tokens: [] });
   }
 
-  // Extract all <style> tag contents
   const styleContents: string[] = [];
   const styleRe = /<style[^>]*>([\s\S]*?)<\/style>/gi;
   let styleMatch: RegExpExecArray | null;
@@ -234,8 +273,6 @@ router.get('/:id/prototype/tokens', (req: Request, res: Response) => {
   }
 
   const combined = styleContents.join('\n');
-
-  // Extract CSS custom property definitions: --name: value
   const tokenRe = /(--[\w-]+)\s*:\s*([^;}{]+)/g;
   const seen = new Set<string>();
   const tokens: { name: string; value: string }[] = [];

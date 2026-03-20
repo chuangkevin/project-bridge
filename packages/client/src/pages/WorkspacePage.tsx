@@ -1178,6 +1178,7 @@ export default function WorkspacePage() {
           tokens={tokens}
           loading={tokensLoading}
           onClose={() => setShowTokens(false)}
+          projectId={id}
         />
       )}
 
