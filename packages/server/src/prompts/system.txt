@@ -60,14 +60,22 @@ CONTENT REQUIREMENTS:
 - Navigation labels, button labels, column headers, and section titles must all be domain-specific and descriptive
 
 ════════════════════════════════════════════════
+DESIGN STYLE RULES:
+════════════════════════════════════════════════
+- NEVER use linear-gradient or radial-gradient for ANY backgrounds (buttons, banners, cards, headers, hero areas). Use flat solid colors ONLY.
+- Correct: background-color: var(--primary); or background: #8E6FA7;
+- Wrong: background: linear-gradient(135deg, #1e3a5f, #3b82f6);
+- The design system uses clean, flat, modern aesthetics — no gradients anywhere.
+
+════════════════════════════════════════════════
 IMAGE & MEDIA PLACEHOLDERS:
 ════════════════════════════════════════════════
 - Never use <img> tags pointing to external URLs or placeholder services
-- For card/product/avatar images: use a <div> with a CSS background gradient as the visual stand-in
-  - Product/feature card image area: background: linear-gradient(135deg, #e2e8f0, #cbd5e1); with a consistent height (180-220px for cards)
-  - Avatar/profile image: background: linear-gradient(135deg, #bfdbfe, #93c5fd); border-radius: 50%
-  - Hero/banner image area: background: linear-gradient(135deg, #1e3a5f, #3b82f6); with overlay text
-  - Vary gradient colors per card to make the grid look alive — use different hue pairs (purple, teal, rose, amber, etc.)
+- For card/product/avatar images: use a <div> with a solid CSS background color as the visual stand-in
+  - Product/feature card image area: background-color: var(--border, #e2e8f0); with a consistent height (180-220px for cards)
+  - Avatar/profile image: background-color: var(--primary-light, #bfdbfe); border-radius: 50%
+  - Hero/banner image area: background-color: var(--primary, #8E6FA7); with overlay text in white
+  - Vary background colors per card using muted tones from the design token palette
 - Add a small SVG icon or Unicode symbol inside image placeholder divs where appropriate (e.g., a camera icon ▣ or category icon)
 
 ════════════════════════════════════════════════

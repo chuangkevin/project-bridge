@@ -80,6 +80,28 @@ router.post('/:id/prototype/regenerate-component', async (req: Request, res: Res
   const before = version.html.slice(Math.max(0, idx - 200), idx).replace(/<[^>]+>/g, '').trim().slice(-100);
   const after = version.html.slice(idx + componentHtml.length, idx + componentHtml.length + 200).replace(/<[^>]+>/g, '').trim().slice(0, 100);
 
+  // Extract existing CSS from the prototype (so regenerated component uses same styles)
+  const styleMatch = version.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+  const existingCss = styleMatch ? styleMatch[1].trim() : '';
+
+  // Extract :root CSS variables specifically
+  const rootVarsMatch = existingCss.match(/:root\s*\{([^}]+)\}/);
+  const rootVars = rootVarsMatch ? rootVarsMatch[1].trim() : '';
+
+  // Fetch design convention (global)
+  const globalConv = db.prepare("SELECT design_convention FROM global_design_profile WHERE id = 'global'").get() as any;
+  const designConvention = globalConv?.design_convention || '';
+
+  // Fetch design tokens if available
+  const projectTokens = db.prepare('SELECT design_tokens FROM projects WHERE id = ?').get(projectId) as any;
+  let designTokensInfo = '';
+  if (projectTokens?.design_tokens) {
+    try {
+      const tokens = JSON.parse(projectTokens.design_tokens);
+      designTokensInfo = `Primary: ${tokens.colors?.primary || ''}, Secondary: ${tokens.colors?.secondary || ''}, Background: ${tokens.colors?.background || ''}, Text: ${tokens.colors?.text || ''}, Font: ${tokens.typography?.fontFamily || ''}`;
+    } catch {}
+  }
+
   // Fetch design spec analysis and design profile
   const specRows = db.prepare(
     'SELECT original_name, visual_analysis FROM uploaded_files WHERE project_id = ? AND visual_analysis IS NOT NULL'
@@ -89,12 +111,36 @@ router.post('/:id/prototype/regenerate-component', async (req: Request, res: Res
   let systemPrompt = `You are a UI component surgeon. You will be given an existing HTML component and an instruction to modify it.
 
 RULES:
-- Return ONLY the updated component HTML. Nothing else.
+- Return ONLY the updated component HTML. Nothing else — no markdown fences, no explanation.
 - Keep the same root element tag.
 - Preserve the data-bridge-id="${bridgeId}" attribute on the root element.
-- Do NOT return DOCTYPE, html, head, body, or any wrapper elements.
+- Do NOT return DOCTYPE, html, head, body, style tags, or any wrapper elements.
 - Apply the instruction precisely. Keep unchanged parts as-is.
+- CRITICAL: Use the EXACT SAME CSS variables and class names as the existing page. The component must blend seamlessly with its surroundings.
+- Use var(--primary), var(--text), var(--bg), var(--border), etc. for colors — NEVER hardcode colors like #8E6FA7, always use var(--primary) instead.
+- Match the existing font-family, font-sizes, spacing, and border-radius from the page CSS.
+- NEVER use linear-gradient or radial-gradient for backgrounds. Use flat solid colors only: background-color: var(--primary) or background: var(--surface). The design system uses flat colors, not gradients.
+- If the existing component uses inline styles, keep using inline styles. If it uses class names, keep using class names. Match the pattern.
 - Surrounding text context (for reference only): before="...${before}..." after="...${after}..."`;
+
+  // Inject the page's CSS variables so AI knows what's available
+  if (rootVars) {
+    systemPrompt += `\n\n=== PAGE CSS VARIABLES (use these for styling) ===\n:root { ${rootVars} }\n===`;
+  }
+
+  // Inject key CSS classes from the page
+  if (existingCss.length > 0) {
+    // Extract class definitions (first 3000 chars to avoid token explosion)
+    systemPrompt += `\n\n=== EXISTING PAGE CSS (reuse these classes) ===\n${existingCss.slice(0, 3000)}\n===`;
+  }
+
+  if (designConvention) {
+    systemPrompt += `\n\n=== DESIGN CONVENTION ===\n${designConvention}\nUse convention colors via CSS variables. Primary = var(--primary).\n===`;
+  }
+
+  if (designTokensInfo) {
+    systemPrompt += `\n\n=== DESIGN TOKENS ===\n${designTokensInfo}\n===`;
+  }
 
   if (specRows.length > 0) {
     systemPrompt += '\n\n=== DESIGN SPEC (follow these component patterns) ===\n';
