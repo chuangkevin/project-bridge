@@ -28,12 +28,30 @@ interface Props {
   onArchDataChange?: (data: any) => void;
 }
 
+interface AnalysisSummaryPage {
+  name: string;
+  viewport: string;
+  components: string[];
+  navigationTo: string[];
+  businessRules: string[];
+  interactions: string[];
+  dataFields: string[];
+}
+
+interface AnalysisSummary {
+  pages: AnalysisSummaryPage[];
+  globalRules: string[];
+  documentTypes: string[];
+}
+
 export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate, onArchDataChange }: Props) {
   const { archData, patchArchData } = useArchStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingUploadNodeId = useRef<string | null>(null);
   const [pasteActive, setPasteActive] = useState(false);
+  const [hasAnalysis, setHasAnalysis] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Use stable refs for node handlers to avoid TDZ errors when initializing nodes
   const handleRenameRef = useRef<(nodeId: string, newName: string) => void>(() => {});
@@ -49,6 +67,14 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
   useEffect(() => {
     return () => { if (versionSaveTimerRef.current) clearTimeout(versionSaveTimerRef.current); };
   }, []);
+
+  // Check if project has analysis results available for import
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}/analysis-summary`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data && data.pages && data.pages.length > 0) setHasAnalysis(true); })
+      .catch(() => {});
+  }, [projectId]);
 
   const loadVersions = useCallback(async () => {
     try {

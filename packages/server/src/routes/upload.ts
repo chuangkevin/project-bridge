@@ -221,4 +221,80 @@ router.patch('/:id/upload/:fileId/label', (req: Request, res: Response) => {
   return res.json({ success: true });
 });
 
+// GET /:id/analysis-summary — aggregate analysis results for architecture import
+router.get('/:id/analysis-summary', (req: Request, res: Response) => {
+  const { id: projectId } = req.params;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const files = db.prepare(
+    "SELECT analysis_result FROM uploaded_files WHERE project_id = ? AND analysis_status = 'done' AND analysis_result IS NOT NULL"
+  ).all(projectId) as { analysis_result: string }[];
+
+  if (files.length === 0) {
+    return res.json({ pages: [], globalRules: [], documentTypes: [] });
+  }
+
+  // Merge pages by name across all analysis results
+  const pageMap = new Map<string, {
+    name: string;
+    viewport: string;
+    components: string[];
+    navigationTo: string[];
+    businessRules: string[];
+    interactions: string[];
+    dataFields: string[];
+    layout?: string;
+  }>();
+  const globalRulesSet = new Set<string>();
+  const documentTypes = new Set<string>();
+
+  for (const file of files) {
+    try {
+      const result = JSON.parse(file.analysis_result);
+      if (result.documentType) documentTypes.add(result.documentType);
+      if (Array.isArray(result.globalRules)) {
+        result.globalRules.forEach((r: string) => globalRulesSet.add(r));
+      }
+      if (Array.isArray(result.pages)) {
+        for (const page of result.pages) {
+          const existing = pageMap.get(page.name);
+          if (existing) {
+            // Merge: union components, navigationTo, businessRules
+            const compSet = new Set([...existing.components, ...(page.components || [])]);
+            existing.components = Array.from(compSet);
+            const navSet = new Set([...existing.navigationTo, ...(page.navigationTo || [])]);
+            existing.navigationTo = Array.from(navSet);
+            const rulesSet = new Set([...existing.businessRules, ...(page.businessRules || [])]);
+            existing.businessRules = Array.from(rulesSet);
+            const interSet = new Set([...existing.interactions, ...(page.interactions || [])]);
+            existing.interactions = Array.from(interSet);
+            const fieldSet = new Set([...existing.dataFields, ...(page.dataFields || [])]);
+            existing.dataFields = Array.from(fieldSet);
+          } else {
+            pageMap.set(page.name, {
+              name: page.name,
+              viewport: page.viewport || 'desktop',
+              components: page.components || [],
+              navigationTo: page.navigationTo || [],
+              businessRules: page.businessRules || [],
+              interactions: page.interactions || [],
+              dataFields: page.dataFields || [],
+              layout: page.layout,
+            });
+          }
+        }
+      }
+    } catch {
+      // Skip malformed JSON
+    }
+  }
+
+  return res.json({
+    pages: Array.from(pageMap.values()),
+    globalRules: Array.from(globalRulesSet),
+    documentTypes: Array.from(documentTypes),
+  });
+});
+
 export default router;
