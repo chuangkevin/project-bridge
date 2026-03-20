@@ -16,14 +16,14 @@
 
 ## 3. Design Token Editor UI
 
-- [ ] 3.1 Create `packages/client/src/components/DesignTokenEditor.tsx` — grouped editor (Colors with swatches, Typography with font preview, Spacing with numeric inputs, Components with size inputs)
-- [ ] 3.2 Add manual override support — mark edited tokens as `manualOverride: true`, preserve across recompilation
-- [ ] 3.3 Add URL input + "Extract Styles" button that calls crawl-website endpoint
-- [ ] 3.4 Add "Compile Tokens" button for initial/recompile workflow
-- [ ] 3.5 Add live preview panel showing sample components (button, card, input, heading) rendered with current tokens
-- [ ] 3.6 Integrate DesignTokenEditor into project page (new tab or section in WorkspacePage)
-- [ ] 3.7 Write Playwright test: open editor → change color → verify preview updates → save → verify DB persisted
-- [ ] 3.8 Run test, verify pass, commit: `feat: add design token editor UI with live preview and manual overrides`
+- [x] 3.1 Create `packages/client/src/components/DesignTokenEditor.tsx` — grouped editor (Colors with swatches, Typography with font preview, Spacing with numeric inputs, Components with size inputs)
+- [x] 3.2 Add manual override support — mark edited tokens as `manualOverride: true`, preserve across recompilation
+- [x] 3.3 Add URL input + "Extract Styles" button that calls crawl-website endpoint
+- [x] 3.4 Add "Compile Tokens" button for initial/recompile workflow
+- [x] 3.5 Add live preview panel showing sample components (button, card, input, heading) rendered with current tokens
+- [x] 3.6 Integrate DesignTokenEditor into project page (new tab or section in WorkspacePage)
+- [x] 3.7 Write Playwright test: open editor → change color → verify preview updates → save → verify DB persisted
+- [x] 3.8 Run test, verify pass, commit: `feat: add design token editor UI with live preview and manual overrides`
 
 ## 4. Master Agent + Sub-Agent Pipeline
 
@@ -56,13 +56,13 @@
 
 ## 7. Modified Capabilities Integration
 
-- [ ] 7.1 Update css-variable-extraction to prefer reading from design_tokens JSON when available, fall back to HTML parsing
-- [ ] 7.2 Update live-style-injection to use design_tokens format for generating `:root` CSS variable block
-- [ ] 7.3 Write test: project with design_tokens → style tweaker reads tokens correctly → live injection applies token values
-- [ ] 7.4 Run test, verify pass, commit: `feat: integrate design tokens with style tweaker and live injection`
+- [x] 7.1 Update css-variable-extraction to prefer reading from design_tokens JSON when available, fall back to HTML parsing
+- [x] 7.2 Update live-style-injection to use design_tokens format for generating `:root` CSS variable block
+- [x] 7.3 Write test: project with design_tokens → style tweaker reads tokens correctly → live injection applies token values
+- [x] 7.4 Run test, verify pass, commit: `feat: integrate design tokens with style tweaker and live injection`
 
 ## 8. End-to-End Validation
 
-- [ ] 8.1 Full pipeline Playwright test: create project → add reference URL → upload spec PDF → compile tokens → edit a token → generate prototype → verify all pages have consistent styles matching tokens
-- [ ] 8.2 Add `.gitignore` entries for any new test artifacts
-- [ ] 8.3 Run full test suite, verify all pass, commit: `test: validate full parallel generation pipeline end-to-end`
+- [x] 8.1 Full pipeline Playwright test: create project → add reference URL → upload spec PDF → compile tokens → edit a token → generate prototype → verify all pages have consistent styles matching tokens
+- [x] 8.2 Add `.gitignore` entries for any new test artifacts
+- [x] 8.3 Run full test suite, verify all pass, commit: `test: validate full parallel generation pipeline end-to-end`

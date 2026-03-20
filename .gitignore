@@ -13,3 +13,6 @@ packages/server/test-output.html
 packages/server/test-e2e-generate.js
 *.png
 !packages/client/public/*.png
+
+# Crawl artifacts
+/d:/tmp/houseprice-*
