@@ -828,9 +828,21 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+              if (items[i].type.startsWith('image/')) {
+                e.preventDefault();
+                const file = items[i].getAsFile();
+                if (file) uploadFile(file);
+                return;
+              }
+            }
+          }}
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
-          placeholder="描述你的 UI..."
+          placeholder="描述你的 UI...（可貼上截圖）"
           rows={2}
           disabled={streaming}
         />

@@ -224,11 +224,115 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // ─── MICRO-ADJUST PATH ─────────────────────────
     if (intent === 'micro-adjust' && currentPrototype) {
-      const microPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/micro-adjust.txt'), 'utf-8');
+
+      // Check if there's a pasted image → vision-micro-adjust flow
+      let hasImageAttachment = false;
+      let imageFilePath: string | null = null;
+      let imageMimeType: string | null = null;
+      if (Array.isArray(fileIds) && fileIds.length > 0) {
+        const imgFile = db.prepare(
+          `SELECT storage_path, mime_type FROM uploaded_files WHERE id IN (${fileIds.map(() => '?').join(',')}) AND mime_type LIKE 'image/%' LIMIT 1`
+        ).get(...fileIds) as any;
+        if (imgFile) {
+          hasImageAttachment = true;
+          imageFilePath = imgFile.storage_path;
+          imageMimeType = imgFile.mime_type;
+        }
+      }
 
       // Save user message
       const userMsgId = uuidv4();
       db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(userMsgId, projectId, 'user', userContent, 'user');
+
+      // ─── VISION MICRO-ADJUST (image + text) ─────
+      if (hasImageAttachment && imageFilePath) {
+        const { findElementByBridgeId, replaceElementByBridgeId, fuzzyMatchElement } = await import('../services/elementMatcher');
+        const visionPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/vision-micro-adjust.txt'), 'utf-8');
+
+        try {
+          const imageBuffer = fs.readFileSync(imageFilePath);
+          const imageBase64 = imageBuffer.toString('base64');
+
+          // Truncate HTML for vision context (keep under 20K chars)
+          let truncatedHtml = currentPrototype.html;
+          if (truncatedHtml.length > 20000) {
+            // Strip large style blocks first
+            truncatedHtml = truncatedHtml.replace(/<style[^>]*>[\s\S]{500,}<\/style>/gi, '<style>/* truncated */</style>');
+            if (truncatedHtml.length > 20000) truncatedHtml = truncatedHtml.slice(0, 20000) + '\n<!-- truncated -->';
+          }
+
+          const genai = new GoogleGenerativeAI(apiKey);
+          const model = genai.getGenerativeModel({
+            model: getGeminiModel(),
+            systemInstruction: visionPrompt,
+            generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' },
+          });
+
+          const result = await model.generateContent([
+            { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
+            { text: `使用者指示: ${userContent}\n\n目前的 prototype HTML:\n${truncatedHtml}` },
+          ]);
+
+          try { trackUsage(apiKey, getGeminiModel(), 'vision-micro-adjust', result.response.usageMetadata); } catch {}
+
+          let responseText = result.response.text().trim();
+          // Strip markdown fences
+          const fenceMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (fenceMatch) responseText = fenceMatch[1].trim();
+
+          let visionResult: { bridgeId: string | null; reasoning: string; componentHtml: string | null };
+          try {
+            visionResult = JSON.parse(responseText);
+          } catch {
+            // Failed to parse — fall through to text-only micro-adjust
+            visionResult = { bridgeId: null, reasoning: 'JSON parse failed', componentHtml: null };
+          }
+
+          if (visionResult.bridgeId && visionResult.componentHtml) {
+            // Verify bridgeId exists
+            let targetId = visionResult.bridgeId;
+            const exactMatch = findElementByBridgeId(currentPrototype.html, targetId);
+            if (!exactMatch.found) {
+              // Fuzzy fallback
+              const fuzzyId = fuzzyMatchElement(currentPrototype.html, {
+                textContent: visionResult.reasoning,
+              });
+              if (fuzzyId) targetId = fuzzyId;
+            }
+
+            if (findElementByBridgeId(currentPrototype.html, targetId).found) {
+              // Replace component
+              let newHtml = replaceElementByBridgeId(currentPrototype.html, targetId, visionResult.componentHtml);
+              newHtml = sanitizeGeneratedHtml(newHtml, newHtml.includes('data-page='));
+              if (designConvention) newHtml = injectConventionColors(newHtml, designConvention);
+
+              // Save version
+              const assistantMsgId = uuidv4();
+              db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(assistantMsgId, projectId, 'assistant', `[Vision micro-adjust: ${visionResult.reasoning}]`, 'micro-adjust');
+
+              const maxVersion = db.prepare('SELECT MAX(version) as maxV FROM prototype_versions WHERE project_id = ?').get(projectId) as any;
+              const newVersion = (maxVersion?.maxV || 0) + 1;
+              db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+              const versionId = uuidv4();
+              const pageMatches = [...newHtml.matchAll(/data-page="([^"]+)"/g)].map(m => m[1]);
+              db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(versionId, projectId, assistantMsgId, newHtml, newVersion, pageMatches.length > 1 ? 1 : 0, JSON.stringify(pageMatches));
+              db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+
+              res.write(`data: ${JSON.stringify({ content: `✓ 已修改元件 (${targetId}): ${visionResult.reasoning}` })}\n\n`);
+              res.write(`data: ${JSON.stringify({ done: true, html: newHtml, messageType: 'micro-adjust', intent: 'micro-adjust', isMultiPage: pageMatches.length > 1, pages: pageMatches })}\n\n`);
+              res.end();
+              return;
+            }
+          }
+          // Fall through to text-only micro-adjust if vision failed
+        } catch (err: any) {
+          console.warn('[vision-micro-adjust] Failed, falling back to text:', err.message);
+          // Fall through to text-only micro-adjust
+        }
+      }
+
+      // ─── TEXT-ONLY MICRO-ADJUST ─────
+      const microPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/micro-adjust.txt'), 'utf-8');
 
       try {
         const genai = new GoogleGenerativeAI(apiKey);
