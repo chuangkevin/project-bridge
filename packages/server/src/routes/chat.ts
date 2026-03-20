@@ -10,6 +10,7 @@ import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from '../services/geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
+import { generateParallel } from '../services/parallelGenerator';
 
 const router = Router();
 
@@ -568,6 +569,84 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
         finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
         isMultiPage = finalPages.length > 1;
+      }
+    }
+
+    // === PARALLEL GENERATION PATH ===
+    // If 3+ pages and we have analysis data, use parallel pipeline
+    const hasAnalysisData = specRowsEarly.some((r: any) => r.analysis_result);
+    if (isMultiPage && finalPages.length >= 3 && hasAnalysisData) {
+      // Find the best analysis_result
+      let analysisData: any = null;
+      for (const row of specRowsEarly) {
+        if (row.analysis_result) {
+          try { analysisData = JSON.parse(row.analysis_result); break; } catch { /* skip */ }
+        }
+      }
+
+      if (analysisData) {
+        res.write(`data: ${JSON.stringify({ phase: 'planning', message: '規劃頁面架構...' })}\n\n`);
+
+        try {
+          const parallelResult = await generateParallel(
+            projectId as string,
+            analysisData,
+            architectureBlock || '',
+            designConvention,
+            userContent,
+            (event) => {
+              res.write(`data: ${JSON.stringify(event)}\n\n`);
+            },
+          );
+
+          // Save user message
+          const userMsgId = uuidv4();
+          db.prepare(
+            'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
+          ).run(userMsgId, projectId, 'user', userContent, 'user');
+
+          // Save assistant response (the full HTML)
+          const assistantMsgId = uuidv4();
+          db.prepare(
+            'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
+          ).run(assistantMsgId, projectId, 'assistant', parallelResult.html, 'generate');
+
+          // Validate
+          {
+            const conventionPrimary = designConvention.match(/#([89a-fA-F][0-9a-fA-F]{5})/)?.[0] || null;
+            const validationResult = validatePrototype(parallelResult.html, analysisData, conventionPrimary, true);
+            logValidation(validationResult, projectId as string);
+          }
+
+          // Save prototype version
+          const maxVersion = db.prepare(
+            'SELECT MAX(version) as maxV FROM prototype_versions WHERE project_id = ?'
+          ).get(projectId) as any;
+          const newVersion = (maxVersion?.maxV || 0) + 1;
+
+          db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+
+          const versionId = uuidv4();
+          db.prepare(
+            'INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+          ).run(versionId, projectId, assistantMsgId, parallelResult.html, newVersion, 1, JSON.stringify(parallelResult.pages));
+
+          db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+
+          res.write(`data: ${JSON.stringify({
+            done: true,
+            html: parallelResult.html,
+            messageType: 'generate',
+            intent,
+            isMultiPage: true,
+            pages: parallelResult.pages,
+          })}\n\n`);
+          res.end();
+          return;
+        } catch (err: any) {
+          console.error('[parallel] Pipeline failed, falling back to single-call:', err.message);
+          // Fall through to single-call generation
+        }
       }
     }
 
