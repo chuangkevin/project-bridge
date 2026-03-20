@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { crawlWebsite, aggregateStyles, CrawledStyles } from '../services/websiteCrawler';
+import { compileDesignTokens } from '../services/designTokenCompiler';
 import db from '../db/connection';
 
 const router = Router();
@@ -110,6 +111,58 @@ router.post('/:projectId/crawl-website/batch', async (req: Request, res: Respons
     failed: results.filter(r => !r.success).length,
     aggregated,
   });
+});
+
+// POST /api/projects/:projectId/compile-tokens
+router.post('/:projectId/compile-tokens', async (req: Request, res: Response) => {
+  const { projectId } = req.params;
+
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  try {
+    const tokens = await compileDesignTokens(projectId as string);
+
+    // Count sources
+    const sources = {
+      images: tokens.source.referenceImages.length,
+      specs: tokens.source.specDocuments.length,
+      urls: tokens.source.crawledUrls.length,
+    };
+
+    return res.json({ success: true, tokens, sources });
+  } catch (err: any) {
+    console.error('Token compilation error:', err);
+    return res.status(500).json({ error: 'Failed to compile tokens' });
+  }
+});
+
+// GET /api/projects/:projectId/design-tokens
+router.get('/:projectId/design-tokens', (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const project = db.prepare('SELECT design_tokens FROM projects WHERE id = ?').get(projectId) as any;
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project.design_tokens) return res.json({ tokens: null });
+  try {
+    return res.json({ tokens: JSON.parse(project.design_tokens) });
+  } catch {
+    return res.json({ tokens: null });
+  }
+});
+
+// PUT /api/projects/:projectId/design-tokens
+router.put('/:projectId/design-tokens', (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const { tokens } = req.body;
+  if (!tokens) return res.status(400).json({ error: 'tokens is required' });
+
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  db.prepare('UPDATE projects SET design_tokens = ? WHERE id = ?').run(JSON.stringify(tokens), projectId);
+  return res.json({ success: true });
 });
 
 export default router;
