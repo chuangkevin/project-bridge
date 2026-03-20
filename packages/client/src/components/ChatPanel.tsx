@@ -14,6 +14,16 @@ export interface ChatMessage {
   messageType?: 'user' | 'generate' | 'in-shell' | 'component' | 'answer';
 }
 
+type FileIntent = 'design-spec' | 'data-spec' | 'brand-guide' | 'reference' | null;
+
+const INTENT_OPTIONS: { value: FileIntent; label: string; color: string }[] = [
+  { value: null, label: '(未分類)', color: '#94a3b8' },
+  { value: 'design-spec', label: '設計稿', color: '#8b5cf6' },
+  { value: 'data-spec', label: '資料規格', color: '#0ea5e9' },
+  { value: 'brand-guide', label: '品牌指南', color: '#f59e0b' },
+  { value: 'reference', label: '參考截圖', color: '#10b981' },
+];
+
 interface UploadedFile {
   id: string;
   filename: string;
@@ -22,6 +32,7 @@ interface UploadedFile {
   componentLabel?: string;
   pageCount?: number;
   analysisStatus?: 'uploading' | 'analyzing' | 'ready' | 'error';
+  intent?: FileIntent;
 }
 
 interface ArtStyle {
@@ -84,6 +95,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [viewingAnalysis, setViewingAnalysis] = useState<any>(null);
   const [promptHistory, setPromptHistory] = useState<string[]>(() => loadHistory());
   const [inputFocused, setInputFocused] = useState(false);
+  const [genSettingsOpen, setGenSettingsOpen] = useState(false);
+  const [genTemperature, setGenTemperature] = useState(0.3);
+  const [genSeedPrompt, setGenSeedPrompt] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +123,30 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   useEffect(() => {
     fetchArtStyle();
   }, [fetchArtStyle]);
+
+  // Load generation settings on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.generation_temperature !== undefined) setGenTemperature(data.generation_temperature);
+          if (data.seed_prompt !== undefined) setGenSeedPrompt(data.seed_prompt);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [projectId]);
+
+  const saveGenSettings = useCallback(async (fields: { generation_temperature?: number; seed_prompt?: string }) => {
+    try {
+      await fetch(`/api/projects/${projectId}/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+    } catch { /* ignore */ }
+  }, [projectId]);
 
   useEffect(() => {
     if (!uploadToast) return;
@@ -145,6 +183,21 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label }),
+      });
+    } catch {
+      // non-fatal
+    }
+  }, [projectId]);
+
+  const handleFileIntent = useCallback(async (fileId: string, intent: FileIntent) => {
+    setAttachedFiles(prev =>
+      prev.map(f => f.id === fileId ? { ...f, intent } : f)
+    );
+    try {
+      await fetch(`/api/projects/${projectId}/upload/${fileId}/label`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent: intent || '' }),
       });
     } catch {
       // non-fatal
@@ -689,6 +742,59 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
 
       <ConstraintsBar projectId={projectId} onChange={handleConstraintsChange} />
 
+      {/* Generation Settings */}
+      <div style={styles.genSettingsWrapper}>
+        <button
+          type="button"
+          style={styles.genSettingsToggle}
+          onClick={() => setGenSettingsOpen(prev => !prev)}
+          data-testid="gen-settings-toggle"
+        >
+          {genSettingsOpen ? '▾' : '▸'} 生成設定
+        </button>
+        {genSettingsOpen && (
+          <div style={styles.genSettingsPanel} data-testid="gen-settings-panel">
+            <div style={styles.genSettingsRow}>
+              <label style={styles.genSettingsLabel}>
+                溫度 (Temperature): {genTemperature.toFixed(1)}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={genTemperature}
+                onChange={e => {
+                  const val = parseFloat(e.target.value);
+                  setGenTemperature(val);
+                  saveGenSettings({ generation_temperature: val });
+                }}
+                style={styles.genSettingsSlider}
+                title="生成溫度"
+                aria-label="生成溫度"
+                data-testid="temperature-slider"
+              />
+              <div style={styles.genSettingsSliderLabels}>
+                <span>0.0 精確</span>
+                <span>1.0 創意</span>
+              </div>
+            </div>
+            <div style={styles.genSettingsRow}>
+              <label style={styles.genSettingsLabel}>種子提示 (Seed Prompt)</label>
+              <textarea
+                style={styles.genSettingsSeedTextarea}
+                value={genSeedPrompt}
+                onChange={e => setGenSeedPrompt(e.target.value)}
+                onBlur={() => saveGenSettings({ seed_prompt: genSeedPrompt })}
+                placeholder="每次生成時自動附加的提示詞..."
+                rows={3}
+                data-testid="seed-prompt-textarea"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Attached files chips */}
       {attachedFiles.length > 0 && (
         <div style={styles.fileChips}>
@@ -772,21 +878,58 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   x
                 </button>
               </div>
-              <select
-                style={styles.labelSelect}
-                value={f.componentLabel || ''}
-                onChange={e => handleFileLabel(f.id, e.target.value)}
-                data-testid="file-label-select"
-                aria-label="標記用途"
-              >
-                <option value="">{f.pageCount != null && f.pageCount > 1 ? `PDF 有 ${f.pageCount} 頁 — 標記整體用途` : '標記用途（可選）'}</option>
-                <option value="卡片樣式">卡片樣式</option>
-                <option value="導覽列">導覽列</option>
-                <option value="搜尋列">搜尋列</option>
-                <option value="標籤元件">標籤元件</option>
-                <option value="整體風格">整體風格</option>
-                <option value="配色方案">配色方案</option>
-              </select>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <select
+                  style={styles.labelSelect}
+                  value={f.componentLabel || ''}
+                  onChange={e => handleFileLabel(f.id, e.target.value)}
+                  data-testid="file-label-select"
+                  aria-label="標記用途"
+                >
+                  <option value="">{f.pageCount != null && f.pageCount > 1 ? `PDF 有 ${f.pageCount} 頁 — 標記整體用途` : '標記用途（可選）'}</option>
+                  <option value="卡片樣式">卡片樣式</option>
+                  <option value="導覽列">導覽列</option>
+                  <option value="搜尋列">搜尋列</option>
+                  <option value="標籤元件">標籤元件</option>
+                  <option value="整體風格">整體風格</option>
+                  <option value="配色方案">配色方案</option>
+                </select>
+                <select
+                  style={{
+                    ...styles.labelSelect,
+                    borderColor: f.intent ? (INTENT_OPTIONS.find(o => o.value === f.intent)?.color || '#cbd5e1') : '#cbd5e1',
+                    color: f.intent ? (INTENT_OPTIONS.find(o => o.value === f.intent)?.color || '#475569') : '#475569',
+                    fontWeight: f.intent ? 600 : 400,
+                  }}
+                  value={f.intent || ''}
+                  onChange={e => handleFileIntent(f.id, (e.target.value || null) as FileIntent)}
+                  data-testid="file-intent-select"
+                  aria-label="檔案意圖"
+                >
+                  {INTENT_OPTIONS.map(opt => (
+                    <option key={opt.value ?? '__null'} value={opt.value ?? ''}>{opt.label}</option>
+                  ))}
+                </select>
+                {f.intent && (() => {
+                  const opt = INTENT_OPTIONS.find(o => o.value === f.intent);
+                  return opt ? (
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        padding: '1px 6px',
+                        borderRadius: '8px',
+                        backgroundColor: opt.color + '20',
+                        color: opt.color,
+                        whiteSpace: 'nowrap',
+                      }}
+                      data-testid="file-intent-badge"
+                    >
+                      {opt.label}
+                    </span>
+                  ) : null;
+                })()}
+              </div>
             </div>
           ))}
         </div>
@@ -1466,5 +1609,55 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     whiteSpace: 'nowrap' as const,
     boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+  },
+  genSettingsWrapper: {
+    padding: '4px 16px 0',
+  },
+  genSettingsToggle: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '12px',
+    color: '#64748b',
+    fontWeight: 600,
+    padding: '4px 0',
+  },
+  genSettingsPanel: {
+    padding: '8px 0',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '10px',
+  },
+  genSettingsRow: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+  },
+  genSettingsLabel: {
+    fontSize: '12px',
+    color: '#475569',
+    fontWeight: 500,
+  },
+  genSettingsSlider: {
+    width: '100%',
+    accentColor: '#3b82f6',
+  },
+  genSettingsSliderLabels: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '10px',
+    color: '#94a3b8',
+  },
+  genSettingsSeedTextarea: {
+    width: '100%',
+    padding: '8px 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '12px',
+    resize: 'vertical' as const,
+    outline: 'none',
+    fontFamily: 'inherit',
+    lineHeight: '1.4',
+    boxSizing: 'border-box' as const,
   },
 };

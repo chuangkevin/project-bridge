@@ -116,6 +116,50 @@ router.patch('/:id', (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/projects/:id/settings — update generation settings
+router.patch('/:id/settings', (req: Request, res: Response) => {
+  try {
+    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const { generation_temperature, seed_prompt } = req.body;
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (generation_temperature !== undefined) {
+      const temp = parseFloat(generation_temperature);
+      if (isNaN(temp) || temp < 0 || temp > 1) {
+        return res.status(400).json({ error: 'generation_temperature must be between 0 and 1' });
+      }
+      updates.push('generation_temperature = ?');
+      values.push(temp);
+    }
+
+    if (seed_prompt !== undefined) {
+      if (typeof seed_prompt !== 'string') {
+        return res.status(400).json({ error: 'seed_prompt must be a string' });
+      }
+      updates.push('seed_prompt = ?');
+      values.push(seed_prompt);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    updates.push("updated_at = datetime('now')");
+    values.push(req.params.id);
+
+    db.prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+
+    const updated = db.prepare('SELECT generation_temperature, seed_prompt FROM projects WHERE id = ?').get(req.params.id);
+    return res.json(updated);
+  } catch (err: any) {
+    console.error('Error updating generation settings:', err);
+    return res.status(500).json({ error: 'Failed to update generation settings' });
+  }
+});
+
 // DELETE /api/projects/:id — delete project
 router.delete('/:id', (req: Request, res: Response) => {
   try {

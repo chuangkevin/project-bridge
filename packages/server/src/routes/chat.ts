@@ -123,6 +123,22 @@ function formatAnalysisForPrompt(analysis: any, fileName: string): string {
   return block;
 }
 
+/** Return a role preamble string based on file intent */
+function getIntentPreamble(intent: string | null | undefined): string {
+  switch (intent) {
+    case 'design-spec':
+      return 'This file is a DESIGN SPECIFICATION — use it for layout, components, and visual structure.\n';
+    case 'data-spec':
+      return 'This file is a DATA SPECIFICATION — use it for data fields, validation rules, and business logic.\n';
+    case 'brand-guide':
+      return 'This file is a BRAND GUIDE — use it for colors, typography, and visual identity.\n';
+    case 'reference':
+      return 'This file is a REFERENCE SCREENSHOT — use it for visual inspiration only.\n';
+    default:
+      return '';
+  }
+}
+
 function formatGeminiError(err: any): string {
   const msg: string = err?.message || '';
   if (msg.includes('API_KEY_INVALID') || msg.includes('401')) return 'Gemini API 金鑰無效，請至設定頁面重新輸入。';
@@ -149,6 +165,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Read arch_data for architecture block injection
     const archDataRaw = (project as any).arch_data;
     const archData = archDataRaw ? JSON.parse(archDataRaw) : null;
+
+    // Read generation settings
+    const generationTemperature: number = (project as any).generation_temperature ?? 0.3;
+    const seedPrompt: string = ((project as any).seed_prompt || '').trim();
 
     const apiKey = getGeminiApiKey();
     if (!apiKey) {
@@ -205,23 +225,24 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     if (Array.isArray(fileIds) && fileIds.length > 0) {
       const placeholders = fileIds.map(() => '?').join(',');
       const files = db.prepare(
-        `SELECT original_name, extracted_text FROM uploaded_files WHERE id IN (${placeholders}) AND project_id = ?`
-      ).all(...fileIds, projectId) as { original_name: string; extracted_text: string | null }[];
+        `SELECT original_name, extracted_text, intent FROM uploaded_files WHERE id IN (${placeholders}) AND project_id = ?`
+      ).all(...fileIds, projectId) as { original_name: string; extracted_text: string | null; intent: string | null }[];
 
       if (files.length > 0) {
-        const fileParts = files.map(f =>
-          `--- ${f.original_name} ---\n${f.extracted_text || '[No text extracted]'}\n--- end ---`
-        ).join('\n');
+        const fileParts = files.map(f => {
+          const preamble = getIntentPreamble(f.intent);
+          return `${preamble}--- ${f.original_name} ---\n${f.extracted_text || '[No text extracted]'}\n--- end ---`;
+        }).join('\n');
         userContent = `[Attached files]\n${fileParts}\n\n${userContent}`;
       }
     } else {
       // Auto-inject project uploaded files even if not explicitly attached
       // Priority: analysis_result (structured) > extracted_text (raw)
       const projectFiles = db.prepare(
-        `SELECT original_name, extracted_text, analysis_result, analysis_status, file_size FROM uploaded_files
+        `SELECT original_name, extracted_text, analysis_result, analysis_status, file_size, intent FROM uploaded_files
          WHERE project_id = ? AND (extracted_text IS NOT NULL AND LENGTH(extracted_text) > 100 OR analysis_result IS NOT NULL)
          ORDER BY created_at DESC`
-      ).all(projectId) as { original_name: string; extracted_text: string; analysis_result: string | null; analysis_status: string | null; file_size: number }[];
+      ).all(projectId) as { original_name: string; extracted_text: string; analysis_result: string | null; analysis_status: string | null; file_size: number; intent: string | null }[];
       const seenSizes = new Set<number>();
       const uniqueFiles = projectFiles.filter(f => {
         if (seenSizes.has(f.file_size)) return false;
@@ -233,17 +254,24 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           let name = f.original_name;
           try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep original */ }
 
+          const preamble = getIntentPreamble(f.intent);
+
           // Use structured analysis if available
           if (f.analysis_result) {
             try {
               const analysis = JSON.parse(f.analysis_result);
-              return formatAnalysisForPrompt(analysis, name);
+              return preamble + formatAnalysisForPrompt(analysis, name);
             } catch { /* fall through to raw text */ }
           }
-          return `--- ${name} ---\n${f.extracted_text.slice(0, 4000)}\n--- end ---`;
+          return `${preamble}--- ${name} ---\n${f.extracted_text.slice(0, 4000)}\n--- end ---`;
         }).join('\n');
         userContent = `[Project design specs (auto-loaded from uploaded files)]\n${fileParts}\n\n${userContent}`;
       }
+    }
+
+    // Prepend seed prompt if configured
+    if (seedPrompt) {
+      userContent = `[Generation Seed]\n${seedPrompt}\n\n${userContent}`;
     }
 
     let fullResponse = '';
@@ -299,7 +327,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           const model = genai.getGenerativeModel({
             model: getGeminiModel(),
             systemInstruction: visionPrompt,
-            generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' },
+            generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json', temperature: generationTemperature },
           });
 
           const result = await model.generateContent([
@@ -373,7 +401,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         const model = genai.getGenerativeModel({
           model: getGeminiModel(),
           systemInstruction: microPrompt,
-          generationConfig: { maxOutputTokens: 32768 },
+          generationConfig: { maxOutputTokens: 32768, temperature: generationTemperature },
         });
 
         const result = await model.generateContentStream(
@@ -438,7 +466,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         const model = genai.getGenerativeModel({
           model: getGeminiModel(),
           systemInstruction: qaSystemPrompt,
-          generationConfig: { maxOutputTokens: 4096 },
+          generationConfig: { maxOutputTokens: 4096, temperature: generationTemperature },
         });
         const chatSession = model.startChat({
           history: history.slice(0, -0).map(h => ({
@@ -526,11 +554,11 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // First, load design spec analysis — inject BEFORE base system prompt so it overrides defaults
     // Scope: if user explicitly attached fileIds, use only those; otherwise use only the MOST RECENT file.
     // This prevents old uploaded files from previous sessions from polluting new generations.
-    let specRowsEarly: { original_name: string; visual_analysis: string; analysis_result: string | null; component_label: string | null; file_size: number }[];
+    let specRowsEarly: { original_name: string; visual_analysis: string; analysis_result: string | null; component_label: string | null; file_size: number; intent: string | null }[];
     if (Array.isArray(fileIds) && fileIds.length > 0) {
       const placeholders = fileIds.map(() => '?').join(',');
       specRowsEarly = db.prepare(
-        `SELECT original_name, visual_analysis, analysis_result, component_label, file_size FROM uploaded_files
+        `SELECT original_name, visual_analysis, analysis_result, component_label, file_size, intent FROM uploaded_files
          WHERE id IN (${placeholders}) AND project_id = ? AND (visual_analysis IS NOT NULL OR analysis_result IS NOT NULL)`
       ).all(...fileIds, projectId) as typeof specRowsEarly;
     } else {
@@ -542,7 +570,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         specRowsEarly = [];
       } else {
         specRowsEarly = db.prepare(
-          `SELECT original_name, visual_analysis, analysis_result, component_label, file_size FROM uploaded_files
+          `SELECT original_name, visual_analysis, analysis_result, component_label, file_size, intent FROM uploaded_files
            WHERE project_id = ? AND (visual_analysis IS NOT NULL OR analysis_result IS NOT NULL) AND (page_name IS NULL OR page_name != '__arch__')
            ORDER BY created_at DESC LIMIT 1`
         ).all(projectId) as typeof specRowsEarly;
@@ -560,18 +588,20 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         let name = row.original_name;
         try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep */ }
 
+        const intentPreamble = getIntentPreamble(row.intent);
+
         // Prefer structured analysis_result over raw visual_analysis
         if (row.analysis_result) {
           try {
             const analysis = JSON.parse(row.analysis_result);
-            designSpecPrefix += formatAnalysisForPrompt(analysis, name) + '\n\n';
+            designSpecPrefix += intentPreamble + formatAnalysisForPrompt(analysis, name) + '\n\n';
             continue;
           } catch { /* fall through */ }
         }
         // Fallback to raw visual_analysis
         if (row.visual_analysis) {
           const analysis = row.visual_analysis.length > 3000 ? row.visual_analysis.slice(0, 3000) + '…' : row.visual_analysis;
-          designSpecPrefix += `--- Spec: ${name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${analysis}\n\n`;
+          designSpecPrefix += `${intentPreamble}--- Spec: ${name}${row.component_label ? ` [${row.component_label}]` : ''} ---\n${analysis}\n\n`;
         }
       }
       designSpecPrefix += '══════════════════════════════════════════════════════\n\n';
@@ -987,7 +1017,7 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       const model = genai.getGenerativeModel({
         model: getGeminiModel(),
         systemInstruction: effectiveSystemPrompt,
-        generationConfig: { maxOutputTokens: 65536 },
+        generationConfig: { maxOutputTokens: 65536, temperature: generationTemperature },
       });
       const chatSession = model.startChat({ history: trimmedHistory });
       const result = await chatSession.sendMessageStream(userContent);
