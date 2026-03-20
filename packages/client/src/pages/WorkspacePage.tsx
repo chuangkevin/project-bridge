@@ -994,6 +994,7 @@ export default function WorkspacePage() {
                 onHtmlGenerated={handleHtmlGenerated}
                 pendingMessage={pendingChatMessage}
                 onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                hasPrototype={!!html}
               />
             ) : leftTab === 'design' ? (
               <DesignPanel

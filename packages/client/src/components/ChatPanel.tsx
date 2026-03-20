@@ -35,6 +35,7 @@ interface Props {
   onHtmlGenerated: (data: { html: string; isMultiPage: boolean; pages: string[] }) => void;
   pendingMessage?: string | null;
   onPendingMessageConsumed?: () => void;
+  hasPrototype?: boolean;
 }
 
 const HISTORY_KEY = 'pb-prompt-history';
@@ -60,7 +61,7 @@ function saveHistory(history: string[]) {
   }
 }
 
-export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed }: Props) {
+export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed, hasPrototype }: Props) {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -271,7 +272,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     e.target.value = '';
   };
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, opts?: { forceRegenerate?: boolean }) => {
     if (!text || streaming) return;
 
     // Update prompt history
@@ -308,6 +309,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       }
       if (constraints) {
         body.constraints = constraints;
+      }
+      if (opts?.forceRegenerate) {
+        body.forceRegenerate = true;
       }
 
       const res = await fetch(`/api/projects/${projectId}/chat`, {
@@ -796,6 +800,17 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           onChange={handleFileSelect}
           data-testid="file-input"
         />
+        {hasPrototype && (
+          <button
+            style={{ ...styles.attachBtn, fontSize: 11, color: '#f59e0b', fontWeight: 600 }}
+            onClick={() => sendMessage(input.trim() || '請依照設計規範重新生成所有頁面', { forceRegenerate: true })}
+            title="強制重新生成（忽略微調模式）"
+            disabled={streaming}
+            data-testid="regenerate-btn"
+          >
+            🔄
+          </button>
+        )}
         <button
           style={styles.attachBtn}
           onClick={() => fileInputRef.current?.click()}

@@ -101,7 +101,7 @@ function formatGeminiError(err: any): string {
 router.post('/:id/chat', async (req: Request, res: Response) => {
   try {
     const projectId = req.params.id;
-    const { message, fileIds } = req.body;
+    const { message, fileIds, forceRegenerate } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
@@ -143,10 +143,23 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       (/空白太|空白超|太大|太小|不對|沒有依照|沒依照|缺少|重新生成|請重新|重做|修改|修正|調整|改掉|有問題|不正確|看起來不|樣式不|版面|排版|沒有正確|沒有運作|不能點|點擊沒|連結沒|沒有做出|做出來|沒有生成|為什麼沒有做|為何沒有|沒有子頁面|沒有頁面|子頁面|顏色不對|色調不對|色調錯誤|顏色錯誤|不像設計稿|沒有照設計稿|沒有按照設計稿/.test(trimmed))
     );
 
-    // Classify intent (four-way)
-    const intent = isObviousGenerate
+    // Check if prototype already exists
+    const currentPrototype = db.prepare(
+      'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+    ).get(projectId) as { html: string } | undefined;
+
+    // Gate isObviousGenerate: only when no prototype exists OR forceRegenerate
+    const gatedObviousGenerate = isObviousGenerate && (!currentPrototype || forceRegenerate);
+
+    // Classify intent (five-way)
+    let intent = gatedObviousGenerate
       ? (hasShell ? 'in-shell' : 'full-page')
       : await classifyIntent(message.trim(), apiKey, hasShell);
+
+    // Override: when prototype exists and not forceRegenerate, downgrade full-page/in-shell to micro-adjust
+    if (currentPrototype && !forceRegenerate && (intent === 'full-page' || intent === 'in-shell')) {
+      intent = 'micro-adjust';
+    }
 
     // Load conversation history (last 20 messages)
     const history = db.prepare(
@@ -200,6 +213,85 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     let fullResponse = '';
+
+    // Load design convention early (needed by micro-adjust and generate paths)
+    const globalRowForConventionEarly = db.prepare("SELECT design_convention FROM global_design_profile WHERE id = 'global'").get() as any;
+    let designConvention = globalRowForConventionEarly?.design_convention || '';
+    if (!designConvention) {
+      const colorConventionPath = path.resolve(__dirname, '../../data/color-convention.txt');
+      try { designConvention = fs.readFileSync(colorConventionPath, 'utf-8'); } catch {}
+    }
+
+    // ─── MICRO-ADJUST PATH ─────────────────────────
+    if (intent === 'micro-adjust' && currentPrototype) {
+      const microPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/micro-adjust.txt'), 'utf-8');
+
+      // Save user message
+      const userMsgId = uuidv4();
+      db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(userMsgId, projectId, 'user', userContent, 'user');
+
+      try {
+        const genai = new GoogleGenerativeAI(apiKey);
+        const model = genai.getGenerativeModel({
+          model: getGeminiModel(),
+          systemInstruction: microPrompt,
+          generationConfig: { maxOutputTokens: 32768 },
+        });
+
+        const result = await model.generateContentStream(
+          `使用者要求: ${userContent}\n\n以下是目前的完整 HTML prototype:\n${currentPrototype.html}`
+        );
+
+        for await (const chunk of result.stream) {
+          const text = chunk.text();
+          if (text) {
+            fullResponse += text;
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          }
+        }
+        try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'micro-adjust', resp.usageMetadata); } catch {}
+      } catch (err: any) {
+        console.error('Micro-adjust error:', err);
+        res.write(`data: ${JSON.stringify({ error: 'Micro-adjust failed: ' + (err.message || '').slice(0, 100) })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Extract HTML
+      let html = fullResponse.trim();
+      const fenceMatch = html.match(/```(?:html)?\s*([\s\S]*?)```/i);
+      if (fenceMatch) html = fenceMatch[1].trim();
+      const startIdx = html.search(/<!doctype html|<html[\s>]/i);
+      if (startIdx > 0) html = html.slice(startIdx);
+      const endIdx = html.lastIndexOf('</html>');
+      if (endIdx !== -1) html = html.slice(0, endIdx + '</html>'.length);
+
+      html = sanitizeGeneratedHtml(html, html.includes('data-page='));
+      if (designConvention) html = injectConventionColors(html, designConvention);
+
+      // Save as new version
+      const assistantMsgId = uuidv4();
+      db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(assistantMsgId, projectId, 'assistant', html, 'micro-adjust');
+
+      const isFullHtml = html.toLowerCase().includes('<!doctype html') || html.toLowerCase().includes('<html');
+      if (isFullHtml) {
+        const maxVersion = db.prepare('SELECT MAX(version) as maxV FROM prototype_versions WHERE project_id = ?').get(projectId) as any;
+        const newVersion = (maxVersion?.maxV || 0) + 1;
+        db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+        const versionId = uuidv4();
+        // Detect pages
+        const pageMatches = [...html.matchAll(/data-page="([^"]+)"/g)].map(m => m[1]);
+        const isMulti = pageMatches.length > 1;
+        db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(versionId, projectId, assistantMsgId, html, newVersion, isMulti ? 1 : 0, JSON.stringify(pageMatches));
+        db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+
+        res.write(`data: ${JSON.stringify({ done: true, html, messageType: 'micro-adjust', intent: 'micro-adjust', isMultiPage: isMulti, pages: pageMatches })}\n\n`);
+      } else {
+        res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: 'micro-adjust', intent: 'micro-adjust' })}\n\n`);
+      }
+      res.end();
+      return;
+    }
 
     if (intent === 'question') {
       // Q&A path
@@ -418,15 +510,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     let effectiveSystemPrompt = designSpecPrefix + architectureBlock + systemPrompt;
 
-    // Inject project design convention (DB first, fallback to file)
-    const globalRowForConvention = db.prepare("SELECT design_convention FROM global_design_profile WHERE id = 'global'").get() as any;
-    let designConvention = globalRowForConvention?.design_convention || '';
-    if (!designConvention) {
-      const colorConventionPath = path.resolve(__dirname, '../../../../docs/colorConvention.md');
-      if (fs.existsSync(colorConventionPath)) {
-        designConvention = fs.readFileSync(colorConventionPath, 'utf-8');
-      }
-    }
+    // designConvention already loaded earlier (before micro-adjust path)
     if (designConvention) {
       effectiveSystemPrompt += `\n\n=== PROJECT DESIGN SYSTEM (HousePrice Color Convention) ===\n${designConvention.slice(0, 4000)}\n====================================`;
     }
