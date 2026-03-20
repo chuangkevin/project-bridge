@@ -210,14 +210,26 @@ router.get('/:id/upload/:fileId/analysis-status', (req: Request, res: Response) 
   });
 });
 
-// PATCH /:id/upload/:fileId/label — set component label for uploaded file
+// PATCH /:id/upload/:fileId/label — set component label and/or intent for uploaded file
 router.patch('/:id/upload/:fileId/label', (req: Request, res: Response) => {
   const { id: projectId, fileId } = req.params;
-  const { label } = req.body;
-  if (typeof label !== 'string') return res.status(400).json({ error: 'label required' });
+  const { label, intent } = req.body;
   const file = db.prepare('SELECT id FROM uploaded_files WHERE id = ? AND project_id = ?').get(fileId, projectId);
   if (!file) return res.status(404).json({ error: 'File not found' });
-  db.prepare('UPDATE uploaded_files SET component_label = ? WHERE id = ?').run(label || null, fileId);
+
+  const validIntents = ['design-spec', 'data-spec', 'brand-guide', 'reference'];
+
+  if (typeof label === 'string') {
+    db.prepare('UPDATE uploaded_files SET component_label = ? WHERE id = ?').run(label || null, fileId);
+  }
+  if (intent !== undefined) {
+    const intentValue = (intent && validIntents.includes(intent)) ? intent : null;
+    db.prepare('UPDATE uploaded_files SET intent = ? WHERE id = ?').run(intentValue, fileId);
+  }
+  // At least one field must be provided
+  if (typeof label !== 'string' && intent === undefined) {
+    return res.status(400).json({ error: 'label or intent required' });
+  }
   return res.json({ success: true });
 });
 
