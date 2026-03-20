@@ -63,7 +63,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const [generationPhase, setGenerationPhase] = useState<'idle' | 'thinking' | 'writing' | 'finalizing'>('idle');
+  const [generationPhase, setGenerationPhase] = useState<'idle' | 'thinking' | 'writing' | 'finalizing' | 'parallel'>('idle');
+  const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
+  const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -299,6 +301,16 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               setError(data.error);
               break;
             }
+            // Handle parallel generation progress events
+            if (data.phase) {
+              setGenerationPhase('parallel');
+              if (data.phase === 'planning' || data.phase === 'tokens' || data.phase === 'assembling') {
+                setParallelMessage(data.message || data.phase);
+              }
+              if (data.phase === 'generating' && data.page) {
+                setPageProgress(prev => ({ ...prev, [data.page]: data.status || 'started' }));
+              }
+            }
             if (data.content) {
               fullContent += data.content;
               setStreamingContent(fullContent);
@@ -362,6 +374,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     } finally {
       setStreaming(false);
       setGenerationPhase('idle');
+      setPageProgress({});
+      setParallelMessage('');
     }
   };
 
@@ -400,31 +414,58 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       {/* Generation progress bar */}
       {generationPhase !== 'idle' && (
         <div style={styles.generationProgress} data-testid="generation-progress">
-          <div style={styles.generationSteps}>
-            {(['thinking', 'writing', 'finalizing'] as const).map((phase, idx) => {
-              const labels: Record<string, string> = { thinking: '思考中', writing: '撰寫中', finalizing: '完成' };
-              const phaseOrder = { thinking: 0, writing: 1, finalizing: 2 };
-              const isActive = generationPhase === phase;
-              const isPast = phaseOrder[generationPhase] > idx;
-              const stepStyle: React.CSSProperties = {
-                ...styles.generationStep,
-                fontWeight: isActive ? 700 : 400,
-                color: isActive ? '#3b82f6' : isPast ? '#22c55e' : '#94a3b8',
-              };
-              return (
-                <span key={phase} style={stepStyle}>
-                  {labels[phase]}
-                </span>
-              );
-            })}
-          </div>
-          <div style={styles.generationBarTrack}>
-            {(() => {
-              const fillWidth = generationPhase === 'thinking' ? '33%' : generationPhase === 'writing' ? '66%' : '100%';
-              const barFillStyle: React.CSSProperties = { ...styles.generationBarFill, width: fillWidth };
-              return <div style={barFillStyle} />;
-            })()}
-          </div>
+          {generationPhase === 'parallel' ? (
+            <div style={{ padding: '8px 0' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#3b82f6' }}>
+                {parallelMessage || '並行生成中...'}
+              </div>
+              {Object.keys(pageProgress).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {Object.entries(pageProgress).map(([page, status]) => (
+                    <div key={page} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                      <span style={{ width: 16, textAlign: 'center' }}>
+                        {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'started' ? '◌' : '·'}
+                      </span>
+                      <span style={{ color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'started' ? '#3b82f6' : '#94a3b8', fontWeight: status === 'started' ? 600 : 400 }}>
+                        {page}
+                      </span>
+                      <span style={{ color: '#94a3b8', fontSize: 11 }}>
+                        {status === 'done' ? '完成' : status === 'error' ? '失敗' : status === 'started' ? '生成中...' : '等待中'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div style={styles.generationSteps}>
+                {(['thinking', 'writing', 'finalizing'] as const).map((phase, idx) => {
+                  const labels: Record<string, string> = { thinking: '思考中', writing: '撰寫中', finalizing: '完成' };
+                  const phaseOrder: Record<string, number> = { thinking: 0, writing: 1, finalizing: 2 };
+                  const isActive = generationPhase === phase;
+                  const isPast = (phaseOrder[generationPhase] ?? -1) > idx;
+                  const stepStyle: React.CSSProperties = {
+                    ...styles.generationStep,
+                    fontWeight: isActive ? 700 : 400,
+                    color: isActive ? '#3b82f6' : isPast ? '#22c55e' : '#94a3b8',
+                  };
+                  return (
+                    <span key={phase} style={stepStyle}>
+                      {labels[phase]}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={styles.generationBarTrack}>
+                {(() => {
+                  const fillWidth = generationPhase === 'thinking' ? '33%' : generationPhase === 'writing' ? '66%' : '100%';
+                  const barFillStyle: React.CSSProperties = { ...styles.generationBarFill, width: fillWidth };
+                  return <div style={barFillStyle} />;
+                })()}
+              </div>
+            </>
+          )}
         </div>
       )}
 
