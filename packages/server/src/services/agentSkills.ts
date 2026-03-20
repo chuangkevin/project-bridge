@@ -264,3 +264,145 @@ export async function skillDesignProposal(
     };
   }
 }
+
+// ─────────────────────────────────────────────
+// Skill 4: BUSINESS CONTEXT — Internal domain knowledge
+// Loads company skill files to enrich analysis with internal business logic
+// ─────────────────────────────────────────────
+
+import fs from 'fs';
+import path from 'path';
+
+export interface BusinessContextResult {
+  matchedSkills: string[];
+  businessRules: string[];
+  dataFlows: string[];
+  relatedSystems: string[];
+  internalTerms: Array<{ term: string; explanation: string }>;
+  implementationNotes: string[];
+}
+
+interface SkillFile {
+  name: string;
+  description: string;
+  content: string;
+}
+
+function loadSkillFiles(): SkillFile[] {
+  const skillDir = path.resolve(__dirname, '../../data/skills');
+  if (!fs.existsSync(skillDir)) return [];
+
+  const files = fs.readdirSync(skillDir).filter(f => f.endsWith('.md'));
+  return files.map(f => {
+    const content = fs.readFileSync(path.join(skillDir, f), 'utf-8');
+    // Extract name and description from frontmatter
+    const nameMatch = content.match(/^name:\s*(.+)$/m);
+    const descMatch = content.match(/^description:\s*(.+)$/m);
+    return {
+      name: nameMatch?.[1]?.trim() || f.replace('.md', ''),
+      description: descMatch?.[1]?.trim() || '',
+      content,
+    };
+  });
+}
+
+const BUSINESS_CONTEXT_PROMPT = `You are an internal business analyst for HousePrice (好房/新好房). You have access to internal skill documents describing business logic, data models, and system architecture.
+
+TASK: Given a spec document, determine which internal business skills are relevant, then extract business context that would help a UI prototype engineer understand the domain deeply.
+
+Step 1: Read the spec text and identify mentions of business concepts (會員, 社區, 實價登錄, 物件, 刊登, 刷新, 額度, etc.)
+Step 2: Match against available skill descriptions to decide which skills to load
+Step 3: From the matched skills, extract:
+  - Business rules that the spec implies but doesn't explicitly state
+  - Data flows between systems (which DB tables, which APIs)
+  - Related internal systems the spec depends on
+  - Internal terms and their precise meanings
+  - Implementation notes for the engineering team
+
+Return JSON:
+{
+  "matchedSkills": ["skill names that matched"],
+  "businessRules": ["implicit business rules from domain knowledge"],
+  "dataFlows": ["data flow descriptions (e.g., 'BusinessMember table → 2B member verification → display badge')"],
+  "relatedSystems": ["internal systems this spec interacts with"],
+  "internalTerms": [{"term": "2B會員", "explanation": "不動產經紀人/經紀業會員，有 BusinessMember 記錄"}],
+  "implementationNotes": ["technical notes for engineers"]
+}`;
+
+export async function skillBusinessContext(
+  fullText: string,
+  pages: any[],
+  apiKey: string
+): Promise<BusinessContextResult> {
+  const skills = loadSkillFiles();
+  if (skills.length === 0) {
+    return { matchedSkills: [], businessRules: [], dataFlows: [], relatedSystems: [], internalTerms: [], implementationNotes: [] };
+  }
+
+  const genai = new GoogleGenerativeAI(apiKey);
+
+  // Step 1: Classify which skills are relevant (lightweight call)
+  const classifierModel = genai.getGenerativeModel({
+    model: getGeminiModel(),
+    generationConfig: { maxOutputTokens: 512, temperature: 0, responseMimeType: 'application/json' },
+  });
+
+  const skillList = skills.map((s, i) => `${i}: ${s.name} — ${s.description.slice(0, 150)}`).join('\n');
+  const classifyResult = await classifierModel.generateContent(
+    `Given this spec text, which skill indices are relevant? Return JSON: {"indices": [0, 2]}\n\nSkills:\n${skillList}\n\nSpec (first 3000 chars):\n${fullText.slice(0, 3000)}`
+  );
+  try { trackUsage(apiKey, getGeminiModel(), 'skill-biz-classify', classifyResult.response.usageMetadata); } catch {}
+
+  let matchedIndices: number[] = [];
+  try {
+    const parsed = JSON.parse(classifyResult.response.text());
+    matchedIndices = (parsed.indices || []).filter((i: number) => i >= 0 && i < skills.length);
+  } catch {
+    // If classification fails, use all skills
+    matchedIndices = skills.map((_, i) => i);
+  }
+
+  if (matchedIndices.length === 0) {
+    return { matchedSkills: [], businessRules: [], dataFlows: [], relatedSystems: [], internalTerms: [], implementationNotes: [] };
+  }
+
+  // Step 2: Load matched skills and analyze
+  const matchedSkillContent = matchedIndices
+    .map(i => `=== SKILL: ${skills[i].name} ===\n${skills[i].content.slice(0, 8000)}\n=== END ===`)
+    .join('\n\n');
+
+  const pagesContext = pages.map(p =>
+    `Page: ${p.name} | Components: ${(p.components || []).join(', ')}`
+  ).join('\n');
+
+  const model = genai.getGenerativeModel({
+    model: getGeminiModel(),
+    generationConfig: { maxOutputTokens: 4096, temperature: 0.2, responseMimeType: 'application/json' },
+  });
+
+  const result = await model.generateContent(
+    `${BUSINESS_CONTEXT_PROMPT}\n\n=== INTERNAL SKILLS ===\n${matchedSkillContent}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 10000)}\n\n=== PAGES ===\n${pagesContext}\n=== END ===`
+  );
+  try { trackUsage(apiKey, getGeminiModel(), 'skill-biz-context', result.response.usageMetadata); } catch {}
+
+  try {
+    const parsed = JSON.parse(result.response.text());
+    return {
+      matchedSkills: matchedIndices.map(i => skills[i].name),
+      businessRules: parsed.businessRules || [],
+      dataFlows: parsed.dataFlows || [],
+      relatedSystems: parsed.relatedSystems || [],
+      internalTerms: parsed.internalTerms || [],
+      implementationNotes: parsed.implementationNotes || [],
+    };
+  } catch {
+    return {
+      matchedSkills: matchedIndices.map(i => skills[i].name),
+      businessRules: [],
+      dataFlows: [],
+      relatedSystems: [],
+      internalTerms: [],
+      implementationNotes: [],
+    };
+  }
+}

@@ -9,6 +9,7 @@ import {
   skillExplore, ExploreResult,
   skillUxReview, UxReviewResult,
   skillDesignProposal, DesignProposalResult,
+  skillBusinessContext, BusinessContextResult,
 } from './agentSkills';
 
 export interface AnalysisPage {
@@ -32,6 +33,7 @@ export interface DocumentAnalysisResult {
   explore?: ExploreResult;
   uxReview?: UxReviewResult;
   designProposal?: DesignProposalResult;
+  businessContext?: BusinessContextResult;
 }
 
 const MAX_RETRIES = 2;
@@ -249,6 +251,18 @@ export async function analyzeDocument(
         console.log(`[agent] Design Proposal: "${(result.designProposal.designDirection || '').slice(0, 80)}..."`);
       } catch (e: any) {
         console.warn(`[agent] Design Proposal skill failed:`, e.message);
+      }
+
+      await new Promise(r => setTimeout(r, 1500)); // Rate limit buffer
+
+      // Skill 4: Business Context — internal domain knowledge from company skills
+      try {
+        result.businessContext = await withRetry(key =>
+          skillBusinessContext(extractedText, result.pages, key)
+        );
+        console.log(`[agent] Business Context: ${result.businessContext.matchedSkills.length} skills matched, ${result.businessContext.businessRules.length} rules, ${result.businessContext.internalTerms.length} terms`);
+      } catch (e: any) {
+        console.warn(`[agent] Business Context skill failed:`, e.message);
       }
     }
 

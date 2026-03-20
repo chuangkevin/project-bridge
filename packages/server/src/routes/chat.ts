@@ -98,6 +98,27 @@ function formatAnalysisForPrompt(analysis: any, fileName: string): string {
     }
   }
 
+  // Business context from company skills
+  if (analysis.businessContext) {
+    const bc = analysis.businessContext;
+    if (bc.businessRules?.length || bc.internalTerms?.length || bc.dataFlows?.length) {
+      block += `\n--- INTERNAL BUSINESS CONTEXT ---\n`;
+      if (bc.matchedSkills?.length) block += `Related systems: ${bc.matchedSkills.join(', ')}\n`;
+      if (bc.businessRules?.length) {
+        block += `Business rules (internal):\n${bc.businessRules.map((r: string) => `  - ${r}`).join('\n')}\n`;
+      }
+      if (bc.internalTerms?.length) {
+        block += `Internal terms:\n${bc.internalTerms.map((t: any) => `  - ${t.term}: ${t.explanation}`).join('\n')}\n`;
+      }
+      if (bc.dataFlows?.length) {
+        block += `Data flows:\n${bc.dataFlows.map((d: string) => `  - ${d}`).join('\n')}\n`;
+      }
+      if (bc.implementationNotes?.length) {
+        block += `Implementation notes:\n${bc.implementationNotes.map((n: string) => `  - ${n}`).join('\n')}\n`;
+      }
+    }
+  }
+
   block += `=== END DOCUMENT ANALYSIS ===`;
   return block;
 }
