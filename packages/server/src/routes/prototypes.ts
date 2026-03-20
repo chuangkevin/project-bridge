@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import db from '../db/connection';
 import { extractComponent, replaceComponent } from '../services/componentExtractor';
 import { getGeminiApiKey, getGeminiModel, trackUsage } from '../services/geminiKeys';
+import { validateNavigation } from '../services/prototypeValidator';
 
 const router = Router();
 
@@ -398,6 +399,22 @@ router.post('/:id/prototype/versions/:version/restore', (req: Request, res: Resp
     isMultiPage: !!target.is_multi_page,
     pages: JSON.parse(target.pages || '[]'),
   });
+});
+
+// GET /:id/prototype/validate-navigation — validate navigation integrity of current prototype
+router.get('/:id/prototype/validate-navigation', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const version = db.prepare(
+    'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+  ).get(projectId) as { html: string } | undefined;
+
+  if (!version) return res.status(404).json({ error: 'No prototype found' });
+
+  const result = validateNavigation(version.html);
+  return res.json(result);
 });
 
 export default router;

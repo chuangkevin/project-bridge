@@ -261,7 +261,24 @@ export default function WorkspacePage() {
     setIsMultiPage(data.isMultiPage);
     setPages(data.pages);
     setActivePage('');
-  }, []);
+
+    // Validate navigation for multi-page prototypes
+    if (data.isMultiPage && id) {
+      fetch(`/api/projects/${id}/prototype/validate-navigation`)
+        .then(r => r.json())
+        .then(result => {
+          if (result.issues && result.issues.length > 0) {
+            const errors = result.issues.filter((i: any) => i.severity === 'error').length;
+            const warnings = result.issues.filter((i: any) => i.severity === 'warning').length;
+            const parts: string[] = [];
+            if (errors > 0) parts.push(`${errors} error(s)`);
+            if (warnings > 0) parts.push(`${warnings} warning(s)`);
+            setToastMsg(`Navigation: ${parts.join(', ')} — ${result.issues.map((i: any) => i.message).join('; ')}`);
+          }
+        })
+        .catch(() => { /* navigation validation is non-blocking */ });
+    }
+  }, [id]);
 
   const handleNavigatePage = useCallback((page: string) => {
     setActivePage(page);
