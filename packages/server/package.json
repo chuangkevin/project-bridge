@@ -9,6 +9,8 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@napi-rs/canvas": "^0.1.97",
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1",
     "better-sqlite3": "^11.0.0",
     "canvas": "^2.11.2",
     "cors": "^2.8.5",

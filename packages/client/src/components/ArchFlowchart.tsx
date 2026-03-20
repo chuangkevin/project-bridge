@@ -255,6 +255,138 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
     onEdgesChange(changes);
   }, [onEdgesChange]);
 
+  const importFromAnalysis = useCallback(async (summary: AnalysisSummary, mode: 'replace' | 'merge') => {
+    const COLS = 3;
+    const SPACING_X = 280;
+    const SPACING_Y = 300;
+    const START_X = 50;
+    const START_Y = 100;
+
+    let existingNodes: Node[] = [];
+    let existingEdges: Edge[] = [];
+    const existingPageNames = new Set<string>();
+
+    if (mode === 'merge') {
+      existingNodes = [...nodes];
+      existingEdges = [...edges];
+      existingNodes.forEach(n => existingPageNames.add(n.data.name as string));
+    }
+
+    // Filter pages: in merge mode, skip already existing pages
+    const pagesToImport = mode === 'merge'
+      ? summary.pages.filter(p => !existingPageNames.has(p.name))
+      : summary.pages;
+
+    // Create a map of page name -> node id for edge creation
+    const pageIdMap = new Map<string, string>();
+    // Include existing nodes in the map for merge mode
+    existingNodes.forEach(n => pageIdMap.set(n.data.name as string, n.id));
+
+    const startIndex = existingNodes.length;
+    const newNodes: Node[] = pagesToImport.map((page, idx) => {
+      const globalIdx = startIndex + idx;
+      const col = globalIdx % COLS;
+      const row = Math.floor(globalIdx / COLS);
+      const nodeId = `page-analysis-${idx}-${Date.now()}`;
+      pageIdMap.set(page.name, nodeId);
+
+      // Map viewport
+      let viewport: 'mobile' | 'desktop' | null = null;
+      if (page.viewport === 'desktop' || page.viewport === 'mobile') viewport = page.viewport;
+
+      // Map components to ArchComponent objects
+      const components = (page.components || []).map((compName, compIdx) => {
+        const description = compIdx === 0 && page.businessRules?.length
+          ? page.businessRules.join('\n').slice(0, 500)
+          : '';
+        return {
+          id: `comp-${idx}-${compIdx}`,
+          name: compName,
+          type: 'button' as const,
+          description,
+          constraints: {},
+          states: [],
+          navigationTo: null,
+        };
+      });
+
+      return {
+        id: nodeId,
+        type: 'page',
+        position: { x: START_X + col * SPACING_X, y: START_Y + row * SPACING_Y },
+        data: {
+          name: page.name,
+          referenceFileUrl: null,
+          referenceFileId: null,
+          viewport,
+          states: [],
+          components,
+          onRename: (nId: string, newName: string) => handleRenameRef.current(nId, newName),
+          onUploadRef: (nId: string) => handleUploadRefRef.current(nId),
+          onDelete: (nId: string) => handleDeleteNodeRef.current(nId),
+          onViewportChange: (nId: string, v: 'mobile' | 'desktop' | null) => handleViewportChangeRef.current(nId, v),
+          onComponentsChange: (nId: string, comps: any[]) => handleComponentsChangeRef.current(nId, comps),
+        },
+      };
+    });
+
+    // Create edges from navigationTo
+    const newEdges: Edge[] = [];
+    for (const page of pagesToImport) {
+      const sourceId = pageIdMap.get(page.name);
+      if (!sourceId) continue;
+      for (const target of (page.navigationTo || [])) {
+        const targetId = pageIdMap.get(target);
+        if (!targetId) continue;
+        // Avoid duplicate edges
+        const edgeId = `edge-${sourceId}-${targetId}`;
+        const alreadyExists = existingEdges.some(e => e.source === sourceId && e.target === targetId);
+        if (!alreadyExists) {
+          newEdges.push({ id: edgeId, source: sourceId, target: targetId, type: 'default' });
+        }
+      }
+    }
+
+    const allNodes = [...existingNodes, ...newNodes];
+    const allEdges = [...existingEdges, ...newEdges];
+
+    setNodes(allNodes);
+    setEdges(allEdges);
+    saveChanges(allNodes, allEdges);
+  }, [nodes, edges, setNodes, setEdges, saveChanges]);
+
+  const handleImportFromAnalysis = useCallback(async () => {
+    setImportLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/analysis-summary`);
+      if (!res.ok) { alert('無法取得分析結果'); return; }
+      const summary: AnalysisSummary = await res.json();
+      if (!summary.pages || summary.pages.length === 0) { alert('尚無分析結果可匯入'); return; }
+
+      const hasExistingNodes = (archData?.nodes?.length ?? 0) > 0;
+      if (hasExistingNodes) {
+        const choice = prompt('目前已有架構節點。\n輸入 "取代" 清除現有架構後匯入，\n輸入 "合併" 保留現有架構並加入新頁面，\n或按取消放棄。');
+        if (!choice) return;
+        const trimmed = choice.trim();
+        if (trimmed === '取代') {
+          await importFromAnalysis(summary, 'replace');
+        } else if (trimmed === '合併') {
+          await importFromAnalysis(summary, 'merge');
+        } else {
+          alert('請輸入「取代」或「合併」');
+          return;
+        }
+      } else {
+        await importFromAnalysis(summary, 'replace');
+      }
+    } catch (err) {
+      console.error('[import] error:', err);
+      alert('匯入失敗，請稍後再試');
+    } finally {
+      setImportLoading(false);
+    }
+  }, [projectId, archData, importFromAnalysis]);
+
   const handleAddPage = () => {
     const newNode: Node = {
       id: `page-${Date.now()}`,
@@ -284,6 +416,17 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
         <button type="button" data-testid="add-page-btn" className="arch-flowchart-toolbar-btn" onClick={handleAddPage}>
           + 新增頁面
         </button>
+        {hasAnalysis && (
+          <button
+            type="button"
+            data-testid="import-analysis-btn"
+            className="arch-flowchart-toolbar-btn"
+            onClick={handleImportFromAnalysis}
+            disabled={importLoading}
+          >
+            {importLoading ? '匯入中...' : '📥 從分析匯入'}
+          </button>
+        )}
         <button type="button" className="arch-flowchart-toolbar-btn" onClick={() => useArchStore.getState().setArchData(null)}>
           重新引導
         </button>

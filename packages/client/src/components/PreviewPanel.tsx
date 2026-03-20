@@ -31,7 +31,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     if (e.data.type === 'show-page' && iframeRef.current?.contentWindow) {
       const name = e.data.name as string;
       try {
-        iframeRef.current.contentWindow.eval(`typeof showPage === 'function' && showPage(${JSON.stringify(name)})`);
+        (iframeRef.current.contentWindow as any).eval(`typeof showPage === 'function' && showPage(${JSON.stringify(name)})`);
       } catch {}
     }
   }, [effectiveMode, onElementClick, onIndicatorClick]);

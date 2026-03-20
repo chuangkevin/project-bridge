@@ -3,13 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ChatPanel, { ChatMessage } from '../components/ChatPanel';
 import DesignPanel from '../components/DesignPanel';
 import StyleTweakerPanel from '../components/StyleTweakerPanel';
-import PreviewPanel from '../components/PreviewPanel';
+import PreviewPanel, { InteractionMode } from '../components/PreviewPanel';
 import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector';
 import Toast from '../components/Toast';
 import AnnotationEditor from '../components/AnnotationEditor';
 import SpecPanel, { Annotation } from '../components/SpecPanel';
 import VersionHistoryPanel from '../components/VersionHistoryPanel';
 import TokenPanel, { DesignToken } from '../components/TokenPanel';
+import ApiBindingPanel from '../components/ApiBindingPanel';
+import ConstraintPanel from '../components/ConstraintPanel';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
@@ -63,9 +65,20 @@ export default function WorkspacePage() {
   const [tokens, setTokens] = useState<DesignToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(false);
 
+  // Interaction mode state (browse, annotate, api-binding)
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>('browse');
+
   // Annotation state
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+
+  // API binding state
+  const [apiBindingElement, setApiBindingElement] = useState<{
+    bridgeId: string;
+    tagName: string;
+  } | null>(null);
+  const [apiBindingIndicators, setApiBindingIndicators] = useState<{ bridgeId: string }[]>([]);
+  const [showConstraintPanel, setShowConstraintPanel] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<{
     bridgeId: string;
     tagName: string;
@@ -98,6 +111,7 @@ export default function WorkspacePage() {
 
   // Export dropdown state
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportingFramework, setExportingFramework] = useState<string | null>(null);
 
   // Share panel state
   const [showSharePanel, setShowSharePanel] = useState(false);
@@ -315,6 +329,37 @@ export default function WorkspacePage() {
     URL.revokeObjectURL(url);
   }, [html, project]);
 
+  const handleExportFramework = useCallback(async (framework: string) => {
+    if (!project || !html) return;
+    setExportingFramework(framework);
+    setShowExportMenu(false);
+    try {
+      const res = await fetch(`/api/projects/${id}/export-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ framework }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: '匯出失敗' }));
+        throw new Error(data.error || '匯出失敗');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = res.headers.get('Content-Disposition');
+      const filenameMatch = disposition?.match(/filename="([^"]+)"/);
+      a.download = filenameMatch ? filenameMatch[1] : `${project.name}-${framework}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToastMsg(`已匯出 ${framework} 專案`);
+    } catch (err: any) {
+      setToastMsg(err.message || '匯出失敗');
+    } finally {
+      setExportingFramework(null);
+    }
+  }, [project, html, id]);
+
   const handleOpenInNewTab = useCallback(() => {
     if (!html) return;
     const blob = new Blob([html], { type: 'text/html' });
@@ -358,6 +403,18 @@ export default function WorkspacePage() {
     setToastMsg('已停止分享');
   }, []);
 
+  // Fetch API binding indicators
+  const fetchApiBindingIndicators = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/projects/${id}/api-bindings`);
+      if (res.ok) {
+        const bindings = await res.json();
+        setApiBindingIndicators(bindings.map((b: any) => ({ bridgeId: b.bridgeId })));
+      }
+    } catch { /* silently fail */ }
+  }, [id]);
+
   // Annotation handlers
   const handleElementClick = useCallback((data: {
     bridgeId: string;
@@ -365,6 +422,15 @@ export default function WorkspacePage() {
     textContent: string;
     rect: { x: number; y: number; width: number; height: number };
   }) => {
+    // In API binding mode, open the binding panel instead
+    if (interactionMode === 'api-binding') {
+      setApiBindingElement({ bridgeId: data.bridgeId, tagName: data.tagName });
+      // Show constraint panel for form elements
+      const formTags = ['INPUT', 'SELECT', 'TEXTAREA'];
+      setShowConstraintPanel(formTags.includes(data.tagName.toUpperCase()));
+      return;
+    }
+
     const container = iframeContainerRef.current;
     const offsetX = container ? container.getBoundingClientRect().left : 300;
     const offsetY = container ? container.getBoundingClientRect().top : 48;
@@ -385,7 +451,7 @@ export default function WorkspacePage() {
       ...data,
       rect: { ...data.rect, x: absX, y: absY },
     });
-  }, []);
+  }, [interactionMode]);
 
   const handleSaveAnnotation = useCallback(async (text: string) => {
     if (!editingAnnotation || !id) return;
@@ -466,7 +532,11 @@ export default function WorkspacePage() {
         const active = document.activeElement;
         const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
         if (!isTyping && html) {
-          setAnnotationMode(prev => !prev);
+          setAnnotationMode(prev => {
+            const next = !prev;
+            setInteractionMode(next ? 'annotate' : 'browse');
+            return next;
+          });
         }
       }
       // F: toggle focus mode (when not typing in an input)
@@ -753,11 +823,70 @@ export default function WorkspacePage() {
                   borderRadius: 6,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
                   zIndex: 1000,
-                  minWidth: 170,
+                  minWidth: 210,
                   overflow: 'hidden',
                 }}
-                onMouseLeave={() => setShowExportMenu(false)}
+                onMouseLeave={() => { if (!exportingFramework) setShowExportMenu(false); }}
               >
+                <div style={{ padding: '6px 14px', fontSize: 11, color: '#888', borderBottom: '1px solid #3a3a4a', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  匯出為框架專案
+                </div>
+                {([
+                  { key: 'react', label: 'React', icon: '\u269B\uFE0F' },
+                  { key: 'vue3', label: 'Vue 3', icon: '\uD83D\uDFE2' },
+                  { key: 'nextjs', label: 'Next.js', icon: '\u25B2' },
+                  { key: 'nuxt3', label: 'Nuxt 3', icon: '\uD83D\uDFE9' },
+                ] as const).map(fw => (
+                  <button
+                    key={fw.key}
+                    type="button"
+                    disabled={!!exportingFramework}
+                    data-testid={`export-${fw.key}`}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '8px 14px',
+                      background: 'none',
+                      border: 'none',
+                      color: exportingFramework === fw.key ? '#a78bfa' : '#e0e0f0',
+                      fontSize: 13,
+                      textAlign: 'left',
+                      cursor: exportingFramework ? 'wait' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      opacity: exportingFramework && exportingFramework !== fw.key ? 0.5 : 1,
+                    }}
+                    onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = '#2a2a3e'; }}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    onClick={() => handleExportFramework(fw.key)}
+                  >
+                    {exportingFramework === fw.key ? '\u23F3' : fw.icon} {fw.label}
+                    {exportingFramework === fw.key && ' 匯出中...'}
+                  </button>
+                ))}
+                <div style={{ borderTop: '1px solid #3a3a4a', marginTop: 2 }} />
+                <button
+                  type="button"
+                  disabled={!!exportingFramework}
+                  data-testid="export-html"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 14px',
+                    background: 'none',
+                    border: 'none',
+                    color: exportingFramework === 'html' ? '#a78bfa' : '#e0e0f0',
+                    fontSize: 13,
+                    textAlign: 'left',
+                    cursor: exportingFramework ? 'wait' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = '#2a2a3e'; }}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  onClick={() => handleExportFramework('html')}
+                >
+                  {exportingFramework === 'html' ? '\u23F3 匯出中...' : '\uD83D\uDCC4 匯出 HTML 專案'}
+                </button>
+                <div style={{ borderTop: '1px solid #3a3a4a' }} />
                 <button
                   type="button"
                   style={{
@@ -776,7 +905,7 @@ export default function WorkspacePage() {
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   onClick={() => { handleExport(); setShowExportMenu(false); }}
                 >
-                  📥 下載 HTML
+                  📥 下載原始 HTML
                 </button>
                 <button
                   type="button"
@@ -798,6 +927,44 @@ export default function WorkspacePage() {
                 >
                   🔗 在新分頁開啟
                 </button>
+                <button
+                  type="button"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 14px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#e0e0f0',
+                    fontSize: 13,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  onClick={async () => {
+                    setShowExportMenu(false);
+                    try {
+                      const res = await fetch(`/api/projects/${id}/api-bindings/export`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${project!.name.replace(/[^a-z0-9\u4e00-\u9fff]/gi, '-')}-api-bindings.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } else {
+                        setToastMsg('匯出失敗');
+                      }
+                    } catch { setToastMsg('匯出失敗'); }
+                  }}
+                  data-testid="export-api-bindings"
+                >
+                  📋 API Bindings (JSON)
+                </button>
               </div>
             )}
           </div>
@@ -806,7 +973,12 @@ export default function WorkspacePage() {
               ...styles.annotateBtn,
               ...(annotationMode ? styles.annotateBtnActive : {}),
             }}
-            onClick={() => setAnnotationMode(!annotationMode)}
+            onClick={() => {
+              const next = !annotationMode;
+              setAnnotationMode(next);
+              setInteractionMode(next ? 'annotate' : 'browse');
+              if (next) { setApiBindingElement(null); setShowConstraintPanel(false); }
+            }}
             title={annotationMode ? 'Disable annotation mode (A)' : 'Enable annotation mode (A)'}
             data-testid="annotate-toggle"
           >
@@ -814,6 +986,29 @@ export default function WorkspacePage() {
               <path d="M10.5 1.5l2 2L4 12H2v-2L10.5 1.5z" />
             </svg>
             標注
+          </button>
+          <button
+            type="button"
+            style={{
+              ...styles.annotateBtn,
+              ...(interactionMode === 'api-binding' ? { backgroundColor: '#eff6ff', borderColor: '#2563eb', color: '#2563eb' } : {}),
+              ...(!html ? { opacity: 0.5 } : {}),
+            }}
+            onClick={() => {
+              const isActive = interactionMode === 'api-binding';
+              setInteractionMode(isActive ? 'browse' : 'api-binding');
+              setAnnotationMode(false);
+              if (!isActive) { fetchApiBindingIndicators(); }
+              if (isActive) { setApiBindingElement(null); setShowConstraintPanel(false); }
+            }}
+            disabled={!html}
+            title="API Binding mode"
+            data-testid="api-binding-toggle"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <path d="M2 4h10M2 7h10M2 10h6" />
+            </svg>
+            API
           </button>
           <button
             type="button"
@@ -972,6 +1167,12 @@ export default function WorkspacePage() {
           ✏️ 標注模式 — 點擊元件來修改或標注 · 按 <kbd style={styles.kbd}>A</kbd> 或 <kbd style={styles.kbd}>Esc</kbd> 退出
         </div>
       )}
+      {/* API binding mode banner */}
+      {interactionMode === 'api-binding' && (
+        <div style={{ ...styles.annotationBanner, background: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #2563eb' }}>
+          API Binding Mode — Click any element to define its API endpoint binding
+        </div>
+      )}
 
       {/* Main content */}
       <div style={styles.body}>
@@ -1075,9 +1276,11 @@ export default function WorkspacePage() {
                   html={html}
                   deviceSize={deviceSize}
                   annotationMode={annotationMode}
+                  interactionMode={interactionMode}
                   onElementClick={handleElementClick}
                   onIndicatorClick={handleIndicatorClick}
                   annotations={annotationIndicators}
+                  apiBindings={apiBindingIndicators}
                 />
               </div>
             )}
@@ -1188,6 +1391,26 @@ export default function WorkspacePage() {
           position={{ x: editingAnnotation.rect.x, y: editingAnnotation.rect.y }}
           onSave={handleSaveAnnotation}
           onCancel={() => { setEditingAnnotation(null); setQuickRegen(null); }}
+        />
+      )}
+
+      {/* API Binding Panel */}
+      {apiBindingElement && interactionMode === 'api-binding' && (
+        <ApiBindingPanel
+          projectId={project.id}
+          bridgeId={apiBindingElement.bridgeId}
+          tagName={apiBindingElement.tagName}
+          onClose={() => { setApiBindingElement(null); setShowConstraintPanel(false); }}
+          onSaved={fetchApiBindingIndicators}
+        />
+      )}
+
+      {/* Constraint Panel (shown alongside ApiBindingPanel for form elements) */}
+      {apiBindingElement && showConstraintPanel && interactionMode === 'api-binding' && (
+        <ConstraintPanel
+          projectId={project.id}
+          bridgeId={apiBindingElement.bridgeId}
+          onClose={() => setShowConstraintPanel(false)}
         />
       )}
 
