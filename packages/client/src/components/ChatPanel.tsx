@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
+import AnalysisPreviewPanel from './AnalysisPreviewPanel';
 
 function isHtmlContent(content: string): boolean {
   const t = content.trimStart().toLowerCase();
@@ -80,6 +81,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [artStyle, setArtStyle] = useState<ArtStyle | null>(null);
   const [artStyleLoading, setArtStyleLoading] = useState(false);
   const [uploadToast, setUploadToast] = useState<string | null>(null);
+  const [viewingAnalysis, setViewingAnalysis] = useState<any>(null);
   const [promptHistory, setPromptHistory] = useState<string[]>(() => loadHistory());
   const [inputFocused, setInputFocused] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -244,6 +246,17 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     }
     setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
   }, []);
+
+  const handleViewAnalysis = useCallback(async (fileId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/upload/${fileId}/analysis-status`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.status === 'done' && data.result) {
+        setViewingAnalysis(data.result);
+      }
+    } catch { /* ignore */ }
+  }, [projectId]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -682,9 +695,32 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           {attachedFiles.map(f => (
             <div key={f.id} style={styles.fileChipWrapper} data-testid="file-chip">
               <div style={styles.fileChip}>
-                <span style={styles.fileName}>{f.filename}</span>
+                {f.analysisStatus === 'ready' ? (
+                  <button
+                    type="button"
+                    style={{ ...styles.fileName, ...styles.fileNameClickable }}
+                    onClick={() => handleViewAnalysis(f.id)}
+                    title="檢視分析結果"
+                    data-testid="analysis-preview-btn"
+                  >
+                    {f.filename}
+                  </button>
+                ) : (
+                  <span style={styles.fileName}>{f.filename}</span>
+                )}
                 {f.analysisStatus === 'analyzing' && (
                   <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 500 }} data-testid="analysis-badge">◌ 分析中...</span>
+                )}
+                {f.analysisStatus === 'ready' && (
+                  <button
+                    type="button"
+                    style={styles.analysisReadyBadge}
+                    onClick={() => handleViewAnalysis(f.id)}
+                    data-testid="analysis-ready-badge"
+                    title="檢視分析結果"
+                  >
+                    ✓ 分析完成
+                  </button>
                 )}
                 {f.analysisStatus === 'error' && (
                   <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 500 }} data-testid="analysis-badge">⚠ 分析失敗</span>
@@ -867,6 +903,14 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         <div style={styles.uploadToast} data-testid="upload-toast">
           {uploadToast}
         </div>
+      )}
+
+      {/* Analysis preview panel */}
+      {viewingAnalysis && (
+        <AnalysisPreviewPanel
+          analysisResult={viewingAnalysis}
+          onClose={() => setViewingAnalysis(null)}
+        />
       )}
 
       {/* File text modal */}
@@ -1132,6 +1176,28 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
+  },
+  fileNameClickable: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    color: '#2563eb',
+    textDecoration: 'underline',
+    textDecorationColor: 'transparent',
+    transition: 'text-decoration-color 0.15s',
+    fontSize: 'inherit',
+    fontFamily: 'inherit',
+  },
+  analysisReadyBadge: {
+    padding: '1px 6px',
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+    borderRadius: '8px',
+    fontSize: '10px',
+    fontWeight: 600,
+    border: '1px solid #bbf7d0',
+    cursor: 'pointer',
   },
   extractedBadge: {
     padding: '1px 6px',
