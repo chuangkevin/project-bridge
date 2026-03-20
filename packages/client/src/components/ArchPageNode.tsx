@@ -1,24 +1,53 @@
 import { useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { useArchStore } from '../stores/useArchStore';
+import { useArchStore, ArchComponent } from '../stores/useArchStore';
+import ComponentEditorModal from './ComponentEditorModal';
 import './ArchFlowchart.css';
+
+const TYPE_ICONS: Record<string, string> = {
+  button: '🔘', input: '✏️', select: '📋', radio: '🔘', tab: '📑', card: '🃏', link: '🔗',
+};
 
 interface ArchPageNodeData {
   name: string;
   referenceFileUrl: string | null;
   viewport?: 'mobile' | 'desktop' | null;
+  components?: ArchComponent[];
   onRename: (id: string, name: string) => void;
   onUploadRef: (id: string) => void;
   onDelete: (id: string) => void;
   onViewportChange: (id: string, v: 'mobile' | 'desktop' | null) => void;
+  onComponentsChange?: (id: string, components: ArchComponent[]) => void;
+  pageNames?: string[];
 }
 
 export default function ArchPageNode({ id, data }: { id: string; data: ArchPageNodeData }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [editingComp, setEditingComp] = useState<ArchComponent | null | 'new'>(null);
   const { setTargetPage } = useArchStore();
+
+  const components = data.components || [];
+  const pageNames = data.pageNames || [];
 
   const handleViewportChange = (v: 'mobile' | 'desktop' | null) => {
     data.onViewportChange(id, data.viewport === v ? null : v);
+  };
+
+  const handleSaveComponent = (comp: ArchComponent) => {
+    let updated: ArchComponent[];
+    if (editingComp === 'new') {
+      updated = [...components, comp];
+    } else {
+      updated = components.map(c => c.id === comp.id ? comp : c);
+    }
+    data.onComponentsChange?.(id, updated);
+    setEditingComp(null);
+  };
+
+  const handleDeleteComponent = (compId: string) => {
+    const updated = components.filter(c => c.id !== compId);
+    data.onComponentsChange?.(id, updated);
   };
 
   return (
@@ -26,6 +55,7 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
       data-testid={`page-node-${data.name}`}
       className="arch-page-node"
       onContextMenu={(e) => { e.preventDefault(); setMenuOpen(true); }}
+      style={{ minWidth: expanded ? 220 : undefined }}
     >
       <Handle type="target" position={Position.Left} />
 
@@ -72,6 +102,45 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
         >
           {data.referenceFileUrl ? '換參考圖' : '+ 參考圖'}
         </button>
+
+        {/* Component list toggle */}
+        <button
+          type="button"
+          className="arch-page-node__upload-btn"
+          onClick={() => setExpanded(!expanded)}
+          style={{ marginTop: 4, fontSize: 11 }}
+        >
+          {expanded ? '▼' : '▶'} 元件 ({components.length})
+        </button>
+
+        {/* Expanded component list */}
+        {expanded && (
+          <div style={{ marginTop: 4, fontSize: 11, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {components.map(c => (
+              <div
+                key={c.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px', borderRadius: 4, background: '#f8f6fb', cursor: 'pointer' }}
+                onClick={() => setEditingComp(c)}
+                title={c.description || c.name}
+              >
+                <span>{TYPE_ICONS[c.type] || '·'}</span>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                {c.navigationTo && <span style={{ color: '#8E6FA7', fontSize: 10 }}>→</span>}
+                {c.states.length > 0 && <span style={{ color: '#64748b', fontSize: 10 }}>{c.states.length}態</span>}
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 10, padding: 0 }}
+                  onClick={(e) => { e.stopPropagation(); handleDeleteComponent(c.id); }}
+                >✕</button>
+              </div>
+            ))}
+            <button
+              type="button"
+              style={{ padding: '2px 4px', border: '1px dashed #cbd5e1', borderRadius: 4, background: 'none', color: '#64748b', fontSize: 11, cursor: 'pointer' }}
+              onClick={() => setEditingComp('new')}
+            >+ 新增元件</button>
+          </div>
+        )}
       </div>
 
       <Handle type="source" position={Position.Right} />
@@ -97,6 +166,16 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
             ))}
           </div>
         </>
+      )}
+
+      {/* Component Editor Modal */}
+      {editingComp !== null && (
+        <ComponentEditorModal
+          component={editingComp === 'new' ? null : editingComp}
+          pageNames={pageNames}
+          onSave={handleSaveComponent}
+          onCancel={() => setEditingComp(null)}
+        />
       )}
     </div>
   );

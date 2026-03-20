@@ -1,5 +1,21 @@
 import { create } from 'zustand';
 
+export interface ArchComponent {
+  id: string;
+  name: string;
+  type: 'button' | 'input' | 'select' | 'radio' | 'tab' | 'card' | 'link';
+  description: string;
+  constraints: {
+    type?: string | null;
+    min?: number | null;
+    max?: number | null;
+    pattern?: string | null;
+    required?: boolean;
+  };
+  states: Array<{ value: string; targetPage: string }>;
+  navigationTo: string | null;
+}
+
 export interface ArchNode {
   id: string;
   nodeType: 'page' | 'component';
@@ -10,6 +26,7 @@ export interface ArchNode {
   interactions?: Array<{ label: string; outcome: string }>;
   states?: string[];
   viewport?: 'mobile' | 'desktop' | null;
+  components?: ArchComponent[];
 }
 
 export interface ArchEdge {

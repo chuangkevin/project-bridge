@@ -40,6 +40,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
   const handleUploadRefRef = useRef<(nodeId: string) => void>(() => {});
   const handleDeleteNodeRef = useRef<(nodeId: string) => void>(() => {});
   const handleViewportChangeRef = useRef<(nodeId: string, v: 'mobile' | 'desktop' | null) => void>(() => {});
+  const handleComponentsChangeRef = useRef<(nodeId: string, comps: any[]) => void>(() => {});
   const versionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versions, setVersions] = useState<{ id: string; version: number; description: string; created_at: string }[]>([]);
@@ -79,10 +80,13 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
         referenceFileId: n.referenceFileId,
         viewport: n.viewport || null,
         states: n.states || [],
+        components: n.components || [],
         onRename: (nodeId: string, newName: string) => handleRenameRef.current(nodeId, newName),
         onUploadRef: (nodeId: string) => handleUploadRefRef.current(nodeId),
         onDelete: (nodeId: string) => handleDeleteNodeRef.current(nodeId),
         onViewportChange: (nodeId: string, v: 'mobile' | 'desktop' | null) => handleViewportChangeRef.current(nodeId, v),
+        onComponentsChange: (nodeId: string, comps: any[]) => handleComponentsChangeRef.current(nodeId, comps),
+        pageNames: (archData?.nodes || []).map(n => n.name),
       },
     }));
 
@@ -111,6 +115,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
         referenceFileUrl: (n.data.referenceFileUrl as string) || null,
         viewport: (n.data.viewport as 'mobile' | 'desktop' | null) || null,
         states: (n.data.states as string[]) || [],
+        components: (n.data.components as any[]) || [],
       })),
       edges: updatedEdges.map(e => ({ id: e.id, source: e.source, target: e.target, label: String(e.label || '') })),
     };
@@ -154,6 +159,15 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
     });
   }, [edges, saveChanges]);
   handleViewportChangeRef.current = handleViewportChange;
+
+  const handleComponentsChange = useCallback((nodeId: string, comps: any[]) => {
+    setNodes(nds => {
+      const updated = nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, components: comps } } : n);
+      saveChanges(updated, edges);
+      return updated;
+    });
+  }, [edges, saveChanges]);
+  handleComponentsChangeRef.current = handleComponentsChange;
 
   const uploadFile = useCallback(async (file: File, nodeId: string) => {
     const nodeName = nodes.find(n => n.id === nodeId)?.data.name as string || '';

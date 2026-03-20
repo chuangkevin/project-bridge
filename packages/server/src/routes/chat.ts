@@ -585,9 +585,42 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
                 outgoingEdges[src].push(tgt);
               }
             }
-            architectureBlock += `\nPage navigation requirements (MUST implement exactly — do NOT invent links not listed here):\n`;
-            for (const [pageName, targets] of Object.entries(outgoingEdges)) {
-              architectureBlock += `- Page "${pageName}": clickable elements (cards, buttons, links) MUST call showPage('${targets[0]}')${targets.length > 1 ? ` or showPage('${targets.slice(1).join("' / showPage('")}')` : ''} as appropriate\n`;
+            // Check if any node has components defined
+            const hasComponents = archData.nodes.some((n: any) => n.components && n.components.length > 0);
+
+            if (hasComponents) {
+              // Component-level navigation (upgraded format)
+              architectureBlock += `\nComponent-level navigation (MUST implement EXACTLY — do NOT invent links not listed here):\n`;
+              for (const node of archData.nodes) {
+                if (node.components && node.components.length > 0) {
+                  architectureBlock += `\nPage "${node.name}" components:\n`;
+                  for (const comp of node.components) {
+                    let line = `  - ${comp.name} [${comp.type}]`;
+                    if (comp.description) line += `: ${comp.description}`;
+                    if (comp.navigationTo) line += ` → onclick showPage('${comp.navigationTo}')`;
+                    if (comp.constraints && comp.constraints.type) {
+                      line += ` | 限制: type=${comp.constraints.type}`;
+                      if (comp.constraints.min != null) line += `, min=${comp.constraints.min}`;
+                      if (comp.constraints.max != null) line += `, max=${comp.constraints.max}`;
+                      if (comp.constraints.required) line += `, required`;
+                    }
+                    architectureBlock += line + '\n';
+                    // Multi-state components
+                    if (comp.states && comp.states.length > 0) {
+                      for (const state of comp.states) {
+                        architectureBlock += `      選「${state.value}」→ showPage('${state.targetPage}')\n`;
+                      }
+                    }
+                  }
+                }
+              }
+              architectureBlock += `Pages with NO component navigation should use page-level edges above.\n`;
+            } else {
+              // Legacy page-level navigation
+              architectureBlock += `\nPage navigation requirements (MUST implement exactly — do NOT invent links not listed here):\n`;
+              for (const [pageName, targets] of Object.entries(outgoingEdges)) {
+                architectureBlock += `- Page "${pageName}": clickable elements (cards, buttons, links) MUST call showPage('${targets[0]}')${targets.length > 1 ? ` or showPage('${targets.slice(1).join("' / showPage('")}')` : ''} as appropriate\n`;
+              }
             }
             architectureBlock += `Pages with NO outgoing edges should have a back/home button that returns to the first page.\n`;
           }
