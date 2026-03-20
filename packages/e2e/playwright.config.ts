@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 60000,
   expect: { timeout: 10000 },
   fullyParallel: false,
-  retries: 1,
+  retries: 0,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: 'http://localhost:5188',
@@ -30,18 +30,16 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm --filter server dev',
+      command: 'cd ../../packages/server && node dist/index.js',
       port: 3001,
-      cwd: '../..',
       reuseExistingServer: true,
-      timeout: 30000,
+      timeout: 60000,
     },
     {
-      command: 'pnpm --filter client dev -- --port 5188',
+      command: 'cd ../../packages/client && npx vite --port 5188 --host 0.0.0.0',
       port: 5188,
-      cwd: '../..',
       reuseExistingServer: true,
-      timeout: 30000,
+      timeout: 60000,
     },
   ],
 });
