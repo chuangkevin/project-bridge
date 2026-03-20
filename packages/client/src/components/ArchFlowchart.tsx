@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import {
   ReactFlow,
   addEdge,
@@ -25,9 +25,10 @@ interface Props {
   projectId: string;
   onSwitchToDesign: () => void;
   onGenerate?: () => void;
+  onArchDataChange?: (data: any) => void;
 }
 
-export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate }: Props) {
+export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate, onArchDataChange }: Props) {
   const { archData, patchArchData } = useArchStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -39,6 +40,33 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate 
   const handleUploadRefRef = useRef<(nodeId: string) => void>(() => {});
   const handleDeleteNodeRef = useRef<(nodeId: string) => void>(() => {});
   const handleViewportChangeRef = useRef<(nodeId: string, v: 'mobile' | 'desktop' | null) => void>(() => {});
+  const versionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versions, setVersions] = useState<{ id: string; version: number; description: string; created_at: string }[]>([]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => { if (versionSaveTimerRef.current) clearTimeout(versionSaveTimerRef.current); };
+  }, []);
+
+  const loadVersions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/architecture/versions`);
+      if (res.ok) { const data = await res.json(); setVersions(data.versions || []); }
+    } catch {}
+  }, [projectId]);
+
+  const handleRestore = useCallback(async (versionId: string) => {
+    if (!confirm('確定要還原到此版本？目前的架構會自動備份。')) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/architecture/versions/${versionId}/restore`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.arch_data && onArchDataChange) onArchDataChange(data.arch_data);
+        loadVersions();
+      }
+    } catch {}
+  }, [projectId, onArchDataChange, loadVersions]);
 
   const toRfNodes = (nodes: ArchNode[]): Node[] =>
     nodes.map(n => ({
@@ -87,6 +115,15 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate 
       edges: updatedEdges.map(e => ({ id: e.id, source: e.source, target: e.target, label: String(e.label || '') })),
     };
     patchArchData(projectId, newArchData);
+    // Debounced auto-save version
+    if (versionSaveTimerRef.current) clearTimeout(versionSaveTimerRef.current);
+    versionSaveTimerRef.current = setTimeout(() => {
+      fetch(`/api/projects/${projectId}/architecture/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: '自動儲存' }),
+      }).catch(() => {});
+    }, 5000);
   }, [archData, projectId, patchArchData]);
 
   const handleRename = useCallback((nodeId: string, newName: string) => {
@@ -210,10 +247,44 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate 
         <button type="button" className="arch-flowchart-toolbar-btn" onClick={() => useArchStore.getState().setArchData(null)}>
           重新引導
         </button>
+        <button type="button" className="arch-flowchart-toolbar-btn" onClick={() => { setShowVersionHistory(!showVersionHistory); if (!showVersionHistory) loadVersions(); }}>
+          歷史版本
+        </button>
+        <button type="button" className="arch-flowchart-toolbar-btn" onClick={() => {
+          fetch(`/api/projects/${projectId}/architecture/versions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: '手動儲存' }),
+          }).then(() => { if (showVersionHistory) loadVersions(); });
+        }}>
+          💾 儲存版本
+        </button>
         <button type="button" className="arch-flowchart-toolbar-btn-primary" onClick={onGenerate ?? onSwitchToDesign}>
           開始生成 ▶
         </button>
       </div>
+
+      {/* Version History Panel */}
+      {showVersionHistory && (
+        <div style={{ position: 'absolute', top: 48, right: 8, width: 280, maxHeight: 400, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, overflow: 'auto', fontSize: 13 }}>
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #e2e8f0', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>架構歷史版本</span>
+            <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#94a3b8' }} onClick={() => setShowVersionHistory(false)}>&times;</button>
+          </div>
+          {versions.length === 0 && (
+            <div style={{ padding: 16, color: '#94a3b8', textAlign: 'center' }}>尚無版本記錄</div>
+          )}
+          {versions.map(v => (
+            <div key={v.id} style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 500 }}>v{v.version} — {v.description}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(v.created_at).toLocaleString('zh-TW')}</div>
+              </div>
+              <button type="button" style={{ padding: '2px 8px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', fontSize: 11 }} onClick={() => handleRestore(v.id)}>還原</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="arch-flowchart-canvas">
         <ReactFlow

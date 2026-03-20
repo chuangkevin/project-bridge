@@ -128,4 +128,72 @@ router.get('/:id/files/:fileId/thumbnail', async (req: Request, res: Response) =
   }
 });
 
+// ─── Architecture Versioning ─────────────────────────
+
+// GET /api/projects/:id/architecture/versions
+router.get('/:id/architecture/versions', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const versions = db.prepare(
+    'SELECT id, version, description, created_at FROM architecture_versions WHERE project_id = ? ORDER BY version DESC LIMIT 50'
+  ).all(projectId);
+  return res.json({ versions });
+});
+
+// POST /api/projects/:id/architecture/versions — save a new version
+router.post('/:id/architecture/versions', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const { description } = req.body;
+
+  // Get current arch_data
+  const project = db.prepare('SELECT arch_data FROM projects WHERE id = ?').get(projectId) as any;
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project.arch_data) return res.status(400).json({ error: 'No architecture data to save' });
+
+  // Auto-increment version
+  const maxRow = db.prepare(
+    'SELECT MAX(version) as maxV FROM architecture_versions WHERE project_id = ?'
+  ).get(projectId) as any;
+  const newVersion = (maxRow?.maxV || 0) + 1;
+
+  const id = uuidv4();
+  db.prepare(
+    'INSERT INTO architecture_versions (id, project_id, version, arch_data, description) VALUES (?, ?, ?, ?, ?)'
+  ).run(id, projectId, newVersion, project.arch_data, description || `Version ${newVersion}`);
+
+  // Auto-prune: keep only last 50
+  db.prepare(
+    'DELETE FROM architecture_versions WHERE project_id = ? AND version NOT IN (SELECT version FROM architecture_versions WHERE project_id = ? ORDER BY version DESC LIMIT 50)'
+  ).run(projectId, projectId);
+
+  return res.json({ id, version: newVersion });
+});
+
+// POST /api/projects/:id/architecture/versions/:versionId/restore
+router.post('/:id/architecture/versions/:versionId/restore', (req: Request, res: Response) => {
+  const { id: projectId, versionId } = req.params;
+
+  // Get the version to restore
+  const version = db.prepare(
+    'SELECT arch_data FROM architecture_versions WHERE id = ? AND project_id = ?'
+  ).get(versionId, projectId) as any;
+  if (!version) return res.status(404).json({ error: 'Version not found' });
+
+  // Safety snapshot: save current state before restoring
+  const project = db.prepare('SELECT arch_data FROM projects WHERE id = ?').get(projectId) as any;
+  if (project?.arch_data) {
+    const maxRow = db.prepare(
+      'SELECT MAX(version) as maxV FROM architecture_versions WHERE project_id = ?'
+    ).get(projectId) as any;
+    const safetyVersion = (maxRow?.maxV || 0) + 1;
+    db.prepare(
+      'INSERT INTO architecture_versions (id, project_id, version, arch_data, description) VALUES (?, ?, ?, ?, ?)'
+    ).run(uuidv4(), projectId, safetyVersion, project.arch_data, '還原前自動備份');
+  }
+
+  // Restore
+  db.prepare('UPDATE projects SET arch_data = ? WHERE id = ?').run(version.arch_data, projectId);
+
+  return res.json({ success: true, arch_data: JSON.parse(version.arch_data) });
+});
+
 export default router;
