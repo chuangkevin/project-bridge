@@ -17,6 +17,9 @@ import prototypesRouter from './routes/prototypes';
 import platformShellRouter from './routes/platformShell';
 import architectureRouter from './routes/architecture';
 import crawlRouter from './routes/crawl';
+import apiBindingsRouter from './routes/apiBindings';
+import componentDependenciesRouter from './routes/componentDependencies';
+import elementConstraintsRouter from './routes/elementConstraints';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,6 +42,9 @@ app.use('/api/projects', prototypesRouter);
 app.use('/api/projects', platformShellRouter);
 app.use('/api/projects', architectureRouter);
 app.use('/api/projects', crawlRouter);
+app.use('/api/projects', apiBindingsRouter);
+app.use('/api/projects', componentDependenciesRouter);
+app.use('/api/projects', elementConstraintsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

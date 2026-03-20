@@ -2,7 +2,9 @@ export const BRIDGE_SCRIPT = `
 <script>
 (function() {
   var annotationMode = false;
+  var apiBindingMode = false;
   var indicators = [];
+  var apiIndicators = [];
 
   function findBridgeId(el) {
     while (el && el !== document.body && el !== document.documentElement) {
@@ -17,7 +19,7 @@ export const BRIDGE_SCRIPT = `
   var hoveredEl = null;
 
   document.addEventListener('mouseover', function(e) {
-    if (!annotationMode) return;
+    if (!annotationMode && !apiBindingMode) return;
     var target = findBridgeId(e.target);
     if (hoveredEl && hoveredEl !== target) {
       hoveredEl.style.outline = '';
@@ -25,14 +27,19 @@ export const BRIDGE_SCRIPT = `
       hoveredEl = null;
     }
     if (target) {
-      target.style.outline = '2px dashed #3b82f6';
-      target.style.outlineOffset = '2px';
+      if (apiBindingMode) {
+        target.style.outline = '2px solid #2563eb';
+        target.style.outlineOffset = '2px';
+      } else {
+        target.style.outline = '2px dashed #3b82f6';
+        target.style.outlineOffset = '2px';
+      }
       hoveredEl = target;
     }
   }, true);
 
   document.addEventListener('mouseout', function(e) {
-    if (!annotationMode) return;
+    if (!annotationMode && !apiBindingMode) return;
     var target = findBridgeId(e.target);
     if (target && target === hoveredEl) {
       target.style.outline = '';
@@ -42,7 +49,7 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('click', function(e) {
-    if (!annotationMode) return;
+    if (!annotationMode && !apiBindingMode) return;
     e.preventDefault();
     e.stopPropagation();
     var target = findBridgeId(e.target);
@@ -144,6 +151,33 @@ export const BRIDGE_SCRIPT = `
         var npEl = document.getElementById(npName);
         if (npEl) { npEl.scrollIntoView(); }
       }
+    } else if (e.data.type === 'set-api-binding-mode') {
+      apiBindingMode = !!e.data.enabled;
+      if (apiBindingMode) {
+        annotationMode = false;
+        document.body.style.cursor = 'pointer';
+      } else {
+        document.body.style.cursor = '';
+        if (hoveredEl) {
+          hoveredEl.style.outline = '';
+          hoveredEl.style.outlineOffset = '';
+          hoveredEl = null;
+        }
+      }
+    } else if (e.data.type === 'show-api-indicators') {
+      clearApiIndicators();
+      var bindings = e.data.bindings || [];
+      bindings.forEach(function(b) {
+        var el = document.querySelector('[data-bridge-id="' + b.bridgeId + '"]');
+        if (!el) return;
+        var rect = el.getBoundingClientRect();
+        var badge = document.createElement('div');
+        badge.className = 'bridge-api-indicator';
+        badge.textContent = 'API';
+        badge.style.cssText = 'position:fixed;top:' + (rect.top - 6) + 'px;left:' + (rect.left - 6) + 'px;padding:1px 4px;border-radius:3px;background:#2563eb;color:#fff;font-size:9px;font-weight:700;z-index:99999;pointer-events:none;font-family:sans-serif;line-height:1.2;';
+        document.body.appendChild(badge);
+        apiIndicators.push(badge);
+      });
     } else if (e.data.type === 'swap-component') {
       var el = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
       if (el) {
@@ -151,6 +185,13 @@ export const BRIDGE_SCRIPT = `
       }
     }
   });
+
+  function clearApiIndicators() {
+    apiIndicators.forEach(function(el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    apiIndicators = [];
+  }
 })();
 </script>
 `;
