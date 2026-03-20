@@ -3,6 +3,8 @@ export const BRIDGE_SCRIPT = `
 (function() {
   var annotationMode = false;
   var apiBindingMode = false;
+  var visualEditMode = false;
+  var visualHoveredEl = null;
   var indicators = [];
   var apiIndicators = [];
 
@@ -19,8 +21,21 @@ export const BRIDGE_SCRIPT = `
   var hoveredEl = null;
 
   document.addEventListener('mouseover', function(e) {
-    if (!annotationMode && !apiBindingMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
     var target = findBridgeId(e.target);
+    if (visualEditMode) {
+      if (visualHoveredEl && visualHoveredEl !== target) {
+        visualHoveredEl.style.outline = '';
+        visualHoveredEl.style.outlineOffset = '';
+        visualHoveredEl = null;
+      }
+      if (target) {
+        target.style.outline = '2px solid #3b82f6';
+        target.style.outlineOffset = '2px';
+        visualHoveredEl = target;
+      }
+      return;
+    }
     if (hoveredEl && hoveredEl !== target) {
       hoveredEl.style.outline = '';
       hoveredEl.style.outlineOffset = '';
@@ -39,7 +54,16 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('mouseout', function(e) {
-    if (!annotationMode && !apiBindingMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
+    if (visualEditMode) {
+      var vTarget = findBridgeId(e.target);
+      if (vTarget && vTarget === visualHoveredEl) {
+        vTarget.style.outline = '';
+        vTarget.style.outlineOffset = '';
+        visualHoveredEl = null;
+      }
+      return;
+    }
     var target = findBridgeId(e.target);
     if (target && target === hoveredEl) {
       target.style.outline = '';
@@ -49,13 +73,35 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('click', function(e) {
-    if (!annotationMode && !apiBindingMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
     e.preventDefault();
     e.stopPropagation();
     var target = findBridgeId(e.target);
     if (!target) return;
     var bridgeId = target.getAttribute('data-bridge-id');
     var rect = target.getBoundingClientRect();
+    if (visualEditMode) {
+      var cs = window.getComputedStyle(target);
+      window.parent.postMessage({
+        type: 'element-selected',
+        bridgeId: bridgeId,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        computedStyles: {
+          backgroundColor: cs.backgroundColor,
+          color: cs.color,
+          fontSize: cs.fontSize,
+          fontFamily: cs.fontFamily,
+          fontWeight: cs.fontWeight,
+          padding: cs.padding,
+          margin: cs.margin,
+          borderRadius: cs.borderRadius,
+          opacity: cs.opacity,
+          width: cs.width,
+          height: cs.height
+        }
+      }, '*');
+      return;
+    }
     window.parent.postMessage({
       type: 'element-click',
       bridgeId: bridgeId,
@@ -183,6 +229,56 @@ export const BRIDGE_SCRIPT = `
       if (el) {
         el.outerHTML = e.data.html;
       }
+    } else if (e.data.type === 'set-visual-edit-mode') {
+      visualEditMode = !!e.data.enabled;
+      if (visualEditMode) {
+        annotationMode = false;
+        apiBindingMode = false;
+        document.body.style.cursor = 'default';
+      } else {
+        document.body.style.cursor = '';
+        if (visualHoveredEl) {
+          visualHoveredEl.style.outline = '';
+          visualHoveredEl.style.outlineOffset = '';
+          visualHoveredEl = null;
+        }
+      }
+    } else if (e.data.type === 'apply-style-change') {
+      var scEl = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
+      if (scEl) {
+        scEl.style[e.data.property] = e.data.value;
+      }
+    } else if (e.data.type === 'apply-position-change') {
+      var posEl = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
+      if (posEl) {
+        posEl.style.transform = 'translate(' + e.data.deltaX + 'px, ' + e.data.deltaY + 'px)';
+      }
+    } else if (e.data.type === 'apply-resize') {
+      var rsEl = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
+      if (rsEl) {
+        rsEl.style.width = e.data.width + 'px';
+        rsEl.style.height = e.data.height + 'px';
+      }
+    } else if (e.data.type === 'get-element-rect') {
+      var rectEl = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
+      if (rectEl) {
+        var elRect = rectEl.getBoundingClientRect();
+        window.parent.postMessage({
+          type: 'element-rect',
+          bridgeId: e.data.bridgeId,
+          rect: { x: elRect.x, y: elRect.y, width: elRect.width, height: elRect.height },
+          scrollX: window.scrollX,
+          scrollY: window.scrollY
+        }, '*');
+      }
+    } else if (e.data.type === 'apply-patches') {
+      var patches = e.data.patches || [];
+      patches.forEach(function(p) {
+        var pEl = document.querySelector('[data-bridge-id="' + p.bridgeId + '"]');
+        if (pEl) {
+          pEl.style[p.property] = p.value;
+        }
+      });
     }
   });
 
