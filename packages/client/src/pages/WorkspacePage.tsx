@@ -12,6 +12,7 @@ import VersionHistoryPanel from '../components/VersionHistoryPanel';
 import TokenPanel, { DesignToken } from '../components/TokenPanel';
 import ApiBindingPanel from '../components/ApiBindingPanel';
 import ConstraintPanel from '../components/ConstraintPanel';
+import VisualEditor from '../components/VisualEditor';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
@@ -1012,6 +1013,25 @@ export default function WorkspacePage() {
           </button>
           <button
             type="button"
+            style={{
+              ...styles.annotateBtn,
+              ...(interactionMode === 'visual-edit' ? { backgroundColor: '#faf5ff', borderColor: '#8E6FA7', color: '#8E6FA7' } : {}),
+              ...(!html ? { opacity: 0.5 } : {}),
+            }}
+            onClick={() => {
+              const isActive = interactionMode === 'visual-edit';
+              setInteractionMode(isActive ? 'browse' : 'visual-edit');
+              setAnnotationMode(false);
+              if (isActive) { /* deactivate */ }
+            }}
+            disabled={!html}
+            title="視覺編輯模式"
+            data-testid="visual-edit-toggle"
+          >
+            ✏️ 編輯
+          </button>
+          <button
+            type="button"
             style={styles.historyBtn}
             onClick={() => setFocusMode(true)}
             title="專注模式 (F)"
@@ -1282,6 +1302,13 @@ export default function WorkspacePage() {
                   annotations={annotationIndicators}
                   apiBindings={apiBindingIndicators}
                 />
+                {interactionMode === 'visual-edit' && id && (
+                  <VisualEditor
+                    projectId={id}
+                    iframeRef={{ current: iframeContainerRef.current?.querySelector('iframe') as HTMLIFrameElement | null } as React.RefObject<HTMLIFrameElement>}
+                    active={interactionMode === 'visual-edit'}
+                  />
+                )}
               </div>
             )}
           </div>

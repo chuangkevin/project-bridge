@@ -23,9 +23,9 @@
 
 ## 4. Integration
 
-- [ ] 4.1 Add Visual Edit mode toggle in WorkspacePage toolbar
-- [ ] 4.2 Render VisualEditor when mode active, pass iframeRef
-- [ ] 4.3 Send set-visual-edit-mode to iframe on toggle
-- [ ] 4.4 Load patches on prototype load, clear on full regeneration
-- [ ] 4.5 E2E test: select element, change color, verify patch saved
-- [ ] 4.6 Commit
+- [x] 4.1 Add Visual Edit mode toggle in WorkspacePage toolbar
+- [x] 4.2 Render VisualEditor when mode active, pass iframeRef
+- [x] 4.3 Send set-visual-edit-mode to iframe on toggle
+- [x] 4.4 Load patches on prototype load, clear on full regeneration
+- [x] 4.5 E2E test: select element, change color, verify patch saved
+- [x] 4.6 Commit
