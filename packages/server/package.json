@@ -20,6 +20,7 @@
     "openai": "^4.73.0",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^4.9.155",
+    "playwright": "^1.58.2",
     "sharp": "^0.34.5",
     "tesseract.js": "^5.1.1",
     "uuid": "^10.0.0",

@@ -16,6 +16,7 @@ import globalDesignRouter from './routes/globalDesign';
 import prototypesRouter from './routes/prototypes';
 import platformShellRouter from './routes/platformShell';
 import architectureRouter from './routes/architecture';
+import crawlRouter from './routes/crawl';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,6 +38,7 @@ app.use('/api/global-design', globalDesignRouter);
 app.use('/api/projects', prototypesRouter);
 app.use('/api/projects', platformShellRouter);
 app.use('/api/projects', architectureRouter);
+app.use('/api/projects', crawlRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
