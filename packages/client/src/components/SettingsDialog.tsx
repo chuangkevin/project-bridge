@@ -23,7 +23,7 @@ export default function SettingsDialog({ onClose }: Props) {
           setApiKey(keySetting.value);
         }
       } catch {
-        setMessage({ type: 'error', text: 'Failed to load settings' });
+        setMessage({ type: 'error', text: '載入設定失敗' });
       } finally {
         setLoading(false);
       }
@@ -40,9 +40,9 @@ export default function SettingsDialog({ onClose }: Props) {
         body: JSON.stringify({ key: 'gemini_api_key', value: apiKey }),
       });
       if (!res.ok) throw new Error('Failed to save');
-      setMessage({ type: 'success', text: 'API key saved successfully' });
+      setMessage({ type: 'success', text: 'API key 已儲存' });
     } catch {
-      setMessage({ type: 'error', text: 'Failed to save API key' });
+      setMessage({ type: 'error', text: '儲存 API key 失敗' });
     } finally {
       setSaving(false);
     }
@@ -51,15 +51,15 @@ export default function SettingsDialog({ onClose }: Props) {
   return (
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.dialog} onClick={e => e.stopPropagation()}>
-        <h2 style={styles.title}>Settings</h2>
+        <h2 style={styles.title}>設定</h2>
 
         {loading ? (
-          <p style={styles.loadingText}>Loading...</p>
+          <p style={styles.loadingText}>載入中...</p>
         ) : (
           <>
             {envKeySet && (
               <div style={styles.envNotice}>
-                Gemini API key is set via environment variable. The value below will override it.
+                Gemini API key 已透過環境變數設定。以下的值將會覆蓋它。
               </div>
             )}
             <label style={styles.label}>Gemini API Key</label>
@@ -78,10 +78,10 @@ export default function SettingsDialog({ onClose }: Props) {
             )}
             <div style={styles.actions}>
               <button type="button" style={styles.cancelBtn} onClick={onClose}>
-                Close
+                關閉
               </button>
               <button style={styles.saveBtn} onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? '儲存中...' : '儲存'}
               </button>
             </div>
           </>

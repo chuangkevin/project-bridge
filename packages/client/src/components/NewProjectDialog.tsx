@@ -41,24 +41,24 @@ export default function NewProjectDialog({ onClose, onCreated }: Props) {
   return (
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.dialog} onClick={e => e.stopPropagation()}>
-        <h2 style={styles.title}>New Project</h2>
+        <h2 style={styles.title}>新增專案</h2>
         <form onSubmit={handleSubmit}>
-          <label style={styles.label}>Project Name</label>
+          <label style={styles.label}>專案名稱</label>
           <input
             ref={inputRef}
             style={styles.input}
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="My awesome prototype"
+            placeholder="我的原型專案"
             disabled={submitting}
           />
           {error && <p style={styles.error}>{error}</p>}
           <div style={styles.actions}>
             <button type="button" style={styles.cancelBtn} onClick={onClose} disabled={submitting}>
-              Cancel
+              取消
             </button>
             <button type="submit" style={styles.createBtn} disabled={submitting || !name.trim()} data-testid="create-project-btn">
-              {submitting ? 'Creating...' : 'Create'}
+              {submitting ? '建立中...' : '建立'}
             </button>
           </div>
         </form>

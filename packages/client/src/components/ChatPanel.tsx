@@ -461,7 +461,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h3 style={styles.headerTitle}>Chat</h3>
+        <h3 style={styles.headerTitle}>對話</h3>
       </div>
 
       {/* Generation progress bar */}
@@ -560,14 +560,14 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         data-testid="drop-zone"
       >
         <span style={styles.dropText}>
-          {dragOver ? 'Drop file here' : 'Drag & drop files here'}
+          {dragOver ? '放開以上傳' : '拖放檔案到這裡'}
         </span>
       </div>
 
       <div style={styles.messageList}>
         {displayMessages.length === 0 && !streaming && (
           <div style={styles.emptyChat}>
-            <p style={styles.emptyChatText}>Describe your UI to start generating a prototype.</p>
+            <p style={styles.emptyChatText}>描述你的 UI 來開始生成原型。</p>
           </div>
         )}
         {displayMessages.map((msg, idx) => {
@@ -658,7 +658,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         {streaming && !streamingContent && (
           <div style={styles.assistantMsgRow}>
             <div style={styles.assistantBubble}>
-              <span style={styles.thinking}>Thinking...</span>
+              <span style={styles.thinking}>思考中...</span>
             </div>
           </div>
         )}
@@ -799,7 +799,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         <button
           style={styles.attachBtn}
           onClick={() => fileInputRef.current?.click()}
-          title="Attach file"
+          title="附加檔案"
           disabled={uploading || streaming}
           data-testid="attach-file-btn"
         >
@@ -815,7 +815,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           onKeyDown={handleKeyDown}
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
-          placeholder="Describe your UI..."
+          placeholder="描述你的 UI..."
           rows={2}
           disabled={streaming}
         />
@@ -854,7 +854,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               rows={12}
             />
             <div style={styles.modalActions}>
-              <button style={styles.modalCancelBtn} onClick={() => setViewingFile(null)}>Close</button>
+              <button style={styles.modalCancelBtn} onClick={() => setViewingFile(null)}>關閉</button>
               <button
                 style={styles.modalSaveBtn}
                 onClick={() => {
@@ -864,7 +864,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   setViewingFile(null);
                 }}
               >
-                Update
+                更新
               </button>
             </div>
           </div>

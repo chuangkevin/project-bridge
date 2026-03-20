@@ -154,13 +154,13 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
           <div style={{ display: 'flex', gap: 4 }}>
             {projectId && (
               <>
-                <button style={{ ...styles.tabBtn, ...(tab === 'editor' ? styles.tabBtnActive : {}) }} onClick={() => setTab('editor')}>Editor</button>
-                <button style={{ ...styles.tabBtn, ...(tab === 'tokens' ? styles.tabBtnActive : {}) }} onClick={() => setTab('tokens')}>CSS Vars</button>
+                <button style={{ ...styles.tabBtn, ...(tab === 'editor' ? styles.tabBtnActive : {}) }} onClick={() => setTab('editor')}>編輯器</button>
+                <button style={{ ...styles.tabBtn, ...(tab === 'tokens' ? styles.tabBtnActive : {}) }} onClick={() => setTab('tokens')}>CSS 變數</button>
               </>
             )}
             {!projectId && <span style={styles.title}>Design Tokens</span>}
           </div>
-          <button style={styles.closeBtn} onClick={onClose} title="Close">&times;</button>
+          <button style={styles.closeBtn} onClick={onClose} title="關閉">&times;</button>
         </div>
 
         {toast && <div style={styles.toast}>{toast}</div>}
@@ -168,8 +168,8 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
         <div style={styles.body}>
           {tab === 'tokens' && (
             <>
-              {loading && <div style={styles.emptyState}>Loading tokens...</div>}
-              {!loading && tokens.length === 0 && <div style={styles.emptyState}>No CSS custom properties found.</div>}
+              {loading && <div style={styles.emptyState}>載入 tokens 中...</div>}
+              {!loading && tokens.length === 0 && <div style={styles.emptyState}>找不到 CSS 自訂屬性。</div>}
               {!loading && tokens.length > 0 && (
                 <ul style={styles.list}>
                   {tokens.map((token) => {
@@ -183,7 +183,7 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
                         <div style={styles.itemRight}>
                           <span style={styles.tokenValue}>{token.value}</span>
                           <button style={styles.copyBtn} onClick={() => handleCopy(token.name)}>
-                            {copied === token.name ? '✓' : 'Copy'}
+                            {copied === token.name ? '✓' : '複製'}
                           </button>
                         </div>
                       </li>
@@ -196,13 +196,13 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
 
           {tab === 'editor' && (
             <>
-              {dtLoading && <div style={styles.emptyState}>Loading...</div>}
+              {dtLoading && <div style={styles.emptyState}>載入中...</div>}
 
               {!dtLoading && !designTokens && (
                 <div style={{ padding: 16, textAlign: 'center' }}>
-                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>No design tokens yet.</p>
+                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>尚無 design tokens。</p>
                   <button style={styles.actionBtn} onClick={handleCompile} disabled={compiling}>
-                    {compiling ? 'Compiling...' : 'Compile Tokens'}
+                    {compiling ? '編譯中...' : '編譯 Tokens'}
                   </button>
                 </div>
               )}
@@ -212,16 +212,16 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
                   {/* Actions */}
                   <div style={styles.actions}>
                     <button style={styles.actionBtnSmall} onClick={handleCompile} disabled={compiling}>
-                      {compiling ? '...' : 'Recompile'}
+                      {compiling ? '...' : '重新編譯'}
                     </button>
                     <button style={{ ...styles.actionBtnSmall, backgroundColor: '#3b82f6', color: '#fff' }} onClick={handleSave} disabled={saving}>
-                      {saving ? '...' : 'Save'}
+                      {saving ? '...' : '儲存'}
                     </button>
                   </div>
 
                   {/* Crawl URL */}
                   <div style={styles.section}>
-                    <div style={styles.sectionTitle}>Reference URL</div>
+                    <div style={styles.sectionTitle}>參考網址</div>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <input
                         style={styles.input}
@@ -231,7 +231,7 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
                         onKeyDown={e => e.key === 'Enter' && handleCrawl()}
                       />
                       <button style={styles.actionBtnSmall} onClick={handleCrawl} disabled={crawling || !crawlUrl.trim()}>
-                        {crawling ? '...' : 'Extract'}
+                        {crawling ? '...' : '提取'}
                       </button>
                     </div>
                     {designTokens.source.crawledUrls.length > 0 && (
@@ -274,7 +274,7 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
                             >{value}</span>
                           )}
                           {isOverride && (
-                            <button style={styles.resetBtn} onClick={() => handleResetOverride(path)} title="Reset">↺</button>
+                            <button style={styles.resetBtn} onClick={() => handleResetOverride(path)} title="重置">↺</button>
                           )}
                         </div>
                       );
@@ -321,7 +321,7 @@ export default function TokenPanel({ tokens, loading, onClose, projectId }: Toke
 
                   {/* Preview */}
                   <div style={styles.section}>
-                    <div style={styles.sectionTitle}>Preview</div>
+                    <div style={styles.sectionTitle}>預覽</div>
                     <div style={{ padding: 12, background: designTokens.colors.background || '#f9fafb', borderRadius: 8, border: '1px solid ' + (designTokens.colors.border || '#e5e7eb') }}>
                       <button style={{
                         backgroundColor: designTokens.colors.primary || '#3b82f6',

@@ -160,7 +160,7 @@ export default function SpecPanel({
   if (collapsed) {
     return (
       <div style={styles.collapsedBar}>
-        <button style={styles.expandBtn} onClick={onToggle} title="Show spec panel" data-testid="spec-panel-expand">
+        <button style={styles.expandBtn} onClick={onToggle} title="展開規格面板" data-testid="spec-panel-expand">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M9 2L4 7l5 5" />
           </svg>
@@ -178,17 +178,17 @@ export default function SpecPanel({
             onClick={() => setTab('annotations')}
             data-testid="tab-annotations"
           >
-            Annotations ({annotations.length})
+            標注 ({annotations.length})
           </button>
           <button
             style={tab === 'spec' ? styles.activeTab : styles.tab}
             onClick={() => setTab('spec')}
             data-testid="tab-spec"
           >
-            Spec
+            規格
           </button>
         </div>
-        <button style={styles.collapseBtn} onClick={onToggle} title="Collapse panel" data-testid="spec-panel-collapse">
+        <button style={styles.collapseBtn} onClick={onToggle} title="收合面板" data-testid="spec-panel-collapse">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M5 2l5 5-5 5" />
           </svg>
@@ -236,7 +236,7 @@ export default function SpecPanel({
             </div>
           )}
           {annotations.length === 0 && (
-            <p style={styles.emptyText}>No annotations yet. Enable annotation mode to add one.</p>
+            <p style={styles.emptyText}>尚無標注。開啟標注模式來新增。</p>
           )}
           {annotations
             .filter(ann =>
@@ -281,14 +281,14 @@ export default function SpecPanel({
                         onClick={handleOpenRegenerate}
                         data-testid="regenerate-btn"
                       >
-                        &#x27F3; Regenerate
+                        &#x27F3; 重新生成
                       </button>
                     )}
                     {regenerateStatus === 'done' && !showRegenerateForm && (
-                      <span style={styles.regenerateDone}>&#10003; Updated</span>
+                      <span style={styles.regenerateDone}>&#10003; 更新於</span>
                     )}
                     {regenerating && (
-                      <span style={styles.regeneratingLabel}>&#x27F3; Regenerating...</span>
+                      <span style={styles.regeneratingLabel}>&#x27F3; 重新生成中...</span>
                     )}
                     {showRegenerateForm && !regenerating && (
                       <div style={styles.regenerateForm}>
@@ -296,7 +296,7 @@ export default function SpecPanel({
                           style={styles.regenerateTextarea}
                           value={regenerateInstruction}
                           onChange={e => setRegenerateInstruction(e.target.value)}
-                          placeholder="Describe what to change..."
+                          placeholder="描述要修改的內容..."
                           rows={3}
                           autoFocus
                         />
@@ -305,7 +305,7 @@ export default function SpecPanel({
                         )}
                         <div style={styles.regenerateFormActions}>
                           <button type="button" style={styles.regenerateCancelBtn} onClick={handleCancelRegenerate}>
-                            Cancel
+                            取消
                           </button>
                           <button
                             type="button"
@@ -317,7 +317,7 @@ export default function SpecPanel({
                             disabled={!regenerateInstruction.trim()}
                             data-testid="regenerate-submit-btn"
                           >
-                            Generate
+                            生成
                           </button>
                         </div>
                       </div>
@@ -332,7 +332,7 @@ export default function SpecPanel({
               />
             </>
           ) : (
-            <p style={styles.emptyText}>Select an annotation to view its spec.</p>
+            <p style={styles.emptyText}>選取一個標注來查看其規格。</p>
           )}
         </div>
       )}

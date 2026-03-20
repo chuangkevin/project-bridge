@@ -33,18 +33,18 @@ export default function AnnotationEditor({ elementLabel, initialText, position, 
           style={styles.textarea}
           value={text}
           onChange={e => setText(e.target.value)}
-          placeholder="Add annotation..."
+          placeholder="新增標注..."
           rows={4}
           autoFocus
         />
         <div style={styles.actions}>
-          <button style={styles.cancelBtn} onClick={onCancel}>Cancel</button>
+          <button style={styles.cancelBtn} onClick={onCancel}>取消</button>
           <button
             style={{ ...styles.saveBtn, opacity: text.trim() ? 1 : 0.5 }}
             onClick={handleSave}
             disabled={!text.trim()}
           >
-            Save
+            儲存
           </button>
         </div>
       </div>

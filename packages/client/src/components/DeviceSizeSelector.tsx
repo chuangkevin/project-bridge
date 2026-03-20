@@ -8,7 +8,7 @@ interface Props {
 const devices: { key: DeviceSize; label: string; icon: JSX.Element }[] = [
   {
     key: 'desktop',
-    label: 'Desktop',
+    label: '桌面版',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
         <rect x="1" y="2" width="14" height="10" rx="1.5" />
@@ -19,7 +19,7 @@ const devices: { key: DeviceSize; label: string; icon: JSX.Element }[] = [
   },
   {
     key: 'tablet',
-    label: 'Tablet',
+    label: '平板',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
         <rect x="2" y="1" width="12" height="14" rx="1.5" />
@@ -29,7 +29,7 @@ const devices: { key: DeviceSize; label: string; icon: JSX.Element }[] = [
   },
   {
     key: 'mobile',
-    label: 'Mobile',
+    label: '手機版',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
         <rect x="4" y="1" width="8" height="14" rx="1.5" />

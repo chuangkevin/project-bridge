@@ -44,13 +44,13 @@ export default function ConstraintsBar({ projectId, onChange }: Props) {
       <button
         style={styles.toggleBtn}
         onClick={() => setExpanded(!expanded)}
-        title="Toggle constraints"
+        title="切換限制條件"
         data-testid="constraints-toggle"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
           <path d="M1 3h12M3 7h8M5 11h4" />
         </svg>
-        <span>Constraints</span>
+        <span>限制條件</span>
         <svg
           width="10"
           height="10"
@@ -72,9 +72,9 @@ export default function ConstraintsBar({ projectId, onChange }: Props) {
               value={constraints.device}
               onChange={e => update({ device: e.target.value as Constraints['device'] })}
             >
-              <option value="Desktop">Desktop</option>
-              <option value="Tablet">Tablet</option>
-              <option value="Mobile">Mobile</option>
+              <option value="Desktop">桌面版</option>
+              <option value="Tablet">平板</option>
+              <option value="Mobile">手機版</option>
             </select>
           </div>
           <div style={styles.field}>

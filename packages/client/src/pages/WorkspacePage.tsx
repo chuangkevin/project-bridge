@@ -576,7 +576,7 @@ export default function WorkspacePage() {
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
-        <p style={styles.loadingText}>Loading project...</p>
+        <p style={styles.loadingText}>載入專案中...</p>
       </div>
     );
   }
@@ -584,8 +584,8 @@ export default function WorkspacePage() {
   if (error || !project) {
     return (
       <div style={styles.errorContainer}>
-        <h2 style={styles.errorTitle}>{error || 'Project not found'}</h2>
-        <button style={styles.backBtn} onClick={() => navigate('/')}>Back to Home</button>
+        <h2 style={styles.errorTitle}>{error || '找不到專案'}</h2>
+        <button style={styles.backBtn} onClick={() => navigate('/')}>返回首頁</button>
       </div>
     );
   }
@@ -626,7 +626,7 @@ export default function WorkspacePage() {
             style={tabBtnStyle(activeMode === 'design')}
             onClick={() => setActiveMode('design')}
           >
-            Design
+            設計
           </button>
           <button
             type="button"
@@ -635,7 +635,7 @@ export default function WorkspacePage() {
             style={tabBtnStyle(activeMode === 'architecture')}
             onClick={() => setActiveMode('architecture')}
           >
-            Architecture
+            架構圖
           </button>
         </div>
       </div>
@@ -655,7 +655,7 @@ export default function WorkspacePage() {
       {/* Toolbar */}
       <div style={{ ...styles.toolbar, ...(focusMode ? { display: 'none' } : {}) }}>
         <div style={styles.toolbarLeft}>
-          <button style={styles.homeBtn} onClick={() => navigate('/')} title="Home" data-testid="home-btn">
+          <button style={styles.homeBtn} onClick={() => navigate('/')} title="首頁" data-testid="home-btn">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7" />
             </svg>
@@ -709,7 +709,7 @@ export default function WorkspacePage() {
               <circle cx="7" cy="7" r="5.5"/>
               <polyline points="7,4 7,7 9,8.5"/>
             </svg>
-            History
+            歷史版本
           </button>
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <button
@@ -722,7 +722,7 @@ export default function WorkspacePage() {
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
                 <path d="M7 1v8M4 6l3 3 3-3M2 11h10"/>
               </svg>
-              Export
+              匯出
             </button>
             {showExportMenu && (
               <div
@@ -796,7 +796,7 @@ export default function WorkspacePage() {
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
               <path d="M10.5 1.5l2 2L4 12H2v-2L10.5 1.5z" />
             </svg>
-            Annotate
+            標注
           </button>
           <button
             type="button"
@@ -966,14 +966,14 @@ export default function WorkspacePage() {
               onClick={() => setLeftTab('chat')}
               data-testid="tab-chat"
             >
-              Chat
+              對話
             </button>
             <button
               style={{ ...styles.tabBtn, ...(leftTab === 'design' ? styles.tabBtnActive : {}) }}
               onClick={() => setLeftTab('design')}
               data-testid="tab-design"
             >
-              Design
+              設計
             </button>
             <button
               style={{ ...styles.tabBtn, ...(leftTab === 'style' ? styles.tabBtnActive : {}), ...(!html ? styles.tabBtnDisabled : {}) }}
@@ -1012,7 +1012,7 @@ export default function WorkspacePage() {
         <div style={styles.previewPane} ref={iframeContainerRef}>
           {isMultiPage && pages.length > 1 && (
             <div style={styles.pageSidebar}>
-              <div style={styles.pageSidebarLabel}>Pages</div>
+              <div style={styles.pageSidebarLabel}>頁面</div>
               {pages.map(page => (
                 <button
                   key={page}

@@ -71,7 +71,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, onEleme
           <line x1="36" y1="36" x2="44" y2="36" />
           <line x1="40" y1="32" x2="40" y2="40" />
         </svg>
-        <p style={styles.emptyText}>Describe your UI in the chat panel to generate a prototype</p>
+        <p style={styles.emptyText}>在對話面板中描述你的 UI 來生成原型</p>
       </div>
     );
   }
@@ -122,7 +122,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, onEleme
         style={iframeStyle}
         sandbox="allow-scripts allow-same-origin"
         srcDoc={injectedHtml}
-        title="Prototype Preview"
+        title="原型預覽"
         onLoad={handleIframeLoad}
       />
     </div>

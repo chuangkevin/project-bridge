@@ -62,7 +62,7 @@ export default function SharePage() {
   if (loading) {
     return (
       <div style={styles.center}>
-        <p style={styles.loadingText}>Loading shared project...</p>
+        <p style={styles.loadingText}>載入分享專案中...</p>
       </div>
     );
   }
@@ -76,9 +76,9 @@ export default function SharePage() {
             <line x1="16" y1="16" x2="32" y2="32" />
             <line x1="32" y1="16" x2="16" y2="32" />
           </svg>
-          <h2 style={styles.errorTitle}>Project not found</h2>
+          <h2 style={styles.errorTitle}>找不到專案</h2>
           <p style={styles.errorText}>
-            This shared link is invalid or the project has been deleted.
+            此分享連結無效，或專案已被刪除。
           </p>
         </div>
       </div>

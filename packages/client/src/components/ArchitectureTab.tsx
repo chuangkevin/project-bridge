@@ -48,7 +48,7 @@ export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchT
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M10 12L6 8l4-4" />
             </svg>
-            返回 Design
+            返回設計
           </button>
         </div>
         <div style={centeredStyle} data-testid="arch-wizard">

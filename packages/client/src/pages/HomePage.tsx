@@ -56,13 +56,13 @@ export default function HomePage() {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this project?')) return;
+    if (!window.confirm('確定要刪除此專案嗎？')) return;
     try {
       const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete');
       setProjects(prev => prev.filter(p => p.id !== id));
     } catch {
-      alert('Failed to delete project');
+      alert('刪除專案失敗');
     }
   };
 
@@ -87,7 +87,7 @@ export default function HomePage() {
           <span style={styles.subtitle}>AI-powered prototype generator</span>
         </div>
         <div style={styles.headerRight}>
-          <button style={styles.settingsBtn} onClick={() => navigate('/settings')} title="Settings" data-testid="settings-btn">
+          <button style={styles.settingsBtn} onClick={() => navigate('/settings')} title="設定" data-testid="settings-btn">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="10" cy="10" r="3" />
               <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.93 3.93l1.41 1.41M14.66 14.66l1.41 1.41M3.93 16.07l1.41-1.41M14.66 5.34l1.41-1.41" />
@@ -97,13 +97,13 @@ export default function HomePage() {
             🌐 全域設計
           </button>
           <button style={styles.newBtn} onClick={() => setShowNewProject(true)} data-testid="new-project-btn">
-            + New Project
+            + 新增專案
           </button>
         </div>
       </header>
 
       <main style={styles.main}>
-        {loading && <p style={styles.loadingText}>Loading projects...</p>}
+        {loading && <p style={styles.loadingText}>載入專案中...</p>}
         {error && <p style={styles.errorText}>{error}</p>}
         {!loading && !error && projects.length === 0 && (
           <div style={styles.emptyState}>
@@ -115,7 +115,7 @@ export default function HomePage() {
                 <line x1="20" y1="40" x2="32" y2="40" />
               </svg>
             </div>
-            <p style={styles.emptyText}>No projects yet. Create one to get started!</p>
+            <p style={styles.emptyText}>尚無專案。建立一個開始吧！</p>
           </div>
         )}
         {!loading && !error && projects.length > 0 && (
@@ -164,12 +164,12 @@ export default function HomePage() {
             >
               <div style={styles.cardContent}>
                 <h3 style={styles.cardTitle}>{project.name}</h3>
-                <p style={styles.cardDate}>Updated {relativeTime(project.updated_at)}</p>
+                <p style={styles.cardDate}>更新於 {relativeTime(project.updated_at)}</p>
               </div>
               <button
                 style={styles.deleteBtn}
                 onClick={(e) => handleDelete(e, project.id)}
-                title="Delete project"
+                title="刪除專案"
                 data-testid={`delete-project-${project.id}`}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

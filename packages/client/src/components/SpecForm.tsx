@@ -71,7 +71,7 @@ export default function SpecForm({ specData, onSave, saving }: Props) {
       </div>
 
       <div style={styles.fieldGroup}>
-        <label style={styles.label}>Constraints</label>
+        <label style={styles.label}>限制條件</label>
         <div style={styles.row}>
           <input
             style={styles.smallInput}
@@ -143,7 +143,7 @@ export default function SpecForm({ specData, onSave, saving }: Props) {
         onClick={() => onSave(form)}
         disabled={saving}
       >
-        {saving ? 'Saving...' : 'Save Spec'}
+        {saving ? '儲存中...' : '儲存規格'}
       </button>
     </div>
   );
