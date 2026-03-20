@@ -29,6 +29,19 @@ STEP 5 — SPACING & LAYOUT DETAILS:
 - Card/item spacing
 - Border radius values
 
+STEP 6 — INPUT CONSTRAINTS:
+Look for any text labels, annotations, or notes that describe input validation rules for form elements. Examples:
+- "坪數：正整數，0-10000" → field: 坪數, type: number, min: 0, max: 10000
+- "email format required" → field: email, type: email
+- "phone: starts with 09, 10 digits" → field: phone, type: phone, pattern: ^09\\d{8}$
+- "maximum 100 characters" → field: (nearby field), type: text, max: 100
+- "required field" or asterisk (*) → required: true
+If you find constraint descriptions, output them in a section called INPUT CONSTRAINTS with the format:
+INPUT CONSTRAINTS:
+- field: <field name>, type: <number|text|email|phone|date|custom>, min: <value>, max: <value>, pattern: <regex>, required: <true|false>
+
+If no constraints are found, omit this section entirely.
+
 Be specific with hex colors — do not guess. If a color looks purple, say purple and give the closest hex. Do not invent components that are not visible.`;
 
 export async function analyzeDesignSpec(images: Buffer[], apiKey: string): Promise<string> {

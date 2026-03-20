@@ -85,6 +85,19 @@ function formatAnalysisForPrompt(analysis: any, fileName: string): string {
     }
   }
 
+  // Input constraints extracted from analysis
+  if (analysis.inputConstraints?.length) {
+    block += `\nInput Constraints (from spec):\n`;
+    for (const c of analysis.inputConstraints) {
+      block += `  - field: ${c.field}, type: ${c.type || 'text'}`;
+      if (c.min !== undefined) block += `, min: ${c.min}`;
+      if (c.max !== undefined) block += `, max: ${c.max}`;
+      if (c.pattern) block += `, pattern: ${c.pattern}`;
+      if (c.required) block += `, required`;
+      block += '\n';
+    }
+  }
+
   block += `=== END DOCUMENT ANALYSIS ===`;
   return block;
 }
@@ -646,6 +659,55 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     let effectiveSystemPrompt = designSpecPrefix + architectureBlock + systemPrompt;
+
+    // Build INPUT CONSTRAINTS block from element_constraints table and analysis_result inputConstraints
+    let constraintsBlock = '';
+    {
+      const elementConstraints = db.prepare(
+        'SELECT * FROM element_constraints WHERE project_id = ?'
+      ).all(projectId) as any[];
+
+      // Also check analysis_result for inputConstraints
+      let analysisConstraints: any[] = [];
+      for (const row of specRowsEarly) {
+        if ((row as any).analysis_result) {
+          try {
+            const analysis = JSON.parse((row as any).analysis_result);
+            if (analysis.inputConstraints && Array.isArray(analysis.inputConstraints)) {
+              analysisConstraints = analysisConstraints.concat(analysis.inputConstraints);
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      if (elementConstraints.length > 0 || analysisConstraints.length > 0) {
+        constraintsBlock = '\n\n=== INPUT CONSTRAINTS ===\n';
+        constraintsBlock += 'When generating HTML form elements, add data-constraint-* attributes as specified below.\n';
+        constraintsBlock += 'For each constrained element, add the appropriate attributes: data-constraint-type, data-constraint-min, data-constraint-max, data-constraint-pattern, data-constraint-required.\n\n';
+
+        for (const c of elementConstraints) {
+          constraintsBlock += `Element [data-bridge-id="${c.bridge_id}"]: type=${c.constraint_type}`;
+          if (c.min !== null) constraintsBlock += `, min=${c.min}`;
+          if (c.max !== null) constraintsBlock += `, max=${c.max}`;
+          if (c.pattern) constraintsBlock += `, pattern=${c.pattern}`;
+          if (c.required) constraintsBlock += `, required=true`;
+          if (c.error_message) constraintsBlock += `, error="${c.error_message}"`;
+          constraintsBlock += '\n';
+        }
+
+        for (const c of analysisConstraints) {
+          constraintsBlock += `Field "${c.field}": type=${c.type || 'text'}`;
+          if (c.min !== undefined) constraintsBlock += `, min=${c.min}`;
+          if (c.max !== undefined) constraintsBlock += `, max=${c.max}`;
+          if (c.pattern) constraintsBlock += `, pattern=${c.pattern}`;
+          if (c.required) constraintsBlock += `, required=true`;
+          constraintsBlock += '\n';
+        }
+
+        constraintsBlock += '=== END INPUT CONSTRAINTS ===\n';
+        effectiveSystemPrompt += constraintsBlock;
+      }
+    }
 
     // designConvention already loaded earlier (before micro-adjust path)
     if (designConvention) {
