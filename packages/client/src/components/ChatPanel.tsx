@@ -20,6 +20,7 @@ interface UploadedFile {
   visualAnalysisReady?: boolean;
   componentLabel?: string;
   pageCount?: number;
+  analysisStatus?: 'uploading' | 'analyzing' | 'ready' | 'error';
 }
 
 interface ArtStyle {
@@ -72,6 +73,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [viewingFile, setViewingFile] = useState<UploadedFile | null>(null);
+  const pollingIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const [editedText, setEditedText] = useState('');
   const [constraints, setConstraints] = useState<Constraints | null>(null);
   const [artStyle, setArtStyle] = useState<ArtStyle | null>(null);
@@ -172,16 +174,24 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       }
 
       const data = await res.json();
-      setAttachedFiles(prev => [...prev, {
+      const needsAnalysis = data.analysis_status === 'pending' || data.analysis_status === 'running';
+      const fileEntry: UploadedFile = {
         id: data.id,
         filename: data.originalName ?? data.filename,
         extractedText: data.extractedText,
         visualAnalysisReady: !!data.visualAnalysisReady,
         pageCount: data.pageCount ?? undefined,
-      }]);
+        analysisStatus: needsAnalysis ? 'analyzing' : 'ready',
+      };
+      setAttachedFiles(prev => [...prev, fileEntry]);
+
+      // Start polling if analysis is running
+      if (needsAnalysis) {
+        startAnalysisPolling(data.id);
+      }
 
       // Show upload success feedback
-      setUploadToast(data.visualAnalysisReady ? '上傳完成，視覺分析已完成' : '上傳完成');
+      setUploadToast(needsAnalysis ? '上傳完成，分析中...' : '上傳完成');
 
       // Refetch art style in case a new image was uploaded
       fetchArtStyle();
@@ -192,6 +202,47 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       setUploadProgress(0);
     }
   };
+
+  const startAnalysisPolling = useCallback((fileId: string) => {
+    // Clear existing interval for this file if any
+    if (pollingIntervalsRef.current[fileId]) {
+      clearInterval(pollingIntervalsRef.current[fileId]);
+    }
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/upload/${fileId}/analysis-status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'done') {
+          clearInterval(pollingIntervalsRef.current[fileId]);
+          delete pollingIntervalsRef.current[fileId];
+          setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, analysisStatus: 'ready' as const } : f));
+        } else if (data.status === 'error') {
+          clearInterval(pollingIntervalsRef.current[fileId]);
+          delete pollingIntervalsRef.current[fileId];
+          setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, analysisStatus: 'error' as const } : f));
+        }
+      } catch { /* ignore polling errors */ }
+    }, 2000);
+    pollingIntervalsRef.current[fileId] = interval;
+  }, [projectId]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(pollingIntervalsRef.current).forEach(clearInterval);
+      pollingIntervalsRef.current = {};
+    };
+  }, []);
+
+  // Stop polling when file is removed
+  const handleRemoveFile = useCallback((fileId: string) => {
+    if (pollingIntervalsRef.current[fileId]) {
+      clearInterval(pollingIntervalsRef.current[fileId]);
+      delete pollingIntervalsRef.current[fileId];
+    }
+    setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
+  }, []);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -393,10 +444,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingMessage]);
 
+  const hasUnreadyFiles = attachedFiles.some(f => f.analysisStatus === 'uploading' || f.analysisStatus === 'analyzing');
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (!hasUnreadyFiles) handleSend();
     }
   };
 
@@ -626,6 +679,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             <div key={f.id} style={styles.fileChipWrapper} data-testid="file-chip">
               <div style={styles.fileChip}>
                 <span style={styles.fileName}>{f.filename}</span>
+                {f.analysisStatus === 'analyzing' && (
+                  <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 500 }} data-testid="analysis-badge">◌ 分析中...</span>
+                )}
+                {f.analysisStatus === 'error' && (
+                  <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 500 }} data-testid="analysis-badge">⚠ 分析失敗</span>
+                )}
                 {f.visualAnalysisReady ? (
                   <span style={styles.visualBadge} data-testid="visual-analysis-badge" title="視覺分析已完成">
                     👁 Visual
@@ -668,7 +727,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 <button
                   type="button"
                   style={styles.removeFileBtn}
-                  onClick={() => setAttachedFiles(prev => prev.filter(x => x.id !== f.id))}
+                  onClick={() => handleRemoveFile(f.id)}
                 >
                   x
                 </button>
@@ -766,7 +825,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             opacity: (!input.trim() || streaming) ? 0.5 : 1,
           }}
           onClick={handleSend}
-          disabled={!input.trim() || streaming}
+          disabled={!input.trim() || streaming || hasUnreadyFiles}
+          title={hasUnreadyFiles ? '等待檔案分析完成...' : attachedFiles.some(f => f.analysisStatus === 'error') ? '部分檔案分析失敗，仍可送出' : ''}
           data-testid="send-btn"
         >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

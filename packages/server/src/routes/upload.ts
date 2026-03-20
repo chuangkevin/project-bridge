@@ -125,6 +125,10 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
       // Fetch art style if just detected
       const artStyle = db.prepare('SELECT detected_style FROM art_style_preferences WHERE project_id = ?').get(projectId) as any;
 
+      // Determine analysis_status for client polling
+      const analysisTriggered = !!(apiKey && (isPdf || isImage));
+      const analysisStatus = analysisTriggered ? 'pending' : 'not_started';
+
       return res.status(201).json({
         id,
         originalName: originalname,
@@ -135,6 +139,7 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         visualAnalysisReady,
         pageCount,
         page_name: pageName,
+        analysis_status: analysisStatus,
       });
     } catch (uploadErr: any) {
       console.error('Upload error:', uploadErr);
