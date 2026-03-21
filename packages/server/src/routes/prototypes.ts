@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import db from '../db/connection';
 import { extractComponent, replaceComponent } from '../services/componentExtractor';
-import { getGeminiApiKey, getGeminiModel, trackUsage } from '../services/geminiKeys';
+import { getGeminiApiKey, getGeminiModel, trackUsage, withRetry } from '../services/geminiKeys';
 import { validateNavigation } from '../services/prototypeValidator';
 
 const router = Router();
@@ -171,22 +171,25 @@ RULES:
 
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      systemInstruction: systemPrompt,
-      generationConfig: { maxOutputTokens: 4096 },
-    });
-    const result = await model.generateContentStream(`Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`);
     let newComponentHtml = '';
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        newComponentHtml += text;
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+    await withRetry(async (retryKey) => {
+      newComponentHtml = '';
+      const genai = new GoogleGenerativeAI(retryKey);
+      const model = genai.getGenerativeModel({
+        model: getGeminiModel(),
+        systemInstruction: systemPrompt,
+        generationConfig: { maxOutputTokens: 4096 },
+      });
+      const result = await model.generateContentStream(`Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`);
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) {
+          newComponentHtml += text;
+          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        }
       }
-    }
-    try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'component-regen', resp.usageMetadata); } catch {}
+      try { const resp = await result.response; trackUsage(retryKey, getGeminiModel(), 'component-regen', resp.usageMetadata); } catch {}
+    });
 
     // Strip markdown fences if AI wrapped in code block
     newComponentHtml = newComponentHtml.trim();

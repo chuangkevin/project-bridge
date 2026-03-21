@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getGeminiModel, trackUsage, withRetry } from './geminiKeys';
 
 export type Intent = 'full-page' | 'in-shell' | 'component' | 'question' | 'micro-adjust';
 
@@ -7,6 +7,14 @@ export async function classifyIntent(
   message: string,
   apiKey: string,
   hasShell: boolean = false
+): Promise<Intent> {
+  return withRetry(async (retryKey) => classifyIntentWithKey(message, retryKey, hasShell));
+}
+
+async function classifyIntentWithKey(
+  message: string,
+  apiKey: string,
+  hasShell: boolean
 ): Promise<Intent> {
   const shellContext = hasShell
     ? `This project has a platform shell (existing nav/sidebar/header). When the user asks to add a page, sub-page, detail page, list page, or feature, prefer "in-shell". Only use "full-page" if the user explicitly asks for a complete standalone page.`

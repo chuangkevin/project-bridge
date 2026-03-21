@@ -7,7 +7,7 @@ import db from '../db/connection';
 import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
-import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from '../services/geminiKeys';
+import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage, withRetry } from '../services/geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { generateParallel } from '../services/parallelGenerator';
@@ -323,21 +323,22 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             if (truncatedHtml.length > 20000) truncatedHtml = truncatedHtml.slice(0, 20000) + '\n<!-- truncated -->';
           }
 
-          const genai = new GoogleGenerativeAI(apiKey);
-          const model = genai.getGenerativeModel({
-            model: getGeminiModel(),
-            systemInstruction: visionPrompt,
-            generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json', temperature: generationTemperature },
+          let responseText = await withRetry(async (retryKey) => {
+            const genai = new GoogleGenerativeAI(retryKey);
+            const model = genai.getGenerativeModel({
+              model: getGeminiModel(),
+              systemInstruction: visionPrompt,
+              generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json', temperature: generationTemperature },
+            });
+
+            const result = await model.generateContent([
+              { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
+              { text: `使用者指示: ${userContent}\n\n目前的 prototype HTML:\n${truncatedHtml}` },
+            ]);
+
+            try { trackUsage(retryKey, getGeminiModel(), 'vision-micro-adjust', result.response.usageMetadata); } catch {}
+            return result.response.text().trim();
           });
-
-          const result = await model.generateContent([
-            { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
-            { text: `使用者指示: ${userContent}\n\n目前的 prototype HTML:\n${truncatedHtml}` },
-          ]);
-
-          try { trackUsage(apiKey, getGeminiModel(), 'vision-micro-adjust', result.response.usageMetadata); } catch {}
-
-          let responseText = result.response.text().trim();
           // Strip markdown fences
           const fenceMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
           if (fenceMatch) responseText = fenceMatch[1].trim();
@@ -397,25 +398,27 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       const microPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/micro-adjust.txt'), 'utf-8');
 
       try {
-        const genai = new GoogleGenerativeAI(apiKey);
-        const model = genai.getGenerativeModel({
-          model: getGeminiModel(),
-          systemInstruction: microPrompt,
-          generationConfig: { maxOutputTokens: 32768, temperature: generationTemperature },
-        });
+        await withRetry(async (retryKey) => {
+          const genai = new GoogleGenerativeAI(retryKey);
+          const model = genai.getGenerativeModel({
+            model: getGeminiModel(),
+            systemInstruction: microPrompt,
+            generationConfig: { maxOutputTokens: 32768, temperature: generationTemperature },
+          });
 
-        const result = await model.generateContentStream(
-          `使用者要求: ${userContent}\n\n以下是目前的完整 HTML prototype:\n${currentPrototype.html}`
-        );
+          const result = await model.generateContentStream(
+            `使用者要求: ${userContent}\n\n以下是目前的完整 HTML prototype:\n${currentPrototype.html}`
+          );
 
-        for await (const chunk of result.stream) {
-          const text = chunk.text();
-          if (text) {
-            fullResponse += text;
-            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              fullResponse += text;
+              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+            }
           }
-        }
-        try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'micro-adjust', resp.usageMetadata); } catch {}
+          try { const resp = await result.response; trackUsage(retryKey, getGeminiModel(), 'micro-adjust', resp.usageMetadata); } catch {}
+        });
       } catch (err: any) {
         console.error('Micro-adjust error:', err);
         res.write(`data: ${JSON.stringify({ error: 'Micro-adjust failed: ' + (err.message || '').slice(0, 100) })}\n\n`);
@@ -462,27 +465,29 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     if (intent === 'question') {
       // Q&A path
       try {
-        const genai = new GoogleGenerativeAI(apiKey);
-        const model = genai.getGenerativeModel({
-          model: getGeminiModel(),
-          systemInstruction: qaSystemPrompt,
-          generationConfig: { maxOutputTokens: 4096, temperature: generationTemperature },
-        });
-        const chatSession = model.startChat({
-          history: history.slice(0, -0).map(h => ({
-            role: h.role === 'assistant' ? 'model' as const : 'user' as const,
-            parts: [{ text: h.content }],
-          })),
-        });
-        const result = await chatSession.sendMessageStream(userContent);
-        for await (const chunk of result.stream) {
-          const text = chunk.text();
-          if (text) {
-            fullResponse += text;
-            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        await withRetry(async (retryKey) => {
+          const genai = new GoogleGenerativeAI(retryKey);
+          const model = genai.getGenerativeModel({
+            model: getGeminiModel(),
+            systemInstruction: qaSystemPrompt,
+            generationConfig: { maxOutputTokens: 4096, temperature: generationTemperature },
+          });
+          const chatSession = model.startChat({
+            history: history.slice(0, -0).map(h => ({
+              role: h.role === 'assistant' ? 'model' as const : 'user' as const,
+              parts: [{ text: h.content }],
+            })),
+          });
+          const result = await chatSession.sendMessageStream(userContent);
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              fullResponse += text;
+              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+            }
           }
-        }
-        try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'chat-qa', resp.usageMetadata); } catch {}
+          try { const resp = await result.response; trackUsage(retryKey, getGeminiModel(), 'chat-qa', resp.usageMetadata); } catch {}
+        });
       } catch (err: any) {
         console.error('Gemini API error:', err);
         res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
@@ -1013,22 +1018,24 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     }));
 
     try {
-      const genai = new GoogleGenerativeAI(apiKey);
-      const model = genai.getGenerativeModel({
-        model: getGeminiModel(),
-        systemInstruction: effectiveSystemPrompt,
-        generationConfig: { maxOutputTokens: 65536, temperature: generationTemperature },
-      });
-      const chatSession = model.startChat({ history: trimmedHistory });
-      const result = await chatSession.sendMessageStream(userContent);
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
-        if (text) {
-          fullResponse += text;
-          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+      await withRetry(async (retryKey) => {
+        const genai = new GoogleGenerativeAI(retryKey);
+        const model = genai.getGenerativeModel({
+          model: getGeminiModel(),
+          systemInstruction: effectiveSystemPrompt,
+          generationConfig: { maxOutputTokens: 65536, temperature: generationTemperature },
+        });
+        const chatSession = model.startChat({ history: trimmedHistory });
+        const result = await chatSession.sendMessageStream(userContent);
+        for await (const chunk of result.stream) {
+          const text = chunk.text();
+          if (text) {
+            fullResponse += text;
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          }
         }
-      }
-      try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
+        try { const resp = await result.response; trackUsage(retryKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
+      });
     } catch (err: any) {
       console.error('Gemini API error:', err);
       res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
