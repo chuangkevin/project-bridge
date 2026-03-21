@@ -4,7 +4,19 @@ const API = 'http://localhost:3001';
 
 /** After navigating to a project page, switch from the default Architecture mode to Design mode. */
 async function switchToDesignMode(page: import('@playwright/test').Page) {
-  await page.getByRole('tab', { name: '設計' }).click();
+  const designTab = page.getByRole('tab', { name: '設計' });
+  await designTab.waitFor({ state: 'visible', timeout: 15000 });
+  await designTab.click();
+  // Skip the architecture wizard if it appears
+  const skipBtn = page.getByRole('button', { name: /跳過/ });
+  try {
+    await skipBtn.waitFor({ state: 'visible', timeout: 3000 });
+    await skipBtn.click();
+  } catch {
+    // Wizard not shown, already in design mode
+  }
+  // Wait for design mode content to load
+  await page.waitForTimeout(500);
 }
 
 test.describe('E2E: Art Style Card', () => {
@@ -152,7 +164,7 @@ test.describe('E2E: Design Panel — Auto-fill direction', () => {
   test('Design panel shows reference upload button and design direction textarea', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
     await switchToDesignMode(page);
-    await page.waitForSelector('[data-testid="tab-design"]');
+    await page.getByTestId('tab-design').waitFor({ state: 'visible', timeout: 15000 });
 
     await page.getByTestId('tab-design').click();
     await expect(page.getByTestId('design-description')).toBeVisible();
