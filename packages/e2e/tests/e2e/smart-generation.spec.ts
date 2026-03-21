@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 const API = 'http://localhost:3001';
-const CLIENT = 'http://localhost:5179';
+
+/** After navigating to a project page, switch from the default Architecture mode to Design mode. */
+async function switchToDesignMode(page: import('@playwright/test').Page) {
+  await page.getByRole('tab', { name: '設計' }).click();
+}
 
 test.describe('E2E: Art Style Card', () => {
   let projectId: string;
@@ -21,7 +25,8 @@ test.describe('E2E: Art Style Card', () => {
   });
 
   test('Art style card hidden when no style detected', async ({ page }) => {
-    await page.goto(`${CLIENT}/project/${projectId}`);
+    await page.goto(`/project/${projectId}`);
+    await switchToDesignMode(page);
     await page.waitForSelector('[data-testid="send-btn"]');
 
     // Art style card should not be visible (no detected style)
@@ -38,7 +43,8 @@ test.describe('E2E: Art Style Card', () => {
     });
     expect(putRes.status()).toBe(200);
 
-    await page.goto(`${CLIENT}/project/${projectId}`);
+    await page.goto(`/project/${projectId}`);
+    await switchToDesignMode(page);
     await page.waitForSelector('[data-testid="send-btn"]');
 
     // Card should not appear since detectedStyle is empty
@@ -64,7 +70,8 @@ test.describe('E2E: Multi-Page Navigation Bar', () => {
   });
 
   test('No tab bar for single-page prototype', async ({ page }) => {
-    await page.goto(`${CLIENT}/project/${projectId}`);
+    await page.goto(`/project/${projectId}`);
+    await switchToDesignMode(page);
     await page.waitForSelector('[data-testid="send-btn"]');
 
     // No tab bar when there is no prototype
@@ -80,7 +87,8 @@ test.describe('E2E: Multi-Page Navigation Bar', () => {
     expect(proj.isMultiPage).toBe(false);
     expect(proj.pages).toEqual([]);
 
-    await page.goto(`${CLIENT}/project/${projectId}`);
+    await page.goto(`/project/${projectId}`);
+    await switchToDesignMode(page);
     await page.waitForSelector('[data-testid="send-btn"]');
 
     // Without multi-page prototype, no tab bar
@@ -106,13 +114,15 @@ test.describe('E2E: Q&A Visual Distinction', () => {
   });
 
   test('Chat panel loads and shows send button', async ({ page }) => {
-    await page.goto(`${CLIENT}/project/${projectId}`);
+    await page.goto(`/project/${projectId}`);
+    await switchToDesignMode(page);
     await expect(page.getByTestId('send-btn')).toBeVisible();
     await expect(page.getByTestId('attach-file-btn')).toBeVisible();
   });
 
   test('Chat panel shows empty state initially', async ({ page }) => {
-    await page.goto(`${CLIENT}/project/${projectId}`);
+    await page.goto(`/project/${projectId}`);
+    await switchToDesignMode(page);
     await page.waitForSelector('[data-testid="send-btn"]');
 
     // No messages shown initially
@@ -140,7 +150,8 @@ test.describe('E2E: Design Panel — Auto-fill direction', () => {
   });
 
   test('Design panel shows reference upload button and design direction textarea', async ({ page }) => {
-    await page.goto(`${CLIENT}/project/${projectId}`);
+    await page.goto(`/project/${projectId}`);
+    await switchToDesignMode(page);
     await page.waitForSelector('[data-testid="tab-design"]');
 
     await page.getByTestId('tab-design').click();

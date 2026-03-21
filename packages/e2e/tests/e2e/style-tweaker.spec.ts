@@ -21,6 +21,7 @@ test.describe('E2E: Style Tweaker Panel', () => {
 
   test('🎨 樣式 tab is disabled when no prototype exists', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     const styleTab = page.getByTestId('tab-style');
     await expect(styleTab).toBeVisible();
@@ -39,6 +40,7 @@ test.describe('E2E: Style Tweaker Panel', () => {
     // the UI state via the PreviewPanel empty state behavior.
 
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Without prototype, tab-style should be disabled
     await expect(page.getByTestId('tab-style')).toBeDisabled();
@@ -54,6 +56,7 @@ test.describe('E2E: Style Tweaker Panel', () => {
     // This test verifies the tab-style element and the component structure.
 
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Verify the tab is present in DOM
     const styleTab = page.getByTestId('tab-style');
@@ -62,7 +65,7 @@ test.describe('E2E: Style Tweaker Panel', () => {
     // Without a prototype, clicking should not work
     await styleTab.click({ force: true });
     // Tab should still be on chat (disabled tab doesn't change state)
-    await expect(page.getByPlaceholder('Describe your UI...')).toBeVisible();
+    await expect(page.getByPlaceholder('描述你的 UI...（可貼上截圖）')).toBeVisible();
   });
 
   test('save-styles-btn is visible in StyleTweakerPanel', async ({ page, request }) => {
@@ -72,6 +75,7 @@ test.describe('E2E: Style Tweaker Panel', () => {
 
     // Check that tab-style exists in the workspace page
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await expect(page.getByTestId('tab-style')).toBeVisible();
   });
 

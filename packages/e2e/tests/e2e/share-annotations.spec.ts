@@ -56,6 +56,6 @@ test.describe('E2E: Share Page with Annotations', () => {
     await page.goto('/share/invalid-token-xyz');
 
     // Verify the not found state
-    await expect(page.getByText('Project not found')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('找不到專案')).toBeVisible({ timeout: 10000 });
   });
 });

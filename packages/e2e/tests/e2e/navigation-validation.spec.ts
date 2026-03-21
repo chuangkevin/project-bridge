@@ -22,6 +22,9 @@ test.describe('導航驗證', () => {
   test('生成多頁原型', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
 
+    // 新專案預設進入架構模式，切換到設計模式
+    await page.getByRole('tab', { name: '設計' }).click();
+
     const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
     await textarea.fill('建立一個三頁的網站：首頁（有導航列連結到產品頁和關於頁）、產品頁（展示產品列表）、關於我們頁面');
     await page.getByTestId('send-btn').click();
@@ -42,6 +45,9 @@ test.describe('導航驗證', () => {
 
   test('呼叫 validate-navigation API → 結果結構正確', async ({ page, request }) => {
     await page.goto(`/project/${projectId}`);
+
+    // 新專案預設進入架構模式，切換到設計模式
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 生成多頁原型
     const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');
@@ -109,6 +115,9 @@ test.describe('導航驗證', () => {
     });
 
     await page.goto(`/project/${projectId}`);
+
+    // 新專案預設進入架構模式，切換到設計模式
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 從架構開始生成
     const textarea = page.locator('textarea[placeholder*="描述你的 UI"]');

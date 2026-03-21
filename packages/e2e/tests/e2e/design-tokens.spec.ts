@@ -19,22 +19,32 @@ test.describe('Design Tokens 面板', () => {
     }
   });
 
+  /** Dismiss onboarding tooltip if visible */
+  async function dismissOnboarding(page: import('@playwright/test').Page) {
+    const skipBtn = page.getByTestId('onboarding-skip');
+    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipBtn.click();
+    }
+  }
+
   /** Skip wizard and navigate to design tab */
   async function skipWizardAndGoToDesign(page: import('@playwright/test').Page) {
     // Skip the ArchWizard if visible
-    const skipBtn = page.getByRole('button', { name: /跳過/ });
+    const skipBtn = page.getByRole('button', { name: /跳過，直接去/ });
     if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await skipBtn.click();
     }
     // Click the 設計 tab
     await page.getByRole('tab', { name: '設計' }).click();
+    // Dismiss onboarding tooltip if visible
+    await dismissOnboarding(page);
   }
 
   /** 生成原型以便 Tokens 按鈕可用 */
   async function generatePrototype(page: import('@playwright/test').Page) {
     await skipWizardAndGoToDesign(page);
 
-    const textarea = page.locator('textarea[placeholder="描述你的 UI...（可貼上截圖）"]');
+    const textarea = page.getByPlaceholder(/描述你的 UI/);
     await textarea.fill('建立一個有藍色主題的簡單頁面');
     await page.getByTestId('send-btn').click();
 

@@ -21,6 +21,7 @@ test.describe('E2E: Spec Panel', () => {
 
   test('spec panel exists with Annotations and Spec tabs', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // The spec panel should be visible (not collapsed by default)
     await expect(page.getByTestId('tab-annotations')).toBeVisible();
@@ -29,6 +30,7 @@ test.describe('E2E: Spec Panel', () => {
 
   test('can collapse and expand spec panel', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Collapse the spec panel
     await page.getByTestId('spec-panel-collapse').click();
@@ -49,18 +51,19 @@ test.describe('E2E: Spec Panel', () => {
 
   test('switching between annotations and spec tabs works', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Default tab is annotations - verify empty state message
-    await expect(page.getByText('No annotations yet')).toBeVisible();
+    await expect(page.getByText('尚無標注。開啟標注模式來新增。')).toBeVisible();
 
     // Switch to Spec tab
     await page.getByTestId('tab-spec').click();
 
     // Verify spec empty state
-    await expect(page.getByText('Select an annotation to view its spec')).toBeVisible();
+    await expect(page.getByText('選取一個標注來查看其規格。')).toBeVisible();
 
     // Switch back to annotations tab
     await page.getByTestId('tab-annotations').click();
-    await expect(page.getByText('No annotations yet')).toBeVisible();
+    await expect(page.getByText('尚無標注。開啟標注模式來新增。')).toBeVisible();
   });
 });

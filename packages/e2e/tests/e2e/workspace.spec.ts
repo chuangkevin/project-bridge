@@ -21,18 +21,19 @@ test.describe('E2E: Workspace', () => {
 
   test('workspace page loads with chat panel, preview area, and toolbar', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Verify toolbar is visible (wait for loading to finish)
     await expect(page.getByText('E2E Workspace Test', { exact: false })).toBeVisible();
 
     // Verify chat panel header
-    await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '對話' })).toBeVisible();
 
     // Verify chat input area
-    await expect(page.getByPlaceholder('Describe your UI...')).toBeVisible();
+    await expect(page.getByPlaceholder('描述你的 UI...（可貼上截圖）')).toBeVisible();
 
     // Verify preview area (empty state text)
-    await expect(page.getByText('Describe your UI in the chat panel', { exact: false })).toBeVisible();
+    await expect(page.getByText('在對話面板中描述你的 UI 來生成原型')).toBeVisible();
 
     // Verify device size selector buttons
     await expect(page.getByTestId('device-desktop')).toBeVisible();
@@ -45,12 +46,13 @@ test.describe('E2E: Workspace', () => {
 
   test('can type a message in chat input and send it', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Wait for workspace to load
-    await expect(page.getByPlaceholder('Describe your UI...')).toBeVisible();
+    await expect(page.getByPlaceholder('描述你的 UI...（可貼上截圖）')).toBeVisible();
 
     // Type a message
-    const chatInput = page.getByPlaceholder('Describe your UI...');
+    const chatInput = page.getByPlaceholder('描述你的 UI...（可貼上截圖）');
     await chatInput.fill('Create a simple button');
 
     // Click send button
@@ -70,6 +72,7 @@ test.describe('E2E: Workspace', () => {
 
   test('home button navigates back to home page', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Wait for workspace to load
     await expect(page.getByTestId('home-btn')).toBeVisible();

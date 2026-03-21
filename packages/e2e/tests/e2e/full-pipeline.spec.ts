@@ -56,7 +56,7 @@ test.describe('完整端對端流程', () => {
     await page.getByRole('tab', { name: '設計' }).click();
 
     // 上傳 PDF
-    const fileInput = page.getByTestId('attach-file-btn');
+    const fileInput = page.getByTestId('file-input');
     await fileInput.setInputFiles(specPdfPath);
 
     // 驗證分析開始
@@ -108,7 +108,7 @@ test.describe('完整端對端流程', () => {
     }
 
     // 嘗試從分析匯入（架構工具列中的按鈕）
-    const importBtn = page.getByRole('button', { name: '📥 從分析匯入' });
+    const importBtn = page.getByTestId('import-analysis-btn');
     if (await importBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       page.on('dialog', dialog => dialog.accept('取代'));
       await importBtn.click();

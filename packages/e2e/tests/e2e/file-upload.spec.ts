@@ -33,12 +33,14 @@ test.describe('E2E: File Upload in Chat', () => {
 
   test('file upload area and attach button exist in chat panel', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await expect(page.getByTestId('drop-zone')).toBeVisible();
     await expect(page.getByTestId('attach-file-btn')).toBeVisible();
   });
 
   test('upload a text file and verify file chip appears', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Create a temp text file
     const filePath = path.join(tmpDir, 'upload-test.txt');

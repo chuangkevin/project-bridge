@@ -21,16 +21,18 @@ test.describe('E2E: Design Panel', () => {
 
   test('Chat and Design tabs are visible, Chat is default', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await expect(page.getByTestId('tab-chat')).toBeVisible();
     await expect(page.getByTestId('tab-design')).toBeVisible();
     // Chat panel should be visible by default
-    await expect(page.getByPlaceholder('Describe your UI...')).toBeVisible();
+    await expect(page.getByPlaceholder('描述你的 UI...（可貼上截圖）')).toBeVisible();
     // Design panel should NOT be visible
     await expect(page.getByTestId('design-description')).not.toBeVisible();
   });
 
   test('clicking Design tab shows DesignPanel', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
     await expect(page.getByTestId('design-description')).toBeVisible();
     await expect(page.getByTestId('add-reference-btn')).toBeVisible();
@@ -45,16 +47,18 @@ test.describe('E2E: Design Panel', () => {
 
   test('switching back to Chat tab shows ChatPanel', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
     await expect(page.getByTestId('design-description')).toBeVisible();
 
     await page.getByTestId('tab-chat').click();
-    await expect(page.getByPlaceholder('Describe your UI...')).toBeVisible();
+    await expect(page.getByPlaceholder('描述你的 UI...（可貼上截圖）')).toBeVisible();
     await expect(page.getByTestId('design-description')).not.toBeVisible();
   });
 
   test('fill description and save shows success toast', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     await page.getByTestId('design-description').fill('現代簡約，企業感，主打信任感');
@@ -65,6 +69,7 @@ test.describe('E2E: Design Panel', () => {
 
   test('set border radius slider and change font, then save', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     // Change font family
@@ -82,6 +87,7 @@ test.describe('E2E: Design Panel', () => {
 
   test('description persists after page reload', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     const desc = '設計風格測試 — 現代感科技風';
@@ -91,12 +97,14 @@ test.describe('E2E: Design Panel', () => {
 
     // Reload and check
     await page.reload();
+    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
     await expect(page.getByTestId('design-description')).toHaveValue(desc, { timeout: 5000 });
   });
 
   test('Design Active badge appears after saving design profile', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Badge should NOT be visible initially (no design profile yet)
     await expect(page.getByTestId('design-active-badge')).not.toBeVisible();
@@ -112,16 +120,15 @@ test.describe('E2E: Design Panel', () => {
     await expect(page.getByTestId('design-active-badge')).toContainText('Design Active');
   });
 
-  test('Design Active badge visible on reload after saving', async ({ page }) => {
+  test('Design Active badge visible on reload after saving', async ({ page, request }) => {
     // Save design via API
-    await fetch(`${API}/api/projects/${projectId}/design`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: 'Pre-saved design profile' }),
+    await request.put(`${API}/api/projects/${projectId}/design`, {
+      data: { description: 'Pre-saved design profile' },
     });
 
     // Load the workspace — badge should already be active
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
     await expect(page.getByTestId('design-active-badge')).toBeVisible({ timeout: 5000 });
   });
 });

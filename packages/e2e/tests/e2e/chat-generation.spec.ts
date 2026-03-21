@@ -1,14 +1,31 @@
 import { test, expect } from '@playwright/test';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
 
 const API = 'http://localhost:3001';
 
-async function skipWizardAndGoToDesign(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: /跳過/ }).click();
-  await page.getByRole('tab', { name: '設計' }).click();
+async function dismissOnboarding(page: import('@playwright/test').Page) {
+  const skipBtn = page.getByTestId('onboarding-skip');
+  if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await skipBtn.click();
+  }
 }
 
 test.describe('對話與生成功能', () => {
   let projectId: string;
+  let tmpDir: string;
+  let tmpFilePath: string;
+
+  test.beforeAll(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-e2e-chat-'));
+    tmpFilePath = path.join(tmpDir, 'test-spec.txt');
+    fs.writeFileSync(tmpFilePath, '這是一份測試用的規格書內容。\n包含多行文字以模擬真實檔案。');
+  });
+
+  test.afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 
   test.beforeEach(async ({ request }) => {
     const res = await request.post(`${API}/api/projects`, {
@@ -26,7 +43,8 @@ test.describe('對話與生成功能', () => {
 
   test('送出簡單生成指令 → 驗證原型建立', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await skipWizardAndGoToDesign(page);
+    await dismissOnboarding(page);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     const textarea = page.getByPlaceholder(/描述你的 UI/);
     await expect(textarea).toBeVisible();
@@ -48,7 +66,8 @@ test.describe('對話與生成功能', () => {
 
   test('微調模式 — 送出修改不應全部重新生成', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await skipWizardAndGoToDesign(page);
+    await dismissOnboarding(page);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 第一次生成
     const textarea = page.getByPlaceholder(/描述你的 UI/);
@@ -79,7 +98,8 @@ test.describe('對話與生成功能', () => {
 
   test('強制重新生成按鈕 → 驗證完整重新生成', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await skipWizardAndGoToDesign(page);
+    await dismissOnboarding(page);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 第一次生成
     const textarea = page.getByPlaceholder(/描述你的 UI/);
@@ -107,11 +127,12 @@ test.describe('對話與生成功能', () => {
 
   test('上傳檔案 → 分析期間送出按鈕停用', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await skipWizardAndGoToDesign(page);
+    await dismissOnboarding(page);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 上傳檔案
     const fileInput = page.getByTestId('file-input');
-    await fileInput.setInputFiles('../../docs/需求文件/新好房【網B後台】批次自動刷新設定_規格書.pdf');
+    await fileInput.setInputFiles(tmpFilePath);
 
     // 驗證檔案晶片出現，顯示「◌ 分析中...」
     await expect(page.getByTestId('file-chip')).toBeVisible({ timeout: 10000 });
@@ -137,11 +158,12 @@ test.describe('對話與生成功能', () => {
 
   test('逐檔分析徽章（分析中... → 分析完成）', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await skipWizardAndGoToDesign(page);
+    await dismissOnboarding(page);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 上傳檔案
     const fileInput = page.getByTestId('file-input');
-    await fileInput.setInputFiles('../../docs/需求文件/新好房【網B後台】批次自動刷新設定_規格書.pdf');
+    await fileInput.setInputFiles(tmpFilePath);
 
     // 驗證檔案晶片出現
     await expect(page.getByTestId('file-chip')).toBeVisible({ timeout: 10000 });
@@ -165,11 +187,12 @@ test.describe('對話與生成功能', () => {
 
   test('點擊分析完成徽章 → 驗證預覽面板開啟', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await skipWizardAndGoToDesign(page);
+    await dismissOnboarding(page);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // 上傳檔案
     const fileInput = page.getByTestId('file-input');
-    await fileInput.setInputFiles('../../docs/需求文件/新好房【網B後台】批次自動刷新設定_規格書.pdf');
+    await fileInput.setInputFiles(tmpFilePath);
 
     // 等待分析完成（✓ 分析完成）
     const readyBadge = page.getByTestId('analysis-ready-badge');

@@ -21,6 +21,7 @@ test.describe('E2E: Constraints Bar', () => {
 
   test('constraints bar toggle exists and opens on click', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     const toggle = page.getByTestId('constraints-toggle');
     await expect(toggle).toBeVisible();
@@ -37,24 +38,26 @@ test.describe('E2E: Constraints Bar', () => {
 
   test('device, color, and language dropdowns exist', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Open constraints bar
     await page.getByTestId('constraints-toggle').click();
     await expect(page.getByTestId('constraints-bar')).toBeVisible();
 
-    // Verify labels
-    await expect(page.getByText('Device')).toBeVisible();
-    await expect(page.getByText('Color')).toBeVisible();
-    await expect(page.getByText('Language')).toBeVisible();
+    // Verify labels within the constraints bar
+    const bar = page.getByTestId('constraints-bar');
+    await expect(bar.getByText('Device')).toBeVisible();
+    await expect(bar.getByText('Color')).toBeVisible();
+    await expect(bar.getByText('Language')).toBeVisible();
 
     // Verify the three select elements exist within the constraints bar
-    const bar = page.getByTestId('constraints-bar');
     const selects = bar.locator('select');
     await expect(selects).toHaveCount(3);
   });
 
   test('selecting different options updates the dropdowns', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+    await page.getByRole('tab', { name: '設計' }).click();
 
     // Open constraints bar
     await page.getByTestId('constraints-toggle').click();
