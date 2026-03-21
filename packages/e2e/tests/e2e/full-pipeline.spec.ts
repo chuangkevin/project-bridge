@@ -119,57 +119,70 @@ test.describe('完整端對端流程', () => {
   test('步驟 6：新增元件到頁面', async ({ page }) => {
     test.skip(!projectId, '前一步驟未成功建立專案');
 
-    await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
-
-    // 如果精靈出現，跳過它
-    const skipBtn = page.getByRole('button', { name: /跳過/ });
-    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await skipBtn.click();
-    }
-
-    const flowchart = page.getByTestId('arch-flowchart');
-    if (!(await flowchart.isVisible({ timeout: 5000 }).catch(() => false))) {
-      // 如果沒有流程圖，直接建立架構
-      await page.request.put(`${API}/api/projects/${projectId}/architecture`, {
-        data: {
+    // Seed architecture data via PATCH API to ensure flowchart is available
+    // (steps 2-4 may have been skipped due to missing Gemini API / PDF)
+    await page.request.patch(`${API}/api/projects/${projectId}/architecture`, {
+      data: {
+        arch_data: {
           type: 'page',
           subtype: 'website',
           aiDecidePages: false,
           nodes: [
-            { id: 'p1', name: '首頁', position: { x: 100, y: 100 }, components: [] },
-            { id: 'p2', name: '功能頁', position: { x: 400, y: 100 }, components: [] },
+            { id: 'p1', nodeType: 'page', name: '首頁', position: { x: 100, y: 100 }, referenceFileId: null, referenceFileUrl: null, components: [] },
+            { id: 'p2', nodeType: 'page', name: '功能頁', position: { x: 400, y: 100 }, referenceFileId: null, referenceFileUrl: null, components: [] },
           ],
           edges: [{ id: 'e1', source: 'p1', target: 'p2' }],
         },
-      });
-      await page.reload();
-      await page.getByRole('tab', { name: '架構圖' }).click();
+      },
+    });
 
-      // 跳過 wizard again after reload
-      const skipBtn2 = page.getByRole('button', { name: /跳過/ });
-      if (await skipBtn2.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await skipBtn2.click();
-      }
-    }
+    await page.goto(`/project/${projectId}`);
+    await page.waitForLoadState('networkidle');
 
-    await expect(page.getByTestId('arch-flowchart')).toBeVisible({ timeout: 10000 });
+    // With arch_data set, navigate to architecture tab
+    const archTab = page.getByRole('tab', { name: '架構圖' });
+    await expect(archTab).toBeVisible({ timeout: 15000 });
+    await archTab.click();
+
+    // Wait for the flowchart canvas to fully render
+    await expect(page.getByTestId('arch-flowchart')).toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(500);
 
     // 在首頁新增元件
-    const firstPage = page.locator('[data-testid^="page-node-"]').first();
-    if (await firstPage.isVisible()) {
-      await firstPage.getByText(/元件/).click();
-      const addBtn = firstPage.getByText('+ 新增元件');
-      if (await addBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await addBtn.click();
+    const pageNode = page.getByTestId('page-node-首頁');
+    await expect(pageNode).toBeVisible({ timeout: 15000 });
 
-        // 填入元件
-        await page.locator('input[placeholder*="搜尋按鈕"]').fill('主要行動按鈕');
-        await page.locator('select').first().selectOption('button');
-        await page.getByText('儲存').or(page.getByText('確認')).first().click();
-        await page.waitForTimeout(1000);
-      }
-    }
+    // 點擊展開元件列表（button text: "▶ 元件 (0)"）
+    const compToggle = pageNode.getByText(/元件\s*\(/);
+    await expect(compToggle).toBeVisible({ timeout: 10000 });
+    await compToggle.click();
+
+    // Wait for the component list to expand
+    await page.waitForTimeout(300);
+
+    // 點擊「+ 新增元件」
+    const addCompBtn = pageNode.getByText('+ 新增元件');
+    await expect(addCompBtn).toBeVisible({ timeout: 10000 });
+    await addCompBtn.click();
+
+    // 元件編輯對話框應出現
+    const nameInput = page.locator('input[placeholder="例：搜尋按鈕"]');
+    await expect(nameInput).toBeVisible({ timeout: 10000 });
+
+    // 填入名稱
+    await nameInput.fill('主要行動按鈕');
+
+    // 選擇類型為按鈕（預設已是 button）
+    await page.locator('select').first().selectOption('button');
+
+    // 儲存元件
+    await page.getByRole('button', { name: '儲存' }).click();
+
+    // Wait for modal to close and component list to update
+    await page.waitForTimeout(500);
+
+    // 驗證元件出現在列表中
+    await expect(pageNode.getByText('主要行動按鈕')).toBeVisible({ timeout: 10000 });
   });
 
   test('步驟 7：生成原型（並行管線）', async ({ page }) => {

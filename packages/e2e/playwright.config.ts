@@ -25,7 +25,6 @@ export default defineConfig({
       name: 'e2e',
       testDir: './tests/e2e',
       testIgnore: 'smoke.spec.ts',
-      dependencies: ['smoke'],
     },
   ],
   webServer: [

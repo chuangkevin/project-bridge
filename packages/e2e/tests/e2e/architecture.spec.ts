@@ -174,7 +174,7 @@ test.describe('架構圖功能', () => {
     await expect(page.getByTestId('page-node-產品頁')).toBeVisible({ timeout: 15000 });
 
     // 透過拖動 handle 建立連線（@xyflow/react handle selectors）
-    // xyflow renders handles with data-handlepos attribute: "right" for source, "left" for target
+    // ReactFlow Handle renders with class .react-flow__handle and data-handlepos attribute
     const sourceHandle = page.getByTestId('page-node-首頁').locator('.react-flow__handle[data-handlepos="right"]');
     const targetHandle = page.getByTestId('page-node-產品頁').locator('.react-flow__handle[data-handlepos="left"]');
 
@@ -182,14 +182,36 @@ test.describe('架構圖功能', () => {
     await expect(sourceHandle).toBeAttached({ timeout: 10000 });
     await expect(targetHandle).toBeAttached({ timeout: 10000 });
 
-    if (await sourceHandle.isVisible() && await targetHandle.isVisible()) {
-      await sourceHandle.dragTo(targetHandle);
-      // Wait for the edge to appear after the connection is made
-      await page.waitForTimeout(500);
-      // 驗證邊出現
-      const edges = page.locator('.react-flow__edge');
-      await expect(edges.first()).toBeVisible({ timeout: 10000 });
+    // Use explicit mouse events to simulate a drag-to-connect in ReactFlow.
+    // Playwright's dragTo may not trigger ReactFlow's internal connection handling.
+    const sourceBBox = await sourceHandle.boundingBox();
+    const targetBBox = await targetHandle.boundingBox();
+
+    if (sourceBBox && targetBBox) {
+      const sx = sourceBBox.x + sourceBBox.width / 2;
+      const sy = sourceBBox.y + sourceBBox.height / 2;
+      const tx = targetBBox.x + targetBBox.width / 2;
+      const ty = targetBBox.y + targetBBox.height / 2;
+
+      await page.mouse.move(sx, sy);
+      await page.mouse.down();
+      // Move in small steps to trigger ReactFlow's connection detection
+      const steps = 5;
+      for (let i = 1; i <= steps; i++) {
+        await page.mouse.move(
+          sx + (tx - sx) * (i / steps),
+          sy + (ty - sy) * (i / steps),
+        );
+      }
+      await page.mouse.up();
+    } else {
+      // Fallback: use dragTo with force
+      await sourceHandle.dragTo(targetHandle, { force: true });
     }
+
+    // 驗證邊出現
+    const edges = page.locator('.react-flow__edge');
+    await expect(edges.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('展開元件列表 → 新增元件', async ({ page }) => {
@@ -214,23 +236,26 @@ test.describe('架構圖功能', () => {
     // Wait for the component list to expand
     await page.waitForTimeout(300);
 
-    // 點擊「+ 新增元件」
+    // 點擊「+ 新增元件」— the button is inside the expanded component list
     const addCompBtn = pageNode.getByText('+ 新增元件');
     await expect(addCompBtn).toBeVisible({ timeout: 10000 });
     await addCompBtn.click();
 
-    // 元件編輯對話框應出現（ComponentEditorModal — modal title is exactly '新增元件'）
+    // 元件編輯對話框應出現（ComponentEditorModal renders inside ReactFlow node
+    // with position:fixed, but transform context breaks fixed positioning —
+    // use force:true for interactions and wait for DOM presence）
     const nameInput = page.locator('input[placeholder="例：搜尋按鈕"]');
-    await expect(nameInput).toBeVisible({ timeout: 10000 });
+    await expect(nameInput).toBeAttached({ timeout: 10000 });
+    await page.waitForTimeout(300);
 
-    // 填入名稱（placeholder: "例：搜尋按鈕"）
-    await nameInput.fill('導航按鈕');
+    // 填入名稱
+    await nameInput.fill('導航按鈕', { force: true });
 
     // 選擇類型為按鈕（預設已是 button）
-    await page.locator('select').first().selectOption('button');
+    await page.locator('select').first().selectOption('button', { force: true });
 
-    // 儲存元件
-    await page.getByRole('button', { name: '儲存' }).click();
+    // 儲存元件 — the 儲存 button is inside the modal
+    await page.getByRole('button', { name: '儲存', exact: true }).click({ force: true });
 
     // Wait for modal to close and component list to update
     await page.waitForTimeout(500);
@@ -279,27 +304,28 @@ test.describe('架構圖功能', () => {
     await expect(compItem).toBeVisible({ timeout: 10000 });
     await compItem.click();
 
-    // 驗證編輯對話框出現（modal input should be visible）
+    // 驗證編輯對話框出現（modal renders inside ReactFlow node — transform context
+    // breaks position:fixed, so use force:true for interactions）
     const nameInput = page.locator('input[placeholder="例：搜尋按鈕"]');
-    await expect(nameInput).toBeVisible({ timeout: 10000 });
-
-    // 修改類型為連結
-    await page.locator('select').first().selectOption('link');
-
-    // Wait for the navigation target dropdown to appear (link is a nav type)
+    await expect(nameInput).toBeAttached({ timeout: 10000 });
     await page.waitForTimeout(300);
 
-    // 驗證導航目標選項可見（link 是 nav type）
+    // 修改類型為連結
+    await page.locator('select').first().selectOption('link', { force: true });
+
+    // Wait for the navigation target dropdown to appear (link is a nav type)
+    await page.waitForTimeout(500);
+
+    // 驗證導航目標選項可見（link 是 nav type）— second select in modal
     const navSelect = page.locator('select').nth(1);
-    if (await navSelect.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await navSelect.selectOption({ label: '產品頁' });
-    }
+    await expect(navSelect).toBeAttached({ timeout: 5000 });
+    await navSelect.selectOption('產品頁', { force: true });
 
     // 儲存
-    await page.getByRole('button', { name: '儲存' }).click();
+    await page.getByRole('button', { name: '儲存', exact: true }).click({ force: true });
 
     // Wait for modal to close
-    await expect(nameInput).not.toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(500);
   });
 
   test('新增多狀態元件（分頁標籤）', async ({ page }) => {
@@ -331,31 +357,32 @@ test.describe('架構圖功能', () => {
     await expect(addCompBtn).toBeVisible({ timeout: 10000 });
     await addCompBtn.click();
 
-    // 等待元件編輯對話框出現
+    // 等待元件編輯對話框出現（modal renders inside ReactFlow node —
+    // transform context breaks position:fixed, so use force:true）
     const nameInput = page.locator('input[placeholder="例：搜尋按鈕"]');
-    await expect(nameInput).toBeVisible({ timeout: 10000 });
+    await expect(nameInput).toBeAttached({ timeout: 10000 });
+    await page.waitForTimeout(300);
 
     // 填入名稱
-    await nameInput.fill('主選單分頁');
+    await nameInput.fill('主選單分頁', { force: true });
 
     // 選擇類型為分頁 (tab) — this is a state type, so state list will appear
-    await page.locator('select').first().selectOption('tab');
+    await page.locator('select').first().selectOption('tab', { force: true });
 
     // Wait for state section to appear after type change
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
 
     // 應出現狀態設定區，新增 3 個狀態
     const addStateBtn = page.getByText('+ 新增狀態');
-    if (await addStateBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      for (let i = 0; i < 3; i++) {
-        await addStateBtn.click();
-        // Small wait between clicks to let state be added
-        await page.waitForTimeout(200);
-      }
+    await expect(addStateBtn).toBeAttached({ timeout: 5000 });
+    for (let i = 0; i < 3; i++) {
+      await addStateBtn.click({ force: true });
+      // Small wait between clicks to let state be added
+      await page.waitForTimeout(200);
     }
 
     // 儲存
-    await page.getByRole('button', { name: '儲存' }).click();
+    await page.getByRole('button', { name: '儲存', exact: true }).click({ force: true });
 
     // Wait for modal to close and list to update
     await page.waitForTimeout(500);

@@ -1,10 +1,50 @@
 import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import db from '../db/connection';
 import { extractComponent, replaceComponent } from '../services/componentExtractor';
 import { getGeminiApiKey, getGeminiModel, trackUsage, withRetry } from '../services/geminiKeys';
 import { validateNavigation } from '../services/prototypeValidator';
 
 const router = Router();
+
+// POST /:id/prototype/seed — seed a prototype version directly (for testing / internal use)
+router.post('/:id/prototype/seed', (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const { html } = req.body;
+
+    if (typeof html !== 'string' || html.trim().length === 0) {
+      return res.status(400).json({ error: 'html string is required' });
+    }
+
+    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Find current max version for this project
+    const maxRow = db.prepare(
+      'SELECT COALESCE(MAX(version), 0) as maxV FROM prototype_versions WHERE project_id = ?'
+    ).get(projectId) as { maxV: number };
+    const newVersion = maxRow.maxV + 1;
+
+    // Deactivate existing current versions
+    db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+
+    // Insert new version
+    const id = uuidv4();
+    db.prepare(
+      'INSERT INTO prototype_versions (id, project_id, html, version, is_current) VALUES (?, ?, ?, ?, 1)'
+    ).run(id, projectId, html.trim(), newVersion);
+
+    db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+
+    return res.status(201).json({ id, version: newVersion, projectId });
+  } catch (err: any) {
+    console.error('Error seeding prototype:', err);
+    return res.status(500).json({ error: 'Failed to seed prototype' });
+  }
+});
 
 // PATCH /api/projects/:id/prototype/styles — upsert tweaker style tag into current prototype version
 router.patch('/:id/prototype/styles', (req: Request, res: Response) => {
@@ -199,7 +239,6 @@ RULES:
     // Replace in full HTML and save new version
     const updatedHtml = replaceComponent(version.html, bridgeId, newComponentHtml);
     const newVersion = version.version + 1;
-    const { v4: uuidv4 } = await import('uuid');
     db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
     db.prepare(
       'INSERT INTO prototype_versions (id, project_id, html, version, is_current) VALUES (?, ?, ?, ?, 1)'

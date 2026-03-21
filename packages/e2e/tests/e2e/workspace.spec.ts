@@ -21,10 +21,15 @@ test.describe('E2E: Workspace', () => {
 
   test('workspace page loads with chat panel, preview area, and toolbar', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+
+    // Wait for loading state to finish (project data fetch)
+    await expect(page.getByText('載入專案中...')).toBeHidden({ timeout: 10000 });
+
+    // The design mode is active by default; click the tab to ensure we are on it
     await page.getByRole('tab', { name: '設計' }).click();
 
     // Verify toolbar is visible (wait for loading to finish)
-    await expect(page.getByText('E2E Workspace Test', { exact: false })).toBeVisible();
+    await expect(page.getByText('E2E Workspace Test', { exact: false })).toBeVisible({ timeout: 5000 });
 
     // Verify chat panel header
     await expect(page.getByRole('heading', { name: '對話' })).toBeVisible();
@@ -46,13 +51,18 @@ test.describe('E2E: Workspace', () => {
 
   test('can type a message in chat input and send it', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+
+    // Wait for loading state to finish
+    await expect(page.getByText('載入專案中...')).toBeHidden({ timeout: 10000 });
+
+    // The design mode is active by default; click the tab to ensure we are on it
     await page.getByRole('tab', { name: '設計' }).click();
 
-    // Wait for workspace to load
-    await expect(page.getByPlaceholder('描述你的 UI...（可貼上截圖）')).toBeVisible();
+    // Wait for chat input to be visible and ready for interaction
+    const chatInput = page.getByPlaceholder('描述你的 UI...（可貼上截圖）');
+    await expect(chatInput).toBeVisible({ timeout: 5000 });
 
     // Type a message
-    const chatInput = page.getByPlaceholder('描述你的 UI...（可貼上截圖）');
     await chatInput.fill('Create a simple button');
 
     // Click send button
@@ -72,10 +82,15 @@ test.describe('E2E: Workspace', () => {
 
   test('home button navigates back to home page', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
+
+    // Wait for loading state to finish
+    await expect(page.getByText('載入專案中...')).toBeHidden({ timeout: 10000 });
+
+    // The design mode is active by default; click the tab to ensure we are on it
     await page.getByRole('tab', { name: '設計' }).click();
 
     // Wait for workspace to load
-    await expect(page.getByTestId('home-btn')).toBeVisible();
+    await expect(page.getByTestId('home-btn')).toBeVisible({ timeout: 5000 });
 
     await page.getByTestId('home-btn').click();
     await expect(page).toHaveURL('/');

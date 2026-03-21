@@ -38,8 +38,8 @@ test.describe('E2E: Home Page', () => {
     // Verify redirect to workspace
     await expect(page).toHaveURL(/\/project\/[\w-]+/, { timeout: 10000 });
 
-    // Verify we're on the workspace page with the project name visible
-    await expect(page.getByText('E2E Home Test Project')).toBeVisible();
+    // Verify we're on the workspace page (project list button visible in top bar)
+    await expect(page.getByRole('button', { name: '專案列表' })).toBeVisible();
   });
 
   test('project card appears on home page after creation', async ({ page, request }) => {

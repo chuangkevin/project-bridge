@@ -95,11 +95,18 @@ test.describe('E2E: Design Panel', () => {
     await page.getByTestId('save-design-btn').click();
     await expect(page.getByText('已儲存，下次生成將套用此設計')).toBeVisible({ timeout: 5000 });
 
-    // Reload and check
-    await page.reload();
+    // Reload and check — after reload the page defaults to Architecture mode,
+    // so we must wait for the architecture tab to become active, then switch
+    // back to Design mode and open the Design sub-tab.
+    await page.reload({ waitUntil: 'networkidle' });
+    // Wait for architecture mode to be the active tab (confirming page has loaded)
+    await expect(page.getByRole('tab', { name: '架構圖' })).toHaveAttribute('aria-selected', 'true', { timeout: 10000 });
+    // Switch to Design mode
     await page.getByRole('tab', { name: '設計' }).click();
+    // Switch left-panel sub-tab from Chat (default) to Design
     await page.getByTestId('tab-design').click();
-    await expect(page.getByTestId('design-description')).toHaveValue(desc, { timeout: 5000 });
+    // Wait for DesignPanel to load saved data from API
+    await expect(page.getByTestId('design-description')).toHaveValue(desc, { timeout: 10000 });
   });
 
   test('Design Active badge appears after saving design profile', async ({ page }) => {

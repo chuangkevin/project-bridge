@@ -106,12 +106,13 @@ test.describe('E2E: DesignPanel — inheritance UI', () => {
     const toggle = page.getByLabel('繼承全域設計');
     await expect(toggle).toBeChecked();
 
-    // Click the visual toggle label to turn it off
-    await toggle.click({ force: true });
-    await expect(toggle).not.toBeChecked();
+    // Click the parent <label> element (the visual toggle) to turn it off
+    // The checkbox itself is display:none, so we click its wrapping label
+    await page.locator('label').filter({ has: toggle }).click();
+    await expect(toggle).not.toBeChecked({ timeout: 5000 });
 
     // Supplement textarea should be hidden
-    await expect(page.getByTestId('supplement-textarea')).not.toBeVisible();
+    await expect(page.getByTestId('supplement-textarea')).not.toBeVisible({ timeout: 5000 });
   });
 
   test('save supplement content and verify it persists', async ({ page, request }) => {
@@ -142,9 +143,9 @@ test.describe('E2E: DesignPanel — inheritance UI', () => {
     await expect(page.getByText('繼承全域設計')).toBeVisible({ timeout: 5000 });
     const toggle = page.getByLabel('繼承全域設計');
 
-    // Turn off inheritance
-    await toggle.click({ force: true });
-    await expect(toggle).not.toBeChecked();
+    // Turn off inheritance by clicking the parent <label> (visual toggle)
+    await page.locator('label').filter({ has: toggle }).click();
+    await expect(toggle).not.toBeChecked({ timeout: 5000 });
 
     await page.getByTestId('save-design-btn').click();
     await expect(page.getByText('已儲存，下次生成將套用此設計')).toBeVisible({ timeout: 5000 });
