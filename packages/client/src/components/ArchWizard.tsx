@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useArchStore, ArchData, ArchNode, ArchEdge } from '../stores/useArchStore';
 
 interface Props {
@@ -70,7 +70,7 @@ export default function ArchWizard({ projectId, onComplete, onSkip }: Props) {
   const [pages, setPages] = useState<ArchNode[]>([]);
   const [currentPageName, setCurrentPageName] = useState('');
   const [customInput, setCustomInput] = useState('');
-  const [componentName, setComponentName] = useState('');
+  const [, setComponentName] = useState('');
   const [selectedInteractions, setSelectedInteractions] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteZoneRef = useRef<HTMLDivElement>(null);
