@@ -90,11 +90,11 @@
 
 ## 13. 測試
 
-- [ ] 13.1 API 測試：使用者 CRUD（建立、停用、刪除、轉移）
-- [ ] 13.2 API 測試：登入/登出/session 管理
-- [ ] 13.3 API 測試：權限矩陣（owner/non-owner/admin 對各操作的存取）
-- [ ] 13.4 API 測試：Fork 功能
-- [ ] 13.5 API 測試：標註帶 user_id + 刪除權限
+- [x] 13.1 API 測試：使用者 CRUD（建立、停用、刪除、轉移）
+- [x] 13.2 API 測試：登入/登出/session 管理
+- [x] 13.3 API 測試：權限矩陣（owner/non-owner/admin 對各操作的存取）
+- [x] 13.4 API 測試：Fork 功能
+- [x] 13.5 API 測試：標註帶 user_id + 刪除權限
 - [ ] 13.6 E2E 測試：登入流程 + 首頁分區顯示
 - [ ] 13.7 E2E 測試：非 owner 操作限制 + Fork
 - [ ] 13.8 E2E 測試：管理員使用者管理面板
