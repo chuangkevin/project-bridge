@@ -98,10 +98,10 @@ export const BRIDGE_SCRIPT = `
 
   document.addEventListener('click', function(e) {
     if (!annotationMode && !apiBindingMode && !visualEditMode && !pageMappingMode) return;
-    e.preventDefault();
-    e.stopPropagation();
     var target = findBridgeId(e.target);
     if (!target) return;
+    e.preventDefault();
+    e.stopPropagation();
     var bridgeId = target.getAttribute('data-bridge-id');
     var rect = target.getBoundingClientRect();
     if (pageMappingMode) {

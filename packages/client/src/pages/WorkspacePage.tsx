@@ -300,7 +300,7 @@ export default function WorkspacePage() {
     setActivePage(page);
     const iframe = document.querySelector('iframe');
     if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'show-page', name: page }, '*');
+      iframe.contentWindow.postMessage({ type: 'navigate-page', page }, '*');
     }
   }, []);
 

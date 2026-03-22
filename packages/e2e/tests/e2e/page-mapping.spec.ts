@@ -102,10 +102,18 @@ test.describe('Page Mapping - E2E UI', () => {
     await page.goto(`/project/${emptyProject.id}`);
     await page.waitForLoadState('networkidle');
 
+    // Skip architecture wizard if shown
+    const skipLink = page.getByText('跳過，直接去 Design →');
+    if (await skipLink.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await skipLink.click();
+    }
     const skipBtn = page.getByRole('button', { name: /跳過/ });
     if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await skipBtn.click();
     }
+
+    // Wait for design mode toolbar to render
+    await page.waitForTimeout(1000);
 
     // Page mapping toggle should be disabled
     const mappingToggle = page.getByTestId('page-mapping-toggle');
