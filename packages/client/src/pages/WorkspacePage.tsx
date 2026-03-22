@@ -13,6 +13,7 @@ import TokenPanel, { DesignToken } from '../components/TokenPanel';
 import ApiBindingPanel from '../components/ApiBindingPanel';
 import ConstraintPanel from '../components/ConstraintPanel';
 import VisualEditor from '../components/VisualEditor';
+import PageMappingPanel from '../components/PageMappingPanel';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
@@ -50,7 +51,7 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
+  const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style' | 'page-mapping'>('chat');
   const [activeMode, setActiveMode] = useState<'design' | 'architecture'>('design');
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
   const { setArchData, targetPage, setTargetPage } = useArchStore();
@@ -1032,6 +1033,30 @@ export default function WorkspacePage() {
           </button>
           <button
             type="button"
+            style={{
+              ...styles.annotateBtn,
+              ...(interactionMode === 'page-mapping' ? { backgroundColor: '#f5f3ff', borderColor: '#8B5CF6', color: '#8B5CF6' } : {}),
+              ...(!html ? { opacity: 0.5 } : {}),
+            }}
+            onClick={() => {
+              const isActive = interactionMode === 'page-mapping';
+              if (isActive) {
+                setInteractionMode('browse');
+                setLeftTab('chat');
+              } else {
+                setInteractionMode('page-mapping');
+                setAnnotationMode(false);
+                setLeftTab('page-mapping');
+              }
+            }}
+            disabled={!html}
+            title="頁面導航對應"
+            data-testid="page-mapping-toggle"
+          >
+            🔗 頁面對應
+          </button>
+          <button
+            type="button"
             style={styles.historyBtn}
             onClick={() => setFocusMode(true)}
             title="專注模式 (F)"
@@ -1238,6 +1263,34 @@ export default function WorkspacePage() {
               <DesignPanel
                 projectId={project.id}
                 onSaved={checkDesignActive}
+              />
+            ) : leftTab === 'page-mapping' ? (
+              <PageMappingPanel
+                projectId={project.id}
+                pages={pages}
+                activePage={activePage}
+                onPageClick={(page) => {
+                  setActivePage(page);
+                  const iframe = document.querySelector('iframe');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'navigate-page', page }, '*');
+                  }
+                }}
+                archComponents={(() => {
+                  try {
+                    const ad = project.arch_data ? JSON.parse(project.arch_data) : null;
+                    if (!ad?.nodes) return [];
+                    const comps: Array<{ id: string; name: string }> = [];
+                    for (const n of ad.nodes) {
+                      if (n.components) {
+                        for (const c of n.components) {
+                          comps.push({ id: c.id, name: c.name });
+                        }
+                      }
+                    }
+                    return comps;
+                  } catch { return []; }
+                })()}
               />
             ) : (
               <StyleTweakerPanel

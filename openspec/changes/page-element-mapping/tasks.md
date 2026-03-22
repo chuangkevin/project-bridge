@@ -19,17 +19,17 @@
 
 ## 4. Bridge Script 擴充
 
-- [ ] 4.1 在 bridgeScript.ts 新增 `page-mapping` mode 支援
-- [ ] 4.2 page-mapping mode 下：hover 高亮帶 data-bridge-id 的元素、點選發送 element-selected 事件（含 bridgeId, tag, textContent, pageName）
-- [ ] 4.3 點選元素時阻止預設行為（不觸發 onclick 導航）
+- [x] 4.1 在 bridgeScript.ts 新增 `page-mapping` mode 支援
+- [x] 4.2 page-mapping mode 下：hover 高亮帶 data-bridge-id 的元素、點選發送 element-selected 事件（含 bridgeId, tag, textContent, pageName）
+- [x] 4.3 點選元素時阻止預設行為（不觸發 onclick 導航）
 
 ## 5. 前端 UI — 頁面對應模式
 
-- [ ] 5.1 WorkspacePage.tsx：新增 leftTab='page-mapping' 模式，toolbar 加入「頁面對應」按鈕（無原型時 disabled）
-- [ ] 5.2 建立 PageMappingPanel.tsx 元件：左側頁面總覽（從 HTML 解析 data-page，顯示 mapping 數量，點擊切換頁面）
-- [ ] 5.3 PageMappingPanel.tsx：右側 mapping 設定面板（元素標籤、導航目標 dropdown、元件身份 dropdown）
-- [ ] 5.4 整合 iframe postMessage：進入 page-mapping 模式時切換 bridge mode，接收 element-selected 事件
-- [ ] 5.5 儲存按鈕：呼叫 PUT API，更新後刷新左側 mapping 數量和 iframe 預覽
+- [x] 5.1 WorkspacePage.tsx：新增 leftTab='page-mapping' 模式，toolbar 加入「頁面對應」按鈕（無原型時 disabled）
+- [x] 5.2 建立 PageMappingPanel.tsx 元件：左側頁面總覽（從 HTML 解析 data-page，顯示 mapping 數量，點擊切換頁面）
+- [x] 5.3 PageMappingPanel.tsx：右側 mapping 設定面板（元素標籤、導航目標 dropdown、元件身份 dropdown）
+- [x] 5.4 整合 iframe postMessage：進入 page-mapping 模式時切換 bridge mode，接收 element-selected 事件
+- [x] 5.5 儲存按鈕：呼叫 PUT API，更新後刷新左側 mapping 數量和 iframe 預覽
 
 ## 6. E2E 測試
 
