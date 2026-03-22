@@ -8,6 +8,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage, withRetry } from '../services/geminiKeys';
+import { cleanupMappingsAfterRegeneration } from '../services/archSync';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { generateParallel } from '../services/parallelGenerator';
@@ -970,6 +971,13 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             'INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
           ).run(versionId, projectId, assistantMsgId, parallelResult.html, newVersion, 1, JSON.stringify(parallelResult.pages));
 
+          // Clean up stale page mappings and re-apply surviving ones
+          const cleanedHtml = cleanupMappingsAfterRegeneration(projectId as string, parallelResult.html);
+          if (cleanedHtml !== parallelResult.html) {
+            db.prepare('UPDATE prototype_versions SET html = ? WHERE id = ?').run(cleanedHtml, versionId);
+            parallelResult.html = cleanedHtml;
+          }
+
           db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
 
           res.write(`data: ${JSON.stringify({
@@ -1146,6 +1154,13 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
         isMultiPage ? 1 : 0,
         JSON.stringify(finalPages)
       );
+
+      // Clean up stale page mappings and re-apply surviving ones
+      const cleanedHtml2 = cleanupMappingsAfterRegeneration(projectId as string, html);
+      if (cleanedHtml2 !== html) {
+        db.prepare('UPDATE prototype_versions SET html = ? WHERE id = ?').run(cleanedHtml2, versionId);
+        html = cleanedHtml2;
+      }
 
       db.prepare(
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?"
