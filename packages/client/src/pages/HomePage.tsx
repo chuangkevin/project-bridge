@@ -12,7 +12,9 @@ interface Project {
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
-  const then = new Date(dateStr).getTime();
+  // SQLite datetime('now') produces UTC without 'Z' suffix — append it if missing
+  const normalized = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr.replace(' ', 'T') + 'Z';
+  const then = new Date(normalized).getTime();
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
