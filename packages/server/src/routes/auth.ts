@@ -1,143 +1,143 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import db from '../db/connection';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
-// Helper: get a setting value
-function getSetting(key: string): string | undefined {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
-  return row?.value;
-}
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-// Helper: upsert a setting
-function setSetting(key: string, value: string): void {
-  db.prepare(`
-    INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(key, value);
-}
-
-// GET /api/auth/status — check if password is set up
+// GET /api/auth/status — check if any users exist (determines setup vs login)
 router.get('/status', (_req: Request, res: Response) => {
   try {
-    const hash = getSetting('admin_password_hash');
-    return res.json({ hasPassword: !!hash });
+    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+    return res.json({ hasUsers: userCount.count > 0 });
   } catch (err: any) {
     console.error('Error checking auth status:', err);
     return res.status(500).json({ error: 'Failed to check auth status' });
   }
 });
 
-// POST /api/auth/setup — first-time password setup
-router.post('/setup', async (req: Request, res: Response) => {
+// 3.2 POST /api/auth/setup — first user setup (becomes admin)
+router.post('/setup', (req: Request, res: Response) => {
   try {
-    const existing = getSetting('admin_password_hash');
-    if (existing) {
-      return res.status(400).json({ error: '管理員密碼已設定，無法重新設定。請使用變更密碼功能。' });
+    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+    if (userCount.count > 0) {
+      return res.status(400).json({ error: '系統已有使用者，無法重新設定' });
     }
 
-    const { password } = req.body;
-    if (!password || typeof password !== 'string' || password.length < 4) {
-      return res.status(400).json({ error: '密碼至少需要 4 個字元' });
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ error: '管理員名稱為必填' });
     }
 
-    const hash = await bcrypt.hash(password, 10);
-    setSetting('admin_password_hash', hash);
+    // Create admin user
+    const userId = uuidv4();
+    db.prepare('INSERT INTO users (id, name, role) VALUES (?, ?, ?)').run(userId, name.trim(), 'admin');
 
+    // 4.7 Assign all existing ownerless projects to admin
+    db.prepare('UPDATE projects SET owner_id = ? WHERE owner_id IS NULL').run(userId);
+
+    // Create session
+    const sessionId = uuidv4();
     const token = crypto.randomUUID();
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    setSetting('admin_session_token', token);
-    setSetting('admin_session_expiry', expiry);
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    db.prepare('INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(
+      sessionId, userId, token, expiresAt
+    );
 
-    return res.json({ success: true, token });
+    return res.json({
+      token,
+      user: { id: userId, name: name.trim(), role: 'admin' },
+    });
   } catch (err: any) {
-    console.error('Error setting up password:', err);
-    return res.status(500).json({ error: 'Failed to set up password' });
+    console.error('Error setting up admin:', err);
+    return res.status(500).json({ error: 'Failed to setup admin' });
   }
 });
 
-// POST /api/auth/verify — verify password
-router.post('/verify', async (req: Request, res: Response) => {
+// 2.4 POST /api/auth/login — select user by ID, create session
+router.post('/login', (req: Request, res: Response) => {
   try {
-    const hash = getSetting('admin_password_hash');
-    if (!hash) {
-      return res.status(400).json({ error: '尚未設定管理員密碼' });
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
     }
 
-    const { password } = req.body;
-    if (!password || typeof password !== 'string') {
-      return res.status(400).json({ error: '請輸入密碼' });
+    const user = db.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').get(userId) as any;
+    if (!user) {
+      return res.status(404).json({ error: '使用者不存在或已停用' });
     }
 
-    const match = await bcrypt.compare(password, hash);
-    if (!match) {
-      return res.status(401).json({ error: '密碼錯誤' });
-    }
-
+    // Create session
+    const sessionId = uuidv4();
     const token = crypto.randomUUID();
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    setSetting('admin_session_token', token);
-    setSetting('admin_session_expiry', expiry);
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
 
-    return res.json({ success: true, token });
+    db.prepare('INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(
+      sessionId, userId, token, expiresAt
+    );
+
+    return res.json({
+      token,
+      user: { id: user.id, name: user.name, role: user.role },
+    });
   } catch (err: any) {
-    console.error('Error verifying password:', err);
-    return res.status(500).json({ error: 'Failed to verify password' });
+    console.error('Error logging in:', err);
+    return res.status(500).json({ error: 'Failed to login' });
   }
 });
 
-// POST /api/auth/change — change password (requires valid token)
-router.post('/change', async (req: Request, res: Response) => {
+// 2.5 POST /api/auth/logout — clear session
+router.post('/logout', (req: Request, res: Response) => {
   try {
-    // Check authorization
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+    }
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error logging out:', err);
+    return res.status(500).json({ error: 'Failed to logout' });
+  }
+});
+
+// 2.6 GET /api/auth/me — return current user info
+router.get('/me', (req: Request, res: Response) => {
+  try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: '未授權' });
+      return res.json({ user: null });
     }
+
     const token = authHeader.slice(7);
-    const storedToken = getSetting('admin_session_token');
-    const expiry = getSetting('admin_session_expiry');
+    const session = db.prepare(`
+      SELECT u.id, u.name, u.role
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.token = ? AND s.expires_at > datetime('now') AND u.is_active = 1
+    `).get(token) as { id: string; name: string; role: string } | undefined;
 
-    if (!storedToken || token !== storedToken) {
-      return res.status(401).json({ error: '無效的 Token' });
-    }
-    if (expiry && new Date(expiry) < new Date()) {
-      return res.status(401).json({ error: 'Token 已過期，請重新登入' });
-    }
-
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: '請提供目前密碼和新密碼' });
-    }
-    if (typeof newPassword !== 'string' || newPassword.length < 4) {
-      return res.status(400).json({ error: '新密碼至少需要 4 個字元' });
+    if (!session) {
+      return res.json({ user: null });
     }
 
-    const hash = getSetting('admin_password_hash');
-    if (!hash) {
-      return res.status(400).json({ error: '尚未設定管理員密碼' });
-    }
-
-    const match = await bcrypt.compare(currentPassword, hash);
-    if (!match) {
-      return res.status(401).json({ error: '目前密碼錯誤' });
-    }
-
-    const newHash = await bcrypt.hash(newPassword, 10);
-    setSetting('admin_password_hash', newHash);
-
-    // Issue new token
-    const newToken = crypto.randomUUID();
-    const newExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    setSetting('admin_session_token', newToken);
-    setSetting('admin_session_expiry', newExpiry);
-
-    return res.json({ success: true, token: newToken });
+    return res.json({ user: session });
   } catch (err: any) {
-    console.error('Error changing password:', err);
-    return res.status(500).json({ error: 'Failed to change password' });
+    console.error('Error getting current user:', err);
+    return res.status(500).json({ error: 'Failed to get user info' });
+  }
+});
+
+// 2.7 GET /api/users — list all users (public, for login page)
+router.get('/users', (_req: Request, res: Response) => {
+  try {
+    const users = db.prepare('SELECT id, name, role, is_active, created_at FROM users WHERE is_active = 1 ORDER BY created_at ASC').all();
+    return res.json(users);
+  } catch (err: any) {
+    console.error('Error listing users:', err);
+    return res.status(500).json({ error: 'Failed to list users' });
   }
 });
 

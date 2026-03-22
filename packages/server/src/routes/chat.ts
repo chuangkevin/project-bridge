@@ -8,6 +8,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage, withRetry } from '../services/geminiKeys';
+import { requireOwnerOrAdmin } from '../middleware/auth';
 import { cleanupMappingsAfterRegeneration } from '../services/archSync';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
@@ -149,7 +150,7 @@ function formatGeminiError(err: any): string {
 }
 
 // POST /api/projects/:id/chat — SSE chat with AI
-router.post('/:id/chat', async (req: Request, res: Response) => {
+router.post('/:id/chat', requireOwnerOrAdmin, async (req: Request, res: Response) => {
   try {
     const projectId = req.params.id;
     const { message, fileIds, forceRegenerate } = req.body;

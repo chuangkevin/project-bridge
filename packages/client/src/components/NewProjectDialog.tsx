@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { authHeaders } from '../contexts/AuthContext';
 
 interface Props {
   onClose: () => void;
@@ -23,7 +24,7 @@ export default function NewProjectDialog({ onClose, onCreated }: Props) {
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ name: name.trim() }),
       });
       if (!res.ok) {

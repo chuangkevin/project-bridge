@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth, authFetch, authHeaders } from '../contexts/AuthContext';
+import DestructiveConfirmDialog from '../components/DestructiveConfirmDialog';
 
 interface KeyInfo {
   suffix: string;
@@ -15,45 +17,23 @@ interface UsageStats {
   month: { calls: number; tokens: number };
 }
 
+interface UserInfo {
+  id: string;
+  name: string;
+  role: 'admin' | 'user';
+  disabled: boolean;
+  created_at: string;
+}
+
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
 }
 
-function getToken(): string | null {
-  return sessionStorage.getItem('admin_token');
-}
-
-function authHeaders(): Record<string, string> {
-  const token = getToken();
-  if (token) return { Authorization: `Bearer ${token}` };
-  return {};
-}
-
-type AuthState = 'loading' | 'setup' | 'login' | 'authenticated';
-
 export default function SettingsPage() {
   const navigate = useNavigate();
-
-  // Auth state
-  const [authState, setAuthState] = useState<AuthState>('loading');
-  const [authError, setAuthError] = useState('');
-
-  // Setup form
-  const [setupPassword, setSetupPassword] = useState('');
-  const [setupConfirm, setSetupConfirm] = useState('');
-
-  // Login form
-  const [loginPassword, setLoginPassword] = useState('');
-
-  // Change password
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
-  const [changeError, setChangeError] = useState('');
-  const [changeSuccess, setChangeSuccess] = useState('');
+  const { user, logout } = useAuth();
 
   // Key management
   const [keys, setKeys] = useState<KeyInfo[]>([]);
@@ -75,129 +55,18 @@ export default function SettingsPage() {
     () => localStorage.getItem('pb-language') ?? '繁體中文'
   );
 
-  // ─── Auth flow ─────────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/auth/status');
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+  // User management (admin only)
+  const [users, setUsers] = useState<UserInfo[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [addUserError, setAddUserError] = useState('');
+  const [addingUser, setAddingUser] = useState(false);
 
-        if (!data.hasPassword) {
-          setAuthState('setup');
-          return;
-        }
+  // Delete user dialog
+  const [deleteTarget, setDeleteTarget] = useState<UserInfo | null>(null);
 
-        // Has password — check if we have a valid token
-        const token = getToken();
-        if (token) {
-          // Verify token by making a test request to settings
-          const testRes = await fetch('/api/settings', {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (testRes.ok) {
-            setAuthState('authenticated');
-            return;
-          }
-          // Token invalid, clear it
-          sessionStorage.removeItem('admin_token');
-        }
-        setAuthState('login');
-      } catch {
-        // If auth status check fails, assume no auth needed
-        setAuthState('authenticated');
-      }
-    })();
-  }, []);
-
-  const handleSetup = async () => {
-    setAuthError('');
-    if (!setupPassword || setupPassword.length < 4) {
-      setAuthError('密碼至少需要 4 個字元');
-      return;
-    }
-    if (setupPassword !== setupConfirm) {
-      setAuthError('兩次輸入的密碼不一致');
-      return;
-    }
-    try {
-      const res = await fetch('/api/auth/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: setupPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAuthError(data.error || '設定失敗');
-        return;
-      }
-      sessionStorage.setItem('admin_token', data.token);
-      setAuthState('authenticated');
-    } catch {
-      setAuthError('網路錯誤');
-    }
-  };
-
-  const handleLogin = async () => {
-    setAuthError('');
-    if (!loginPassword) {
-      setAuthError('請輸入密碼');
-      return;
-    }
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: loginPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAuthError(data.error || '驗證失敗');
-        return;
-      }
-      sessionStorage.setItem('admin_token', data.token);
-      setAuthState('authenticated');
-    } catch {
-      setAuthError('網路錯誤');
-    }
-  };
-
-  const handleChangePassword = async () => {
-    setChangeError('');
-    setChangeSuccess('');
-    if (!currentPassword) {
-      setChangeError('請輸入目前密碼');
-      return;
-    }
-    if (!newPassword || newPassword.length < 4) {
-      setChangeError('新密碼至少需要 4 個字元');
-      return;
-    }
-    if (newPassword !== newPasswordConfirm) {
-      setChangeError('兩次輸入的新密碼不一致');
-      return;
-    }
-    try {
-      const res = await fetch('/api/auth/change', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setChangeError(data.error || '變更失敗');
-        return;
-      }
-      sessionStorage.setItem('admin_token', data.token);
-      setCurrentPassword('');
-      setNewPassword('');
-      setNewPasswordConfirm('');
-      setChangeSuccess('密碼已成功變更');
-      setTimeout(() => setChangeSuccess(''), 3000);
-    } catch {
-      setChangeError('網路錯誤');
-    }
-  };
+  // Transfer admin dialog
+  const [transferTarget, setTransferTarget] = useState<UserInfo | null>(null);
 
   // ─── Settings data loading ─────────────────────────
   const fetchKeys = useCallback(async () => {
@@ -218,8 +87,19 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const fetchUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const res = await authFetch('/api/users/all');
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch { /* ignore */ }
+    setUsersLoading(false);
+  }, []);
+
   useEffect(() => {
-    if (authState !== 'authenticated') return;
     let cancelled = false;
     (async () => {
       try {
@@ -233,7 +113,14 @@ export default function SettingsPage() {
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [authState, fetchKeys, fetchUsage]);
+  }, [fetchKeys, fetchUsage]);
+
+  // Fetch users if admin
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchUsers();
+    }
+  }, [user, fetchUsers]);
 
   const handleAddKey = async () => {
     const trimmed = newKey.trim();
@@ -295,8 +182,71 @@ export default function SettingsPage() {
     localStorage.setItem('pb-language', lang);
   };
 
-  // ─── Auth screens ──────────────────────────────────
-  if (authState === 'loading') {
+  // ─── User management handlers ──────────────────────
+  const handleAddUser = async () => {
+    const trimmed = newUserName.trim();
+    if (!trimmed) {
+      setAddUserError('請輸入使用者名稱');
+      return;
+    }
+    setAddingUser(true);
+    setAddUserError('');
+    try {
+      const res = await authFetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setAddUserError(data.error || '新增失敗');
+        setAddingUser(false);
+        return;
+      }
+      setNewUserName('');
+      await fetchUsers();
+    } catch {
+      setAddUserError('網路錯誤');
+    }
+    setAddingUser(false);
+  };
+
+  const handleToggleUser = async (u: UserInfo) => {
+    const endpoint = u.disabled ? 'enable' : 'disable';
+    try {
+      const res = await authFetch(`/api/users/${u.id}/${endpoint}`, { method: 'PATCH' });
+      if (res.ok) await fetchUsers();
+    } catch { /* ignore */ }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await authFetch(`/api/users/${deleteTarget.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setDeleteTarget(null);
+        await fetchUsers();
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleTransferAdmin = async () => {
+    if (!transferTarget) return;
+    try {
+      const res = await authFetch('/api/users/transfer-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserId: transferTarget.id }),
+      });
+      if (res.ok) {
+        setTransferTarget(null);
+        logout();
+      }
+    } catch { /* ignore */ }
+  };
+
+  // ─── Render ────────────────────────────────────────
+  if (loading) {
     return (
       <div style={styles.container}>
         <header style={styles.header}>
@@ -316,108 +266,6 @@ export default function SettingsPage() {
     );
   }
 
-  if (authState === 'setup') {
-    return (
-      <div style={styles.container}>
-        <header style={styles.header}>
-          <div style={styles.headerLeft}>
-            <button style={styles.backBtn} onClick={() => navigate('/')} title="返回首頁">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M12 15l-5-5 5-5" />
-              </svg>
-            </button>
-            <h1 style={styles.headerTitle}>設定</h1>
-          </div>
-        </header>
-        <main style={styles.main}>
-          <section style={styles.section}>
-            <div style={styles.sectionHeader}>
-              <h2 style={styles.sectionTitle}>設定管理員密碼</h2>
-              <div style={styles.sectionDivider} />
-            </div>
-            <p style={{ ...styles.hint, marginBottom: '16px' }}>
-              首次使用，請設定管理員密碼以保護設定頁面。
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px' }}>
-              <div>
-                <label style={styles.label}>密碼</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={setupPassword}
-                  onChange={e => { setSetupPassword(e.target.value); setAuthError(''); }}
-                  placeholder="輸入密碼（至少 4 個字元）"
-                  onKeyDown={e => e.key === 'Enter' && handleSetup()}
-                  data-testid="setup-password"
-                />
-              </div>
-              <div>
-                <label style={styles.label}>確認密碼</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={setupConfirm}
-                  onChange={e => { setSetupConfirm(e.target.value); setAuthError(''); }}
-                  placeholder="再次輸入密碼"
-                  onKeyDown={e => e.key === 'Enter' && handleSetup()}
-                  data-testid="setup-confirm"
-                />
-              </div>
-              <button style={styles.primaryBtn} onClick={handleSetup} data-testid="setup-submit">
-                設定密碼
-              </button>
-              {authError && <p style={styles.errorText}>{authError}</p>}
-            </div>
-          </section>
-        </main>
-      </div>
-    );
-  }
-
-  if (authState === 'login') {
-    return (
-      <div style={styles.container}>
-        <header style={styles.header}>
-          <div style={styles.headerLeft}>
-            <button style={styles.backBtn} onClick={() => navigate('/')} title="返回首頁">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M12 15l-5-5 5-5" />
-              </svg>
-            </button>
-            <h1 style={styles.headerTitle}>設定</h1>
-          </div>
-        </header>
-        <main style={styles.main}>
-          <section style={styles.section}>
-            <div style={styles.sectionHeader}>
-              <h2 style={styles.sectionTitle}>請輸入管理員密碼</h2>
-              <div style={styles.sectionDivider} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px' }}>
-              <div>
-                <label style={styles.label}>密碼</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={loginPassword}
-                  onChange={e => { setLoginPassword(e.target.value); setAuthError(''); }}
-                  placeholder="輸入管理員密碼"
-                  onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                  data-testid="login-password"
-                />
-              </div>
-              <button style={styles.primaryBtn} onClick={handleLogin} data-testid="login-submit">
-                登入
-              </button>
-              {authError && <p style={styles.errorText}>{authError}</p>}
-            </div>
-          </section>
-        </main>
-      </div>
-    );
-  }
-
-  // ─── Authenticated: full settings page ─────────────
   return (
     <div style={styles.container}>
       <header style={styles.header}>
@@ -597,73 +445,143 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* ── Section: Change Password ────────────────── */}
-        <section style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>變更密碼</h2>
-            <div style={styles.sectionDivider} />
-          </div>
-
-          {!showChangePassword ? (
-            <button
-              style={{ ...styles.primaryBtn, backgroundColor: '#64748b' }}
-              onClick={() => setShowChangePassword(true)}
-              data-testid="show-change-password"
-            >
-              變更管理員密碼
-            </button>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px' }}>
-              <div>
-                <label style={styles.label}>目前密碼</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={currentPassword}
-                  onChange={e => { setCurrentPassword(e.target.value); setChangeError(''); }}
-                  placeholder="輸入目前密碼"
-                  data-testid="change-current-password"
-                />
-              </div>
-              <div>
-                <label style={styles.label}>新密碼</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={newPassword}
-                  onChange={e => { setNewPassword(e.target.value); setChangeError(''); }}
-                  placeholder="輸入新密碼（至少 4 個字元）"
-                  data-testid="change-new-password"
-                />
-              </div>
-              <div>
-                <label style={styles.label}>確認新密碼</label>
-                <input
-                  type="password"
-                  style={styles.input}
-                  value={newPasswordConfirm}
-                  onChange={e => { setNewPasswordConfirm(e.target.value); setChangeError(''); }}
-                  placeholder="再次輸入新密碼"
-                  onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
-                  data-testid="change-confirm-password"
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={styles.primaryBtn} onClick={handleChangePassword} data-testid="change-password-submit">
-                  確認變更
-                </button>
-                <button
-                  style={{ ...styles.primaryBtn, backgroundColor: '#94a3b8' }}
-                  onClick={() => { setShowChangePassword(false); setChangeError(''); setChangeSuccess(''); }}
-                >
-                  取消
-                </button>
-              </div>
-              {changeError && <p style={styles.errorText}>{changeError}</p>}
-              {changeSuccess && <p style={{ ...styles.hint, color: '#16a34a', fontWeight: 600 }}>{changeSuccess}</p>}
+        {/* ── Section: User Management (admin only) ───── */}
+        {user?.role === 'admin' && (
+          <section style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>使用者管理</h2>
+              <div style={styles.sectionDivider} />
+              <span style={styles.badge}>{users.length} 位使用者</span>
             </div>
-          )}
-        </section>
+
+            {usersLoading ? (
+              <p style={styles.loadingText}>載入中...</p>
+            ) : (
+              <>
+                {/* User table */}
+                {users.length > 0 && (
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>名稱</th>
+                          <th style={styles.th}>角色</th>
+                          <th style={styles.th}>狀態</th>
+                          <th style={styles.th}>建立時間</th>
+                          <th style={{ ...styles.th, width: '160px' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((u, i) => {
+                          const isSelf = u.id === user?.id;
+                          const isAdmin = u.role === 'admin';
+                          return (
+                            <tr key={u.id} style={i % 2 === 0 ? {} : styles.evenRow}>
+                              <td style={styles.td}>
+                                <span style={{ fontWeight: 500, color: '#1e293b' }}>{u.name}</span>
+                                {isSelf && <span style={styles.selfBadge}>(你)</span>}
+                              </td>
+                              <td style={styles.td}>
+                                <span style={isAdmin ? styles.roleBadgeAdmin : styles.roleBadgeUser}>
+                                  {isAdmin ? '管理員' : '使用者'}
+                                </span>
+                              </td>
+                              <td style={styles.td}>
+                                <span style={u.disabled ? styles.statusBadgeDisabled : styles.statusBadgeEnabled}>
+                                  {u.disabled ? '停用' : '啟用'}
+                                </span>
+                              </td>
+                              <td style={styles.td}>
+                                <span style={{ fontSize: '13px', color: '#64748b' }}>
+                                  {new Date(u.created_at).toLocaleDateString()}
+                                </span>
+                              </td>
+                              <td style={{ ...styles.td, display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                {!isSelf && !isAdmin && (
+                                  <>
+                                    <button
+                                      style={u.disabled ? styles.enableBtn : styles.disableBtn}
+                                      onClick={() => handleToggleUser(u)}
+                                    >
+                                      {u.disabled ? '啟用' : '停用'}
+                                    </button>
+                                    <button
+                                      style={styles.transferBtn}
+                                      onClick={() => setTransferTarget(u)}
+                                    >
+                                      轉移管理權
+                                    </button>
+                                    <button
+                                      style={styles.deleteBtn}
+                                      onClick={() => setDeleteTarget(u)}
+                                      title="刪除使用者"
+                                    >
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                                      </svg>
+                                    </button>
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Add new user */}
+                <div style={{ ...styles.inputRow, marginTop: '12px' }}>
+                  <input
+                    type="text"
+                    style={{ ...styles.input, fontFamily: 'inherit' }}
+                    value={newUserName}
+                    onChange={e => { setNewUserName(e.target.value); setAddUserError(''); }}
+                    placeholder="輸入新使用者名稱"
+                    disabled={addingUser}
+                    onKeyDown={e => e.key === 'Enter' && handleAddUser()}
+                  />
+                  <button
+                    style={{
+                      ...styles.primaryBtn,
+                      ...(addingUser ? styles.btnDisabled : {}),
+                    }}
+                    onClick={handleAddUser}
+                    disabled={addingUser}
+                  >
+                    新增使用者
+                  </button>
+                </div>
+                {addUserError && <p style={styles.errorText}>{addUserError}</p>}
+              </>
+            )}
+
+            {/* Delete user dialog */}
+            <DestructiveConfirmDialog
+              open={!!deleteTarget}
+              title="刪除使用者"
+              message={`確定要刪除使用者「${deleteTarget?.name}」嗎？此操作無法復原。`}
+              confirmText={deleteTarget?.name ?? ''}
+              confirmLabel="請輸入使用者名稱以確認"
+              buttonText="刪除"
+              onConfirm={handleDeleteUser}
+              onCancel={() => setDeleteTarget(null)}
+            />
+
+            {/* Transfer admin dialog */}
+            <DestructiveConfirmDialog
+              open={!!transferTarget}
+              title="轉移管理權"
+              message={`確定要將管理員權限轉移給「${transferTarget?.name}」嗎？你將失去管理員權限並被登出。`}
+              confirmText={transferTarget?.name ?? ''}
+              confirmLabel="請輸入目標使用者名稱以確認"
+              buttonText="轉移"
+              onConfirm={handleTransferAdmin}
+              onCancel={() => setTransferTarget(null)}
+            />
+          </section>
+        )}
 
       </main>
     </div>
@@ -711,4 +629,13 @@ const styles: Record<string, React.CSSProperties> = {
   prefGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
   prefField: { display: 'flex', flexDirection: 'column' as const },
   select: { padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#1e293b', backgroundColor: '#fff', cursor: 'pointer', outline: 'none' },
+  // User management
+  selfBadge: { marginLeft: '6px', fontSize: '12px', color: '#94a3b8' },
+  roleBadgeAdmin: { padding: '2px 8px', borderRadius: '10px', backgroundColor: '#dbeafe', fontSize: '12px', fontWeight: 500, color: '#1d4ed8' },
+  roleBadgeUser: { padding: '2px 8px', borderRadius: '10px', backgroundColor: '#f1f5f9', fontSize: '12px', fontWeight: 500, color: '#64748b' },
+  statusBadgeEnabled: { padding: '2px 8px', borderRadius: '10px', backgroundColor: '#dcfce7', fontSize: '12px', fontWeight: 500, color: '#16a34a' },
+  statusBadgeDisabled: { padding: '2px 8px', borderRadius: '10px', backgroundColor: '#fee2e2', fontSize: '12px', fontWeight: 500, color: '#dc2626' },
+  enableBtn: { padding: '4px 12px', border: '1px solid #bbf7d0', borderRadius: '6px', backgroundColor: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  disableBtn: { padding: '4px 12px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  transferBtn: { padding: '4px 12px', border: '1px solid #c7d2fe', borderRadius: '6px', backgroundColor: '#eef2ff', color: '#4f46e5', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
 };
