@@ -31,11 +31,16 @@ router.post('/:id/prototype/seed', (req: Request, res: Response) => {
     // Deactivate existing current versions
     db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
 
+    // Extract pages from data-page attributes
+    const pageMatches = [...html.matchAll(/data-page="([^"]+)"/g)].map(m => m[1]);
+    const uniquePages = [...new Set(pageMatches)];
+    const isMultiPage = uniquePages.length > 1 ? 1 : 0;
+
     // Insert new version
     const id = uuidv4();
     db.prepare(
-      'INSERT INTO prototype_versions (id, project_id, html, version, is_current) VALUES (?, ?, ?, ?, 1)'
-    ).run(id, projectId, html.trim(), newVersion);
+      'INSERT INTO prototype_versions (id, project_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, 1, ?, ?)'
+    ).run(id, projectId, html.trim(), newVersion, isMultiPage, JSON.stringify(uniquePages));
 
     db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
 
