@@ -37,33 +37,17 @@ jobs:
       ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
       ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
       - name: Set Image Tag
         run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Clone Argo App Repo
+      - name: Update Image Tag in Argo App Repo
         run: |
           git clone --branch main http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git argo-app
-
-      - name: Sync K8s Manifests to Argo App Repo
-        run: |
-          mkdir -p argo-app/project-bridge
-          cp k8s/namespace.yaml argo-app/project-bridge/
-          cp k8s/deployment.yaml argo-app/project-bridge/
-          cp k8s/service.yaml argo-app/project-bridge/
-          cp k8s/pvc.yaml argo-app/project-bridge/
-          cp k8s/secret.yaml argo-app/project-bridge/
-          cp k8s/kustomization.yaml argo-app/project-bridge/
-
-      - name: Update Image Tag and Push
-        run: |
           cd argo-app
           git config user.email "gitea-actions@gitea.local"
           git config user.name "Gitea Bot"
           sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" project-bridge/kustomization.yaml
-          git add -A
+          git add project-bridge/kustomization.yaml
           git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
           git push http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git HEAD:main
 
