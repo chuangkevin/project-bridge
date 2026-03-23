@@ -1,0 +1,67 @@
+name: Deploy to ArgoCD
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker Image"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-actions
+
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Update Image Tag in Argo App Repo
+        env:
+          GIT_USER: ${{ secrets.GIT_USERNAME }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          git clone --branch main https://${GIT_USER}:${GIT_TOKEN}@gitea.housefun.com.tw/HF_RD/argo-app.git argo-app
+          cd argo-app
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" project-bridge/kustomization.yaml
+          git add project-bridge/kustomization.yaml
+          git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
+          git push https://${GIT_USER}:${GIT_TOKEN}@gitea.housefun.com.tw/HF_RD/argo-app.git HEAD:main
+
+      - name: ArgoCD Sync
+        env:
+          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+        run: |
+          docker run --rm -i --network host \
+            --add-host srvhpgit.evertrust.com.tw:10.202.1.14 \
+            -e ARGOCD_USERNAME="${ARGOCD_USERNAME}" \
+            -e ARGOCD_PASSWORD="${ARGOCD_PASSWORD}" \
+            argoproj/argocd:v2.6.15 /bin/sh -c '
+              set -e
+              echo "y" | argocd login srvhpgit.evertrust.com.tw:30091 --insecure \
+                --username "$ARGOCD_USERNAME" \
+                --password "$ARGOCD_PASSWORD" \
+                --grpc-web
+              argocd app sync project-bridge --force --grpc-web
+            '
+
+      - name: Deployment Summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`srvhpgit1:32050/project-bridge:$IMAGE_TAG\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed at**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
