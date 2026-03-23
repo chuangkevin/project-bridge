@@ -13,6 +13,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 
+# Tell node-gyp to use bundled headers instead of downloading from internet
+ENV npm_config_nodedir=/usr/local
+
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
