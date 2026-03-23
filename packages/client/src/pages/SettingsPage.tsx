@@ -8,6 +8,7 @@ interface KeyInfo {
   todayTokens: number;
   totalCalls: number;
   totalTokens: number;
+  fromEnv?: boolean;
 }
 
 interface UsageStats {
@@ -398,7 +399,6 @@ export default function SettingsPage() {
   };
 
   const handleDeleteKey = async (suffix: string) => {
-    if (keys.length <= 1) return;
     try {
       const res = await fetch(`/api/settings/api-keys/${suffix}`, {
         method: 'DELETE',
@@ -407,6 +407,9 @@ export default function SettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setKeys(data.keys || []);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || '刪除失敗');
       }
     } catch { /* ignore */ }
   };
@@ -612,19 +615,20 @@ export default function SettingsPage() {
                             <span style={styles.statNum}>{formatTokens(k.totalTokens)}</span>
                           </td>
                           <td style={styles.td}>
-                            <button
-                              style={{
-                                ...styles.deleteBtn,
-                                ...(keys.length <= 1 ? styles.btnDisabled : {}),
-                              }}
-                              onClick={() => handleDeleteKey(k.suffix)}
-                              disabled={keys.length <= 1}
-                              title={keys.length <= 1 ? '至少保留一組 Key' : '刪除此 Key'}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                              </svg>
-                            </button>
+                            {k.fromEnv ? (
+                              <span title="透過環境變數設定，無法從 UI 刪除" style={styles.envBadge}>ENV</span>
+                            ) : (
+                              <button
+                                type="button"
+                                style={styles.deleteBtn}
+                                onClick={() => handleDeleteKey(k.suffix)}
+                                title="刪除此 Key"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                                </svg>
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -992,6 +996,7 @@ const styles: Record<string, React.CSSProperties> = {
   statNum: { fontWeight: 600, color: '#1e293b' },
   statLabel: { color: '#94a3b8', fontSize: '12px' },
   deleteBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: '#fff', color: '#ef4444', cursor: 'pointer', padding: 0, transition: 'background-color 0.15s' },
+  envBadge: { fontSize: 11, color: '#94a3b8', padding: '0 6px' } as React.CSSProperties,
   // Usage cards
   usageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' },
   usageCard: { padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center' as const },

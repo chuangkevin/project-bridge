@@ -106,8 +106,12 @@ export function getKeyList(): Array<{
   todayTokens: number;
   totalCalls: number;
   totalTokens: number;
+  fromEnv: boolean;
 }> {
   const keys = loadKeys();
+  const envKeys = new Set(
+    (process.env.GEMINI_API_KEY || '').split(',').map(k => k.trim()).filter(Boolean)
+  );
   return keys.map(k => {
     const suffix = k.slice(-4);
     const today = db.prepare(
@@ -124,6 +128,7 @@ export function getKeyList(): Array<{
       todayTokens: today?.tokens || 0,
       totalCalls: total?.calls || 0,
       totalTokens: total?.tokens || 0,
+      fromEnv: envKeys.has(k),
     };
   });
 }
