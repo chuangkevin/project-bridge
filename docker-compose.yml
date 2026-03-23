@@ -1,0 +1,16 @@
+services:
+  project-bridge:
+    image: srvhpgit1:32050/project-bridge:latest
+    container_name: project-bridge
+    restart: unless-stopped
+    ports:
+      - "5123:3001"
+    volumes:
+      - project-bridge-data:/app/packages/server/data
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=3001
+
+volumes:
+  project-bridge-data:
