@@ -62,13 +62,24 @@ export default function HomePage() {
     await requireAuth();
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteInput, setDeleteInput] = useState('');
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!window.confirm('確定要刪除此專案嗎？')) return;
+    const project = projects.find(p => p.id === id);
+    if (!project) return;
+    setDeleteTarget({ id, name: project.name });
+    setDeleteInput('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteInput !== deleteTarget.name) return;
     try {
-      const res = await fetch(`/api/projects/${id}`, { method: 'DELETE', headers: authHeaders() });
+      const res = await fetch(`/api/projects/${deleteTarget.id}`, { method: 'DELETE', headers: authHeaders() });
       if (!res.ok) throw new Error('Failed to delete');
-      setProjects(prev => prev.filter(p => p.id !== id));
+      setProjects(prev => prev.filter(p => p.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch {
       alert('刪除專案失敗');
     }
@@ -217,6 +228,37 @@ export default function HomePage() {
           onCreated={handleProjectCreated}
         />
       )}
+
+      {deleteTarget && (
+        <div style={styles.modalOverlay} onClick={() => setDeleteTarget(null)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 8px', color: '#dc2626' }}>刪除專案</h3>
+            <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: 14 }}>
+              此操作無法復原。請輸入 <strong style={{ color: '#1e293b' }}>{deleteTarget.name}</strong> 以確認刪除。
+            </p>
+            <input
+              type="text"
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              placeholder={deleteTarget.name}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') confirmDelete(); }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setDeleteTarget(null)} style={{ padding: '8px 16px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer' }}>取消</button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleteInput !== deleteTarget.name}
+                style={{ padding: '8px 16px', border: 'none', borderRadius: 6, background: deleteInput === deleteTarget.name ? '#dc2626' : '#fca5a5', color: '#fff', cursor: deleteInput === deleteTarget.name ? 'pointer' : 'not-allowed', fontWeight: 600 }}
+              >
+                刪除此專案
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -289,6 +331,8 @@ function ProjectGrid({ projects, navigate, user, handleDelete, handleFork, own }
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modalContent: { background: '#fff', borderRadius: 12, padding: 24, width: 420, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' },
   container: {
     minHeight: '100vh',
     backgroundColor: '#f8fafc',

@@ -481,6 +481,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
           onConnect={onConnect}
           nodeTypes={nodeTypes}
           fitView
+          onPaneContextMenu={(e) => e.preventDefault()}
         >
           <Background color="#EBE3F2" gap={20} />
           <Controls />

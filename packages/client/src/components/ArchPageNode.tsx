@@ -68,7 +68,7 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
     <div
       data-testid={`page-node-${data.name}`}
       className="arch-page-node"
-      onContextMenu={(e) => { e.preventDefault(); setMenuOpen(true); }}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(true); }}
       style={{}}
     >
       <Handle type="target" position={Position.Left} />

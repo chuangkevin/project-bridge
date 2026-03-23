@@ -80,6 +80,16 @@ export const BRIDGE_SCRIPT = `
     if (!target) return;
     var bridgeId = target.getAttribute('data-bridge-id');
     var rect = target.getBoundingClientRect();
+    if (annotationMode || apiBindingMode) {
+      window.parent.postMessage({
+        type: 'element-click',
+        bridgeId: bridgeId,
+        tagName: target.tagName,
+        textContent: (target.textContent || '').substring(0, 50),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      }, '*');
+      return;
+    }
     if (visualEditMode) {
       var cs = window.getComputedStyle(target);
       window.parent.postMessage({
@@ -102,13 +112,6 @@ export const BRIDGE_SCRIPT = `
       }, '*');
       return;
     }
-    window.parent.postMessage({
-      type: 'element-click',
-      bridgeId: bridgeId,
-      tagName: target.tagName,
-      textContent: (target.textContent || '').substring(0, 50),
-      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    }, '*');
   }, true);
 
   function clearIndicators() {
