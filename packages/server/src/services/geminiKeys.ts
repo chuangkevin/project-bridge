@@ -7,15 +7,35 @@ let keyIndex = 0;
 let lastLoadTime = 0;
 const CACHE_TTL = 60_000; // reload from DB every 60s
 
+/** Check if a key looks like a real API key (not a placeholder) */
+function isValidKeyFormat(key: string): boolean {
+  // Gemini keys start with "AIza" and are 39 chars
+  // Reject obvious placeholders like "your-api-key-here", "xxx", "placeholder", etc.
+  if (key.length < 20) return false;
+  if (/^(your|placeholder|test|example|dummy|fake|xxx|change.?me)/i.test(key)) return false;
+  return true;
+}
+
+/** Load blocked key suffixes from DB */
+function loadBlockedSuffixes(): Set<string> {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'blocked_api_keys'").get() as any;
+  if (!row?.value) return new Set();
+  return new Set(row.value.split(',').map((s: string) => s.trim()).filter(Boolean));
+}
+
 function loadKeys(): string[] {
   const now = Date.now();
   if (cachedKeys.length > 0 && now - lastLoadTime < CACHE_TTL) return cachedKeys;
 
+  const blocked = loadBlockedSuffixes();
   const keys: string[] = [];
 
-  // 1. Environment variable (comma-separated)
+  // 1. Environment variable (comma-separated) — skip placeholders & blocked
   if (process.env.GEMINI_API_KEY) {
-    keys.push(...process.env.GEMINI_API_KEY.split(',').map(k => k.trim()).filter(Boolean));
+    const envKeys = process.env.GEMINI_API_KEY.split(',')
+      .map(k => k.trim())
+      .filter(k => k && isValidKeyFormat(k) && !blocked.has(k.slice(-4)));
+    keys.push(...envKeys);
   }
 
   // 2. DB: gemini_api_keys (comma-separated list)
@@ -144,14 +164,31 @@ export function addApiKey(newKey: string): void {
   invalidateKeyCache();
 }
 
-/** Remove an API key by its last 4 chars */
+/** Remove an API key by its last 4 chars. ENV keys get blocked instead of deleted. */
 export function removeApiKey(suffix: string): boolean {
   const keys = loadKeys();
-  const filtered = keys.filter(k => k.slice(-4) !== suffix);
-  if (filtered.length === keys.length) return false; // Not found
-  db.prepare(
-    "INSERT INTO settings (key, value, updated_at) VALUES ('gemini_api_keys', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')"
-  ).run(filtered.join(','));
+  const target = keys.find(k => k.slice(-4) === suffix);
+  if (!target) return false;
+
+  // Check if this key comes from env
+  const envKeys = new Set(
+    (process.env.GEMINI_API_KEY || '').split(',').map(k => k.trim()).filter(Boolean)
+  );
+  if (envKeys.has(target)) {
+    // Can't delete from env — add to blocked list
+    const blocked = loadBlockedSuffixes();
+    blocked.add(suffix);
+    db.prepare(
+      "INSERT INTO settings (key, value, updated_at) VALUES ('blocked_api_keys', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')"
+    ).run([...blocked].join(','));
+  } else {
+    // DB key — remove from stored list
+    const filtered = keys.filter(k => k.slice(-4) !== suffix);
+    db.prepare(
+      "INSERT INTO settings (key, value, updated_at) VALUES ('gemini_api_keys', ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')"
+    ).run(filtered.join(','));
+  }
+
   invalidateKeyCache();
   return true;
 }
