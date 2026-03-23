@@ -1,0 +1,82 @@
+name: Build and Deploy Project Bridge (Test)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Build Docker Image
+        run: |
+          echo "Building image with tag: $IMAGE_TAG and latest"
+          docker build -t srvhpgit1:32050/project-bridge:$IMAGE_TAG -t srvhpgit1:32050/project-bridge:latest .
+
+      - name: Push to Internal Registry
+        run: |
+          docker push srvhpgit1:32050/project-bridge:$IMAGE_TAG
+          docker push srvhpgit1:32050/project-bridge:latest
+
+      - name: Clean Up Local Images
+        run: |
+          docker rmi -f srvhpgit1:32050/project-bridge:$IMAGE_TAG || true
+          docker rmi -f srvhpgit1:32050/project-bridge:latest || true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-push
+    env:
+      GIT_USER: ${{ secrets.GIT_USERNAME }}
+      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+      ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+      ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Clone Argo App Repo
+        run: |
+          git clone --branch main http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git argo-app
+
+      - name: Sync K8s Manifests to Argo App Repo
+        run: |
+          mkdir -p argo-app/project-bridge
+          cp k8s/namespace.yaml argo-app/project-bridge/
+          cp k8s/deployment.yaml argo-app/project-bridge/
+          cp k8s/service.yaml argo-app/project-bridge/
+          cp k8s/pvc.yaml argo-app/project-bridge/
+          cp k8s/secret.yaml argo-app/project-bridge/
+          cp k8s/kustomization.yaml argo-app/project-bridge/
+
+      - name: Update Image Tag and Push
+        run: |
+          cd argo-app
+          git config user.email "gitea-actions@gitea.local"
+          git config user.name "Gitea Bot"
+          sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" project-bridge/kustomization.yaml
+          git add -A
+          git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
+          git push http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git HEAD:main
+
+      - name: ArgoCD Sync
+        run: |
+          docker run --rm -i --network host \
+            -e ARGOCD_USERNAME="${ARGOCD_USERNAME}" \
+            -e ARGOCD_PASSWORD="${ARGOCD_PASSWORD}" \
+            argoproj/argocd:v2.6.15 /bin/sh -c '
+              set -e
+              echo "y" | argocd login srvhpgit1:30091 --insecure \
+                --username "$ARGOCD_USERNAME" \
+                --password "$ARGOCD_PASSWORD" \
+                --grpc-web
+              argocd app sync project-bridge --force --grpc-web
+            '
