@@ -239,9 +239,10 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
   }, [uploadFile]);
 
   const onConnect = useCallback((connection: Connection) => {
-    const newEdge = { ...connection, id: `edge-${Date.now()}` };
+    const newEdge = { ...connection, id: `edge-${Date.now()}`, sourceHandle: connection.sourceHandle ?? null, targetHandle: connection.targetHandle ?? null };
     setEdges(eds => {
-      const updated = addEdge(newEdge, eds);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updated = addEdge(newEdge, eds as any) as Edge[];
       saveChanges(nodes, updated);
       return updated;
     });
