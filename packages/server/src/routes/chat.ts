@@ -202,8 +202,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
     ).get(projectId) as { html: string } | undefined;
 
+    // Server-side forceRegenerate detection: explicit redesign intent in message
+    const impliedForceRegenerate = /重新設計|完全重做|全部重做|請重新生成|重新生成|redesign|rebuild|start over/i.test(message);
+    const effectiveForceRegenerate = forceRegenerate || impliedForceRegenerate;
+
     // Gate isObviousGenerate: only when no prototype exists OR forceRegenerate
-    const gatedObviousGenerate = isObviousGenerate && (!currentPrototype || forceRegenerate);
+    const gatedObviousGenerate = isObviousGenerate && (!currentPrototype || effectiveForceRegenerate);
 
     // Classify intent (five-way)
     let intent = gatedObviousGenerate
@@ -211,7 +215,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       : await classifyIntent(message.trim(), apiKey, hasShell);
 
     // Override: when prototype exists and not forceRegenerate, downgrade full-page/in-shell to micro-adjust
-    if (currentPrototype && !forceRegenerate && (intent === 'full-page' || intent === 'in-shell')) {
+    if (currentPrototype && !effectiveForceRegenerate && (intent === 'full-page' || intent === 'in-shell')) {
       intent = 'micro-adjust';
     }
 
@@ -908,8 +912,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           finalPages = analysisPages;
           isMultiPage = true;
         } else {
-          // Fallback: run AI page structure analysis
-          const pageStructure = (intent === 'full-page' || intent === 'in-shell')
+          // Fallback: run AI page structure analysis (also run when forceRegenerate implied)
+          const pageStructure = (intent === 'full-page' || intent === 'in-shell' || impliedForceRegenerate)
             ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
             : { multiPage: false, pages: [] as string[] };
 
