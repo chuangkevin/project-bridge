@@ -168,7 +168,15 @@ router.delete('/:id', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+    const pid = req.params.id;
+    // Delete child tables with NO ACTION FK first
+    db.prepare('DELETE FROM api_bindings WHERE project_id = ?').run(pid);
+    db.prepare('DELETE FROM component_dependencies WHERE project_id = ?').run(pid);
+    db.prepare('DELETE FROM element_constraints WHERE project_id = ?').run(pid);
+    // page_element_mappings and patches if they exist
+    try { db.prepare('DELETE FROM page_element_mappings WHERE project_id = ?').run(pid); } catch {}
+    try { db.prepare('DELETE FROM prototype_patches WHERE project_id = ?').run(pid); } catch {}
+    db.prepare('DELETE FROM projects WHERE id = ?').run(pid);
     return res.status(204).send();
   } catch (err: any) {
     console.error('Error deleting project:', err);
