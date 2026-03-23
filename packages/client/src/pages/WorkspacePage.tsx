@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import ChatPanel, { ChatMessage } from '../components/ChatPanel';
 import DesignPanel from '../components/DesignPanel';
 import StyleTweakerPanel from '../components/StyleTweakerPanel';
@@ -38,11 +39,14 @@ interface Project {
   isMultiPage?: boolean;
   pages?: string[];
   arch_data?: any;
+  owner_id?: string;
+  owner_name?: string;
 }
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [html, setHtml] = useState<string | null>(null);
@@ -135,6 +139,31 @@ export default function WorkspacePage() {
   // Inline rename state
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
+
+  // Fork state
+  const [forking, setForking] = useState(false);
+
+  // Read-only when viewing another user's project (non-admin)
+  const isReadOnly = !!(project && user && project.owner_id && project.owner_id !== user.id && user.role !== 'admin');
+
+  const handleFork = useCallback(async () => {
+    if (!project || forking) return;
+    setForking(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/fork`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Fork 失敗' }));
+        setToastMsg(data.error || 'Fork 失敗');
+        return;
+      }
+      const data = await res.json();
+      navigate(`/projects/${data.id}`);
+    } catch {
+      setToastMsg('Fork 失敗');
+    } finally {
+      setForking(false);
+    }
+  }, [project, forking, navigate]);
 
   const checkDesignActive = useCallback(async () => {
     try {
@@ -1178,6 +1207,38 @@ export default function WorkspacePage() {
           >
             ⌨ ?
           </button>
+          {isReadOnly && (
+            <button
+              type="button"
+              style={styles.forkBtn}
+              onClick={handleFork}
+              disabled={forking}
+              title="複製此專案到你的帳號"
+              data-testid="fork-btn"
+            >
+              {forking ? '⟳ Fork 中...' : '⑂ Fork 專案'}
+            </button>
+          )}
+          {user && (
+            <div style={styles.userWidget}>
+              <span
+                style={styles.userWidgetName}
+                data-testid="current-user-name"
+                title={user.name}
+              >
+                {user.name}
+              </span>
+              <button
+                type="button"
+                style={styles.logoutBtn}
+                onClick={logout}
+                data-testid="logout-btn"
+                title="登出"
+              >
+                登出
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1196,6 +1257,8 @@ export default function WorkspacePage() {
 
       {/* Main content */}
       <div style={styles.body}>
+        <div style={styles.chatPaneWrapper}>
+        {isReadOnly && <div style={styles.readOnlyOverlay} data-testid="readonly-overlay" />}
         <div style={{ ...styles.chatPane, ...(focusMode ? { width: 0, overflow: 'hidden', borderRight: 'none' } : {}) }}>
           {/* Tab switcher */}
           <div style={styles.tabBar}>
@@ -1247,6 +1310,7 @@ export default function WorkspacePage() {
               />
             )}
           </div>
+        </div>
         </div>
         <div style={styles.previewPane} ref={iframeContainerRef}>
           {isMultiPage && pages.length > 1 && (
@@ -2246,5 +2310,41 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     textAlign: 'center' as const,
+  },
+  forkBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    border: '1px solid #3b82f6',
+    borderRadius: '8px',
+    backgroundColor: '#eff6ff',
+    color: '#1d4ed8',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  userWidget: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 4,
+  } as React.CSSProperties,
+  userWidgetName: {
+    fontSize: 12,
+    color: '#64748b',
+    maxWidth: 100,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  } as React.CSSProperties,
+  logoutBtn: {
+    fontSize: 11,
+    padding: '3px 8px',
+    border: '1px solid #e2e8f0',
+    borderRadius: 4,
+    background: 'none',
+    color: '#94a3b8',
+    cursor: 'pointer',
   },
 };

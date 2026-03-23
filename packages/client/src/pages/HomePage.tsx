@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NewProjectDialog from '../components/NewProjectDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Project {
   id: string;
@@ -8,6 +9,8 @@ interface Project {
   share_token: string;
   created_at: string;
   updated_at: string;
+  owner_id?: string;
+  owner_name?: string;
 }
 
 function relativeTime(dateStr: string): string {
@@ -34,6 +37,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest');
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -71,6 +75,21 @@ export default function HomePage() {
     navigate(`/project/${project.id}`);
   };
 
+  const handleFork = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/projects/${id}/fork`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to fork');
+      const forked = await res.json();
+      navigate(`/project/${forked.id}`);
+    } catch {
+      alert('Fork 專案失敗');
+    }
+  };
+
+  const isOwn = (p: Project) =>
+    p.owner_id === user?.id || p.owner_id == null;
+
   const filteredProjects = projects
     .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
@@ -78,6 +97,10 @@ export default function HomePage() {
       if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       return a.name.localeCompare(b.name);
     });
+
+  const myProjects = filteredProjects.filter(isOwn);
+  const othersProjects = filteredProjects.filter(p => !isOwn(p));
+  const splitSections = myProjects.length > 0 && othersProjects.length > 0;
 
   return (
     <div style={styles.container}>
@@ -146,39 +169,16 @@ export default function HomePage() {
             <p style={styles.emptyText}>沒有找到符合的專案</p>
           </div>
         )}
-        <div style={styles.grid}>
-          {filteredProjects.map(project => (
-            <div
-              key={project.id}
-              style={styles.card}
-              data-testid={`project-card-${project.id}`}
-              onClick={() => navigate(`/project/${project.id}`)}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
-                (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0';
-              }}
-            >
-              <div style={styles.cardContent}>
-                <h3 style={styles.cardTitle}>{project.name}</h3>
-                <p style={styles.cardDate}>更新於 {relativeTime(project.updated_at)}</p>
-              </div>
-              <button
-                style={styles.deleteBtn}
-                onClick={(e) => handleDelete(e, project.id)}
-                title="刪除專案"
-                data-testid={`delete-project-${project.id}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M12.67 4v9.33a1.33 1.33 0 01-1.34 1.34H4.67a1.33 1.33 0 01-1.34-1.34V4" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
+        {splitSections ? (
+          <>
+            <h2 style={styles.sectionHeading}>我的專案</h2>
+            <ProjectGrid projects={myProjects} navigate={navigate} user={user} handleDelete={handleDelete} handleFork={handleFork} own />
+            <h2 style={styles.sectionHeadingSecond}>其他人的專案</h2>
+            <ProjectGrid projects={othersProjects} navigate={navigate} user={user} handleDelete={handleDelete} handleFork={handleFork} own={false} />
+          </>
+        ) : (
+          <ProjectGrid projects={filteredProjects} navigate={navigate} user={user} handleDelete={handleDelete} handleFork={handleFork} own />
+        )}
       </main>
 
       {showNewProject && (
@@ -187,6 +187,73 @@ export default function HomePage() {
           onCreated={handleProjectCreated}
         />
       )}
+    </div>
+  );
+}
+
+interface ProjectGridProps {
+  projects: Project[];
+  navigate: (path: string) => void;
+  user: { id: string; role: string } | null;
+  handleDelete: (e: React.MouseEvent, id: string) => void;
+  handleFork: (e: React.MouseEvent, id: string) => void;
+  own: boolean;
+}
+
+function ProjectGrid({ projects, navigate, user, handleDelete, handleFork, own }: ProjectGridProps) {
+  return (
+    <div style={styles.grid}>
+      {projects.map(project => {
+        const canDelete = user?.id === project.owner_id || user?.role === 'admin' || project.owner_id == null;
+        return (
+          <div
+            key={project.id}
+            style={styles.card}
+            data-testid={`project-card-${project.id}`}
+            onClick={() => navigate(`/project/${project.id}`)}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+              (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
+              (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0';
+            }}
+          >
+            <div style={styles.cardContent}>
+              <h3 style={styles.cardTitle}>{project.name}</h3>
+              {project.owner_name && (
+                <p style={styles.cardOwner}>{project.owner_name}</p>
+              )}
+              <p style={styles.cardDate}>更新於 {relativeTime(project.updated_at)}</p>
+            </div>
+            {!own && (
+              <button
+                type="button"
+                style={styles.forkBtn}
+                onClick={e => handleFork(e, project.id)}
+                title="Fork 專案"
+                data-testid={`fork-project-${project.id}`}
+              >
+                Fork
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                style={styles.deleteBtn}
+                onClick={e => handleDelete(e, project.id)}
+                title="刪除專案"
+                data-testid={`delete-project-${project.id}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M12.67 4v9.33a1.33 1.33 0 01-1.34 1.34H4.67a1.33 1.33 0 01-1.34-1.34V4" />
+                </svg>
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -339,6 +406,11 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   },
+  cardOwner: {
+    margin: '0 0 2px',
+    fontSize: '12px',
+    color: '#64748b',
+  },
   cardDate: {
     margin: 0,
     fontSize: '13px',
@@ -357,5 +429,33 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     flexShrink: 0,
     marginLeft: '8px',
+  },
+  sectionHeading: {
+    margin: '0 0 16px',
+    fontSize: '15px',
+    fontWeight: 600,
+    color: '#475569',
+  },
+  sectionHeadingSecond: {
+    margin: '32px 0 16px',
+    fontSize: '15px',
+    fontWeight: 600,
+    color: '#475569',
+  },
+  forkBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '32px',
+    padding: '0 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    backgroundColor: 'transparent',
+    color: '#64748b',
+    cursor: 'pointer',
+    flexShrink: 0,
+    marginLeft: '8px',
+    fontSize: '12px',
+    fontWeight: 500,
   },
 };

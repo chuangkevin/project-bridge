@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 interface KeyInfo {
   suffix: string;
@@ -13,6 +14,14 @@ interface UsageStats {
   today: { calls: number; tokens: number };
   week: { calls: number; tokens: number };
   month: { calls: number; tokens: number };
+}
+
+interface UserInfo {
+  id: string;
+  name: string;
+  role: 'admin' | 'user';
+  status: 'active' | 'disabled';
+  created_at: string;
 }
 
 function formatTokens(n: number): string {
@@ -31,10 +40,21 @@ function authHeaders(): Record<string, string> {
   return {};
 }
 
+function getBridgeToken(): string | null {
+  return localStorage.getItem('bridge_token') ?? localStorage.getItem('pb-auth-token');
+}
+
+function bridgeAuthHeaders(): Record<string, string> {
+  const token = getBridgeToken();
+  if (token) return { Authorization: `Bearer ${token}` };
+  return {};
+}
+
 type AuthState = 'loading' | 'setup' | 'login' | 'authenticated';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { user: authUser } = useAuth();
 
   // Auth state
   const [authState, setAuthState] = useState<AuthState>('loading');
@@ -74,6 +94,14 @@ export default function SettingsPage() {
   const [language, setLanguage] = useState(
     () => localStorage.getItem('pb-language') ?? '繁體中文'
   );
+
+  // User management
+  const [users, setUsers] = useState<UserInfo[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserSubmitting, setNewUserSubmitting] = useState(false);
+  const [newUserError, setNewUserError] = useState('');
+  const [userActionError, setUserActionError] = useState('');
 
   // ─── Auth flow ─────────────────────────────────────
   useEffect(() => {
@@ -234,6 +262,109 @@ export default function SettingsPage() {
     })();
     return () => { cancelled = true; };
   }, [authState, fetchKeys, fetchUsage]);
+
+  // ─── User management ────────────────────────────────
+  const fetchUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const res = await fetch('/api/users', { headers: bridgeAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.users || data || []);
+      }
+    } catch { /* ignore */ }
+    setUsersLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+    if (authUser?.role === 'admin') fetchUsers();
+  }, [authState, authUser, fetchUsers]);
+
+  const handleAddUser = async () => {
+    setNewUserError('');
+    const name = newUserName.trim();
+    if (!name) {
+      setNewUserError('請輸入使用者名稱');
+      return;
+    }
+    setNewUserSubmitting(true);
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNewUserError(data.error || '新增失敗');
+        setNewUserSubmitting(false);
+        return;
+      }
+      setNewUserName('');
+      await fetchUsers();
+    } catch {
+      setNewUserError('網路錯誤');
+    }
+    setNewUserSubmitting(false);
+  };
+
+  const handleToggleUser = async (u: UserInfo) => {
+    setUserActionError('');
+    const action = u.status === 'active' ? 'disable' : 'enable';
+    try {
+      const res = await fetch(`/api/users/${u.id}/${action}`, {
+        method: 'PATCH',
+        headers: bridgeAuthHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setUserActionError(data.error || '操作失敗');
+        return;
+      }
+      await fetchUsers();
+    } catch {
+      setUserActionError('網路錯誤');
+    }
+  };
+
+  const handleDeleteUser = async (u: UserInfo) => {
+    if (!window.confirm('確定刪除使用者 ' + u.name + '?')) return;
+    setUserActionError('');
+    try {
+      const res = await fetch(`/api/users/${u.id}`, {
+        method: 'DELETE',
+        headers: bridgeAuthHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setUserActionError(data.error || '刪除失敗');
+        return;
+      }
+      await fetchUsers();
+    } catch {
+      setUserActionError('網路錯誤');
+    }
+  };
+
+  const handleTransferAdmin = async (u: UserInfo) => {
+    if (!window.confirm('確定將管理員權限轉移給 ' + u.name + '?')) return;
+    setUserActionError('');
+    try {
+      const res = await fetch(`/api/users/${u.id}/transfer-admin`, {
+        method: 'POST',
+        headers: bridgeAuthHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setUserActionError(data.error || '轉移失敗');
+        return;
+      }
+      await fetchUsers();
+    } catch {
+      setUserActionError('網路錯誤');
+    }
+  };
 
   const handleAddKey = async () => {
     const trimmed = newKey.trim();
@@ -665,6 +796,136 @@ export default function SettingsPage() {
           )}
         </section>
 
+        {/* ── Section: User Management (admin only) ────── */}
+        {authUser?.role === 'admin' && (
+          <section style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>使用者管理</h2>
+              <div style={styles.sectionDivider} />
+              <span style={styles.badge}>{users.length} 位</span>
+            </div>
+
+            {/* Add user form */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={styles.label}>新增使用者</label>
+              <div style={{ ...styles.inputRow, marginTop: '4px' }}>
+                <input
+                  type="text"
+                  style={{ ...styles.input, fontFamily: 'inherit' }}
+                  value={newUserName}
+                  onChange={e => { setNewUserName(e.target.value); setNewUserError(''); }}
+                  placeholder="輸入使用者名稱"
+                  disabled={newUserSubmitting}
+                  onKeyDown={e => e.key === 'Enter' && handleAddUser()}
+                  data-testid="new-user-name"
+                />
+                <button
+                  style={{
+                    ...styles.primaryBtn,
+                    ...(newUserSubmitting ? styles.btnDisabled : {}),
+                  }}
+                  onClick={handleAddUser}
+                  disabled={newUserSubmitting}
+                  data-testid="new-user-submit"
+                >
+                  {newUserSubmitting ? '新增中...' : '+ 新增使用者'}
+                </button>
+              </div>
+              {newUserError && <p style={styles.errorText}>{newUserError}</p>}
+            </div>
+
+            {/* Users table */}
+            {usersLoading ? (
+              <p style={styles.loadingText}>載入中...</p>
+            ) : users.length === 0 ? (
+              <p style={styles.loadingText}>尚無使用者</p>
+            ) : (
+              <div style={styles.tableWrap}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>名稱</th>
+                      <th style={styles.th}>角色</th>
+                      <th style={styles.th}>狀態</th>
+                      <th style={styles.th}>建立時間</th>
+                      <th style={{ ...styles.th, textAlign: 'right' as const }}>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u, i) => (
+                      <tr key={u.id} style={i % 2 === 0 ? {} : styles.evenRow}>
+                        <td style={styles.td}>
+                          <span style={{ fontWeight: 500, color: '#1e293b' }}>{u.name}</span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={{
+                            ...styles.roleBadge,
+                            ...(u.role === 'admin' ? styles.roleBadgeAdmin : styles.roleBadgeUser),
+                          }}>
+                            {u.role === 'admin' ? '管理員' : '使用者'}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={{
+                            ...styles.statusBadge,
+                            ...(u.status === 'active' ? styles.statusActive : styles.statusDisabled),
+                          }}>
+                            {u.status === 'active' ? '啟用' : '停用'}
+                          </span>
+                        </td>
+                        <td style={{ ...styles.td, color: '#64748b', fontSize: '12px' }}>
+                          {new Date(u.created_at).toLocaleDateString('zh-TW', {
+                            year: 'numeric', month: '2-digit', day: '2-digit',
+                          })}
+                        </td>
+                        <td style={{ ...styles.td, textAlign: 'right' as const }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            {/* Transfer admin — only for non-admin active users */}
+                            {u.role !== 'admin' && u.status === 'active' && (
+                              <button
+                                type="button"
+                                style={styles.actionBtnNeutral}
+                                onClick={() => handleTransferAdmin(u)}
+                                title="轉移管理員權限"
+                                data-testid={`transfer-admin-${u.id}`}
+                              >
+                                轉移管理員
+                              </button>
+                            )}
+                            {/* Enable / Disable */}
+                            <button
+                              type="button"
+                              style={u.status === 'active' ? styles.actionBtnWarn : styles.actionBtnGreen}
+                              onClick={() => handleToggleUser(u)}
+                              data-testid={`toggle-user-${u.id}`}
+                            >
+                              {u.status === 'active' ? '停用' : '啟用'}
+                            </button>
+                            {/* Delete */}
+                            <button
+                              type="button"
+                              style={styles.deleteBtn}
+                              onClick={() => handleDeleteUser(u)}
+                              title="刪除使用者"
+                              data-testid={`delete-user-${u.id}`}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {userActionError && <p style={{ ...styles.errorText, marginTop: '8px' }}>{userActionError}</p>}
+          </section>
+        )}
+
       </main>
     </div>
   );
@@ -711,4 +972,15 @@ const styles: Record<string, React.CSSProperties> = {
   prefGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
   prefField: { display: 'flex', flexDirection: 'column' as const },
   select: { padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#1e293b', backgroundColor: '#fff', cursor: 'pointer', outline: 'none' },
+  // User management action buttons
+  actionBtnWarn: { padding: '4px 10px', border: '1px solid #fed7aa', borderRadius: '6px', backgroundColor: '#fff7ed', color: '#c2410c', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  actionBtnGreen: { padding: '4px 10px', border: '1px solid #bbf7d0', borderRadius: '6px', backgroundColor: '#f0fdf4', color: '#15803d', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  actionBtnNeutral: { padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: '#f8fafc', color: '#475569', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  // Role / status badges
+  roleBadge: { padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 },
+  roleBadgeAdmin: { backgroundColor: '#eff6ff', color: '#1d4ed8' },
+  roleBadgeUser: { backgroundColor: '#f8fafc', color: '#64748b' },
+  statusBadge: { padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 },
+  statusActive: { backgroundColor: '#f0fdf4', color: '#15803d' },
+  statusDisabled: { backgroundColor: '#fef2f2', color: '#b91c1c' },
 };
