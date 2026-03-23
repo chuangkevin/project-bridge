@@ -119,6 +119,7 @@ function buildSharedCss(plan: GenerationPlan): string {
 
   // CSS reset
   parts.push(`*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; max-width: 100%; }
 body { font-family: var(--font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); font-size: var(--font-body-size, 15px); line-height: var(--font-body-line-height, 1.6); color: var(--text, #1f2937); background: var(--background, #f9fafb); }
 a { color: var(--primary, #3b82f6); text-decoration: none; }
 a:hover { opacity: 0.85; }`);

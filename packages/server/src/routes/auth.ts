@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 import db from '../db/connection';
 
 const router = Router();
@@ -19,14 +20,74 @@ function setSetting(key: string, value: string): void {
   `).run(key, value);
 }
 
-// GET /api/auth/status — check if password is set up
+// GET /api/auth/status — check auth state
 router.get('/status', (_req: Request, res: Response) => {
   try {
     const hash = getSetting('admin_password_hash');
-    return res.json({ hasPassword: !!hash });
+    const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any)?.c ?? 0;
+    return res.json({ hasPassword: !!hash, hasUsers: userCount > 0 });
   } catch (err: any) {
     console.error('Error checking auth status:', err);
     return res.status(500).json({ error: 'Failed to check auth status' });
+  }
+});
+
+// POST /api/auth/login — user login (creates session, returns bearer token)
+router.post('/login', (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+    const user = db.prepare('SELECT id, name, role, is_active FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return res.status(404).json({ error: '使用者不存在' });
+    if (!user.is_active) return res.status(403).json({ error: '帳號已停用' });
+
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expiresAt);
+
+    return res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+  } catch (err: any) {
+    console.error('Error logging in:', err);
+    return res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+// GET /api/auth/me — get current user from bearer token
+router.get('/me', (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.json({ user: null });
+    }
+    const token = authHeader.slice(7);
+    const session = db.prepare(`
+      SELECT s.user_id, u.name, u.role
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.token = ? AND s.expires_at > datetime('now') AND u.is_active = 1
+    `).get(token) as { user_id: string; name: string; role: string } | undefined;
+
+    if (!session) return res.json({ user: null });
+    return res.json({ user: { id: session.user_id, name: session.name, role: session.role } });
+  } catch (err: any) {
+    console.error('Error getting current user:', err);
+    return res.status(500).json({ error: 'Failed to get current user' });
+  }
+});
+
+// POST /api/auth/logout — invalidate session
+router.post('/logout', (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+    }
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error logging out:', err);
+    return res.status(500).json({ error: 'Failed to logout' });
   }
 });
 

@@ -1167,6 +1167,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   messageList: {
     flex: 1,
+    minHeight: 0,
     overflowY: 'auto',
     padding: '16px',
     display: 'flex',
@@ -1287,6 +1288,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap' as const,
     gap: '6px',
     padding: '6px 16px',
+    flexShrink: 0,
   },
   fileChipWrapper: {
     display: 'flex',
@@ -1412,6 +1414,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#e2e8f0',
     borderRadius: '2px',
     overflow: 'hidden',
+    flexShrink: 0,
   },
   uploadBar: {
     height: '100%',
@@ -1426,6 +1429,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderTop: '1px solid #e2e8f0',
     backgroundColor: '#ffffff',
     alignItems: 'flex-end',
+    flexShrink: 0,
   },
   attachBtn: {
     width: '36px',
@@ -1612,6 +1616,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   genSettingsWrapper: {
     padding: '4px 16px 0',
+    flexShrink: 0,
   },
   genSettingsToggle: {
     background: 'none',

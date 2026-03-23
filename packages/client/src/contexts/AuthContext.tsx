@@ -64,21 +64,14 @@ function UserPickerModal({ onPick, onCancel }: UserPickerModalProps) {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      const endpoint = !hasUsers ? '/api/auth/setup' : '/api/users';
-      const res = await fetch(endpoint, {
+      const res = await fetch('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim() }),
       });
       const data = await res.json();
       if (!res.ok) return alert(data.error || '建立失敗');
-      // If setup, token is already in response
-      if (data.token) {
-        localStorage.setItem(TOKEN_KEY, data.token);
-        onPick(data.user.id);
-      } else {
-        onPick(data.id);
-      }
+      onPick(data.id);
     } finally {
       setCreating(false);
     }

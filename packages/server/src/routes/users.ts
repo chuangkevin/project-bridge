@@ -5,15 +5,18 @@ import { requireAuth, requireAdmin } from '../middleware/auth';
 
 const router = Router();
 
-// All user management routes require auth
-router.use(requireAuth);
+// GET /api/users — public: list active users (for UserPickerModal)
+router.get('/', (_req: Request, res: Response) => {
+  try {
+    const users = db.prepare('SELECT id, name, role FROM users WHERE is_active = 1 ORDER BY created_at ASC').all();
+    return res.json(users);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to list users' });
+  }
+});
 
-// 3.2 POST /api/users/setup — first user becomes admin (no auth required override)
-// This is handled separately before the requireAuth middleware
-// We'll handle it via a special route in auth.ts instead
-
-// 3.1 POST /api/users — admin creates a new user
-router.post('/', requireAdmin, (req: Request, res: Response) => {
+// POST /api/users — public: self-register (Netflix model — anyone can add a profile)
+router.post('/', (req: Request, res: Response) => {
   try {
     const { name } = req.body;
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -27,7 +30,10 @@ router.post('/', requireAdmin, (req: Request, res: Response) => {
     }
 
     const id = uuidv4();
-    db.prepare('INSERT INTO users (id, name, role) VALUES (?, ?, ?)').run(id, name.trim(), 'user');
+    // First user becomes admin; subsequent users are regular users
+    const count = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
+    const role = count === 0 ? 'admin' : 'user';
+    db.prepare('INSERT INTO users (id, name, role) VALUES (?, ?, ?)').run(id, name.trim(), role);
 
     const user = db.prepare('SELECT id, name, role, is_active, created_at FROM users WHERE id = ?').get(id);
     return res.status(201).json(user);

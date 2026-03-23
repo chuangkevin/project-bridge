@@ -83,6 +83,7 @@ export default function WorkspacePage() {
     tagName: string;
   } | null>(null);
   const [apiBindingIndicators, setApiBindingIndicators] = useState<{ bridgeId: string }[]>([]);
+  const [apiBindingsFull, setApiBindingsFull] = useState<{ id: string; bridgeId: string; method: string; url: string }[]>([]);
   const [showConstraintPanel, setShowConstraintPanel] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<{
     bridgeId: string;
@@ -326,10 +327,7 @@ export default function WorkspacePage() {
 
   const handleNavigatePage = useCallback((page: string) => {
     setActivePage(page);
-    const iframe = document.querySelector('iframe');
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'show-page', name: page }, '*');
-    }
+    window.postMessage({ type: 'show-page', name: page }, '*');
   }, []);
 
   const injectStyles = useCallback((css: string) => {
@@ -441,6 +439,7 @@ export default function WorkspacePage() {
       if (res.ok) {
         const bindings = await res.json();
         setApiBindingIndicators(bindings.map((b: any) => ({ bridgeId: b.bridgeId })));
+        setApiBindingsFull(bindings.map((b: any) => ({ id: b.id, bridgeId: b.bridgeId, method: b.method, url: b.url })));
       }
     } catch { /* silently fail */ }
   }, [id]);
@@ -466,6 +465,16 @@ export default function WorkspacePage() {
     const offsetY = container ? container.getBoundingClientRect().top : 48;
     const absX = data.rect.x + offsetX;
     const absY = data.rect.y + offsetY;
+
+    // In annotation mode: skip QuickRegen popup, go straight to annotation editor
+    if (interactionMode === 'annotate') {
+      setEditingAnnotation({
+        ...data,
+        rect: { ...data.rect, x: absX, y: absY },
+      });
+      return;
+    }
+
     // Show quick regenerate popup (primary action) instead of annotation editor
     setQuickRegen({
       bridgeId: data.bridgeId,
@@ -1054,10 +1063,10 @@ export default function WorkspacePage() {
               if (isActive) { /* deactivate */ }
             }}
             disabled={!html}
-            title="視覺編輯模式"
+            title="拖移編輯模式（點擊選取元件後可拖動位置）"
             data-testid="visual-edit-toggle"
           >
-            ✏️ 編輯
+            ↔ 拖移
           </button>
           <button
             type="button"
@@ -1388,6 +1397,11 @@ export default function WorkspacePage() {
             onToggle={() => setSpecPanelCollapsed(!specPanelCollapsed)}
             savingSpec={savingSpec}
             projectId={project.id}
+            apiBindings={apiBindingsFull}
+            onSelectApiBinding={(bridgeId) => {
+              setApiBindingElement({ bridgeId, tagName: 'element' });
+              setInteractionMode('api-binding');
+            }}
           />
         )}
       </div>
@@ -1475,8 +1489,8 @@ export default function WorkspacePage() {
         </div>
       )}
 
-      {/* Annotation editor popup — secondary action */}
-      {editingAnnotation && quickRegen?.showAnnotationForm && (
+      {/* Annotation editor popup — direct in annotate mode, or secondary via quickRegen */}
+      {editingAnnotation && (interactionMode === 'annotate' || quickRegen?.showAnnotationForm) && (
         <AnnotationEditor
           elementLabel={`<${editingAnnotation.tagName.toLowerCase()}> ${editingAnnotation.textContent}`}
           position={{ x: editingAnnotation.rect.x, y: editingAnnotation.rect.y }}
@@ -1796,6 +1810,13 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflow: 'hidden',
   },
+  chatPaneWrapper: {
+    position: 'relative' as const,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    flexShrink: 0,
+    overflow: 'hidden',
+  },
   chatPane: {
     width: '300px',
     flexShrink: 0,
@@ -1803,6 +1824,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
+    flex: 1,
   },
   tabBar: {
     display: 'flex',

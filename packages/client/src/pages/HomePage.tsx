@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NewProjectDialog from '../components/NewProjectDialog';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, authHeaders } from '../contexts/AuthContext';
 
 interface Project {
   id: string;
@@ -37,7 +37,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest');
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout, requireAuth } = useAuth();
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -58,16 +58,25 @@ export default function HomePage() {
     fetchProjects();
   }, [fetchProjects]);
 
+  const handleLogin = async () => {
+    await requireAuth();
+  };
+
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!window.confirm('確定要刪除此專案嗎？')) return;
     try {
-      const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/projects/${id}`, { method: 'DELETE', headers: authHeaders() });
       if (!res.ok) throw new Error('Failed to delete');
       setProjects(prev => prev.filter(p => p.id !== id));
     } catch {
       alert('刪除專案失敗');
     }
+  };
+
+  const handleNewProject = async () => {
+    await requireAuth();
+    setShowNewProject(true);
   };
 
   const handleProjectCreated = (project: Project) => {
@@ -88,7 +97,7 @@ export default function HomePage() {
   };
 
   const isOwn = (p: Project) =>
-    p.owner_id === user?.id || p.owner_id == null;
+    !user || p.owner_id === user.id || p.owner_id == null;
 
   const filteredProjects = projects
     .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -100,7 +109,7 @@ export default function HomePage() {
 
   const myProjects = filteredProjects.filter(isOwn);
   const othersProjects = filteredProjects.filter(p => !isOwn(p));
-  const splitSections = myProjects.length > 0 && othersProjects.length > 0;
+  const splitSections = !!user && myProjects.length > 0 && othersProjects.length > 0;
 
   return (
     <div style={styles.container}>
@@ -110,7 +119,7 @@ export default function HomePage() {
           <span style={styles.subtitle}>AI-powered prototype generator</span>
         </div>
         <div style={styles.headerRight}>
-          <button style={styles.settingsBtn} onClick={() => navigate('/settings')} title="設定" data-testid="settings-btn">
+          <button type="button" style={styles.settingsBtn} onClick={() => navigate('/settings')} title="設定" data-testid="settings-btn">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="10" cy="10" r="3" />
               <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.93 3.93l1.41 1.41M14.66 14.66l1.41 1.41M3.93 16.07l1.41-1.41M14.66 5.34l1.41-1.41" />
@@ -119,7 +128,28 @@ export default function HomePage() {
           <button type="button" style={styles.globalDesignBtn} onClick={() => navigate('/global-design')} data-testid="global-design-btn">
             🌐 全域設計
           </button>
-          <button style={styles.newBtn} onClick={() => setShowNewProject(true)} data-testid="new-project-btn">
+          {user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: '#555', fontWeight: 500 }}
+                data-testid="home-user-name">
+                👤 {user.name}{user.role === 'admin' && <span style={{ fontSize: 10, color: '#8E6FA7', marginLeft: 4 }}>管理員</span>}
+              </span>
+              <button type="button"
+                onClick={logout}
+                style={{ fontSize: 12, color: '#999', background: 'none', border: '1px solid #e2e8f0', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
+                data-testid="home-logout-btn">
+                登出
+              </button>
+            </div>
+          ) : (
+            <button type="button"
+              onClick={handleLogin}
+              style={{ fontSize: 13, color: '#8E6FA7', background: 'none', border: '1px solid #C4A8DC', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 500 }}
+              data-testid="home-login-btn">
+              👤 登入
+            </button>
+          )}
+          <button type="button" style={styles.newBtn} onClick={handleNewProject} data-testid="new-project-btn">
             + 新增專案
           </button>
         </div>

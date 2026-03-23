@@ -237,35 +237,42 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     } else {
       // Auto-inject project uploaded files even if not explicitly attached
-      // Priority: analysis_result (structured) > extracted_text (raw)
-      const projectFiles = db.prepare(
-        `SELECT original_name, extracted_text, analysis_result, analysis_status, file_size, intent FROM uploaded_files
-         WHERE project_id = ? AND (extracted_text IS NOT NULL AND LENGTH(extracted_text) > 100 OR analysis_result IS NOT NULL)
-         ORDER BY created_at DESC`
-      ).all(projectId) as { original_name: string; extracted_text: string; analysis_result: string | null; analysis_status: string | null; file_size: number; intent: string | null }[];
-      const seenSizes = new Set<number>();
-      const uniqueFiles = projectFiles.filter(f => {
-        if (seenSizes.has(f.file_size)) return false;
-        seenSizes.add(f.file_size);
-        return true;
-      }).slice(0, 1);
-      if (uniqueFiles.length > 0) {
-        const fileParts = uniqueFiles.map(f => {
-          let name = f.original_name;
-          try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep original */ }
+      // Skip injection when intent is 'component' or when the message does not explicitly
+      // reference uploaded files (keywords: 依照, 根據, 規格, spec, 設計稿).
+      const messageReferencesFiles = /依照|根據|規格|spec|設計稿/i.test(message.trim());
+      const shouldInjectFiles = intent !== 'component' && messageReferencesFiles;
 
-          const preamble = getIntentPreamble(f.intent);
+      if (shouldInjectFiles) {
+        // Priority: analysis_result (structured) > extracted_text (raw)
+        const projectFiles = db.prepare(
+          `SELECT original_name, extracted_text, analysis_result, analysis_status, file_size, intent FROM uploaded_files
+           WHERE project_id = ? AND (extracted_text IS NOT NULL AND LENGTH(extracted_text) > 100 OR analysis_result IS NOT NULL)
+           ORDER BY created_at DESC`
+        ).all(projectId) as { original_name: string; extracted_text: string; analysis_result: string | null; analysis_status: string | null; file_size: number; intent: string | null }[];
+        const seenSizes = new Set<number>();
+        const uniqueFiles = projectFiles.filter(f => {
+          if (seenSizes.has(f.file_size)) return false;
+          seenSizes.add(f.file_size);
+          return true;
+        }).slice(0, 1);
+        if (uniqueFiles.length > 0) {
+          const fileParts = uniqueFiles.map(f => {
+            let name = f.original_name;
+            try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep original */ }
 
-          // Use structured analysis if available
-          if (f.analysis_result) {
-            try {
-              const analysis = JSON.parse(f.analysis_result);
-              return preamble + formatAnalysisForPrompt(analysis, name);
-            } catch { /* fall through to raw text */ }
-          }
-          return `${preamble}--- ${name} ---\n${f.extracted_text.slice(0, 4000)}\n--- end ---`;
-        }).join('\n');
-        userContent = `[Project design specs (auto-loaded from uploaded files)]\n${fileParts}\n\n${userContent}`;
+            const preamble = getIntentPreamble(f.intent);
+
+            // Use structured analysis if available
+            if (f.analysis_result) {
+              try {
+                const analysis = JSON.parse(f.analysis_result);
+                return preamble + formatAnalysisForPrompt(analysis, name);
+              } catch { /* fall through to raw text */ }
+            }
+            return `${preamble}--- ${name} ---\n${f.extracted_text.slice(0, 4000)}\n--- end ---`;
+          }).join('\n');
+          userContent = `[Project design specs (auto-loaded from uploaded files)]\n${fileParts}\n\n${userContent}`;
+        }
       }
     }
 
@@ -876,33 +883,39 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       finalPages = archData.nodes.map((n: any) => n.name);
       isMultiPage = finalPages.length > 1;
     } else {
-      // Check if analysis_result has page names — use those directly to avoid extra AI call
-      const analysisPages: string[] = [];
-      if (specRowsEarly.length > 0) {
-        for (const row of specRowsEarly) {
-          if (row.analysis_result) {
-            try {
-              const analysis = JSON.parse(row.analysis_result);
-              if (analysis.pages?.length > 1) {
-                analysisPages.push(...analysis.pages.map((p: any) => p.name));
-              }
-            } catch { /* ignore */ }
+      // When intent is 'component', skip all spec-based and AI page detection entirely
+      if (intent === 'component') {
+        finalPages = [];
+        isMultiPage = false;
+      } else {
+        // Check if analysis_result has page names — use those directly to avoid extra AI call
+        const analysisPages: string[] = [];
+        if (specRowsEarly.length > 0) {
+          for (const row of specRowsEarly) {
+            if (row.analysis_result) {
+              try {
+                const analysis = JSON.parse(row.analysis_result);
+                if (analysis.pages?.length > 1) {
+                  analysisPages.push(...analysis.pages.map((p: any) => p.name));
+                }
+              } catch { /* ignore */ }
+            }
           }
         }
-      }
 
-      if (analysisPages.length > 1) {
-        // Use pages from structured analysis — skip AI page detection
-        finalPages = analysisPages;
-        isMultiPage = true;
-      } else {
-        // Fallback: run AI page structure analysis
-        const pageStructure = (intent === 'full-page' || intent === 'in-shell')
-          ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
-          : { multiPage: false, pages: [] as string[] };
+        if (analysisPages.length > 1) {
+          // Use pages from structured analysis — skip AI page detection
+          finalPages = analysisPages;
+          isMultiPage = true;
+        } else {
+          // Fallback: run AI page structure analysis
+          const pageStructure = (intent === 'full-page' || intent === 'in-shell')
+            ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
+            : { multiPage: false, pages: [] as string[] };
 
-        finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
-        isMultiPage = finalPages.length > 1;
+          finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
+          isMultiPage = finalPages.length > 1;
+        }
       }
     }
 
@@ -1067,7 +1080,7 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     let html: string;
     if (intent === 'component') {
       // Wrap component fragment in minimal preview HTML
-      html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>body{display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:32px 24px;background:#f8fafc;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}</style></head><body>${rawAiOutput}</body></html>`;
+      html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>body{display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:32px 24px;background:#f8fafc;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden;max-width:100%;}</style></head><body>${rawAiOutput}</body></html>`;
     } else if (intent === 'in-shell' && shellHtml) {
       // Compose in-shell: replace {CONTENT} with AI output
       // If AI mistakenly returned full HTML, extract <main> content first

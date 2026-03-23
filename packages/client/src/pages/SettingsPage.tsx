@@ -54,7 +54,7 @@ type AuthState = 'loading' | 'setup' | 'login' | 'authenticated';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { user: authUser } = useAuth();
+  const { user: authUser, requireAuth } = useAuth();
 
   // Auth state
   const [authState, setAuthState] = useState<AuthState>('loading');
@@ -797,6 +797,36 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Section: User Management (admin only) ────── */}
+        {!authUser && (
+          <section style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>使用者管理</h2>
+              <div style={styles.sectionDivider} />
+            </div>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+              以管理員身分登入後可管理使用者。
+            </p>
+            <button
+              type="button"
+              onClick={() => requireAuth()}
+              style={{ padding: '8px 16px', background: '#8E6FA7', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
+              data-testid="admin-login-btn"
+            >
+              👤 切換使用者 / 管理員登入
+            </button>
+          </section>
+        )}
+        {authUser && authUser.role !== 'admin' && (
+          <section style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>使用者管理</h2>
+              <div style={styles.sectionDivider} />
+            </div>
+            <p style={{ fontSize: 13, color: '#64748b' }}>
+              僅管理員可存取使用者管理功能。目前登入：{authUser.name}
+            </p>
+          </section>
+        )}
         {authUser?.role === 'admin' && (
           <section style={styles.section}>
             <div style={styles.sectionHeader}>

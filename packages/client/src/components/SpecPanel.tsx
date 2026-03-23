@@ -12,6 +12,13 @@ export interface Annotation {
   created_at?: string;
 }
 
+interface ApiBinding {
+  id: string;
+  bridgeId: string;
+  method: string;
+  url: string;
+}
+
 interface Props {
   annotations: Annotation[];
   selectedAnnotation: Annotation | null;
@@ -22,6 +29,8 @@ interface Props {
   onToggle: () => void;
   savingSpec?: boolean;
   projectId?: string;
+  apiBindings?: ApiBinding[];
+  onSelectApiBinding?: (bridgeId: string) => void;
 }
 
 export default function SpecPanel({
@@ -34,14 +43,44 @@ export default function SpecPanel({
   onToggle,
   savingSpec,
   projectId,
+  apiBindings = [],
+  onSelectApiBinding,
 }: Props) {
-  const [tab, setTab] = useState<'annotations' | 'spec'>('annotations');
+  const [tab, setTab] = useState<'annotations' | 'spec' | 'api'>('annotations');
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegenerateForm, setShowRegenerateForm] = useState(false);
   const [regenerateInstruction, setRegenerateInstruction] = useState('');
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateStatus, setRegenerateStatus] = useState<'idle' | 'done' | 'error'>('idle');
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+
+  const handleExportFigma = () => {
+    // Export as Figma-compatible JSON (compatible with annotation plugins like Figma Tokens / Annotate It!)
+    const figmaExport = {
+      version: '1.0',
+      source: 'project-bridge',
+      exportedAt: new Date().toISOString(),
+      annotations: annotations.map((ann, i) => ({
+        id: ann.id,
+        index: i + 1,
+        nodeId: ann.bridge_id,       // maps to data-bridge-id in prototype
+        elementTag: ann.element_tag,
+        elementText: ann.element_text,
+        content: ann.content,
+        createdAt: ann.created_at,
+        spec: ann.spec_data ? {
+          component: ann.spec_data,
+        } : null,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(figmaExport, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'annotations-figma.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleExportMarkdown = () => {
     const title = 'Prototype Annotations';
@@ -180,6 +219,15 @@ export default function SpecPanel({
           >
             標注 ({annotations.length})
           </button>
+          {apiBindings.length > 0 && (
+            <button
+              style={tab === 'api' ? styles.activeTab : styles.tab}
+              onClick={() => setTab('api')}
+              data-testid="tab-api-bindings"
+            >
+              API ({apiBindings.length})
+            </button>
+          )}
           <button
             style={tab === 'spec' ? styles.activeTab : styles.tab}
             onClick={() => setTab('spec')}
@@ -232,6 +280,15 @@ export default function SpecPanel({
                 data-testid="export-annotations-btn"
               >
                 ↓ 匯出標注
+              </button>
+              <button
+                type="button"
+                style={{ ...styles.exportBtn, background: '#f0f4ff', color: '#3b5fc0', borderColor: '#c7d2fe' }}
+                onClick={handleExportFigma}
+                title="匯出 Figma 相容 JSON（可用於 Figma 標注插件）"
+                data-testid="export-figma-btn"
+              >
+                ↓ Figma JSON
               </button>
             </div>
           )}
@@ -333,6 +390,32 @@ export default function SpecPanel({
             </>
           ) : (
             <p style={styles.emptyText}>選取一個標注來查看其規格。</p>
+          )}
+        </div>
+      )}
+
+      {tab === 'api' && (
+        <div style={styles.list}>
+          {apiBindings.length === 0 ? (
+            <p style={styles.emptyText}>尚無 API 標記。進入 API 模式點擊元件來新增。</p>
+          ) : (
+            apiBindings.map(b => (
+              <div
+                key={b.id}
+                style={styles.annotationItem}
+                onClick={() => onSelectApiBinding?.(b.bridgeId)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                    background: b.method === 'GET' ? '#dcfce7' : b.method === 'POST' ? '#dbeafe' : b.method === 'DELETE' ? '#fee2e2' : '#fef9c3',
+                    color: b.method === 'GET' ? '#166534' : b.method === 'POST' ? '#1e40af' : b.method === 'DELETE' ? '#991b1b' : '#854d0e',
+                  }}>{b.method}</span>
+                  <code style={{ fontSize: 11, color: '#475569', wordBreak: 'break-all' }}>{b.url || '(未設定)'}</code>
+                </div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>{b.bridgeId}</div>
+              </div>
+            ))
           )}
         </div>
       )}

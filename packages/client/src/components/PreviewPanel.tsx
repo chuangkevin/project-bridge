@@ -88,6 +88,9 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
         iframe.contentWindow.postMessage({ type: 'show-api-indicators', bindings: apiBindings }, '*');
       }
     }
+    if (effectiveMode === 'visual-edit') {
+      iframe.contentWindow.postMessage({ type: 'set-visual-edit-mode', enabled: true }, '*');
+    }
   }, [annotations, apiBindings, effectiveMode]);
 
   if (!html) {

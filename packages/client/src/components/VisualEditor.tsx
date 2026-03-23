@@ -188,10 +188,19 @@ export default function VisualEditor({ projectId, iframeRef, active, onPatchesCh
     };
   }, [active, computeIframeOffset]);
 
+  // ── Block iframe from stealing mouse events during drag/resize ──
+  const blockIframe = useCallback(() => {
+    if (iframeRef.current) iframeRef.current.style.pointerEvents = 'none';
+  }, [iframeRef]);
+  const unblockIframe = useCallback(() => {
+    if (iframeRef.current) iframeRef.current.style.pointerEvents = '';
+  }, [iframeRef]);
+
   // ── Drag handling ──
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     if (!selectedBridgeId || !selectedRect) return;
     e.preventDefault();
+    blockIframe();
     dragRef.current = {
       active: true,
       startX: e.clientX,
@@ -227,6 +236,7 @@ export default function VisualEditor({ projectId, iframeRef, active, onPatchesCh
     };
 
     const onMouseUp = () => {
+      unblockIframe();
       if (dragRef.current.active && selectedBridgeId) {
         const { accDeltaX, accDeltaY } = dragRef.current;
         if (accDeltaX !== 0 || accDeltaY !== 0) {
@@ -240,13 +250,14 @@ export default function VisualEditor({ projectId, iframeRef, active, onPatchesCh
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [selectedBridgeId, selectedRect, postToIframe, collectPatch]);
+  }, [selectedBridgeId, selectedRect, postToIframe, collectPatch, blockIframe, unblockIframe]);
 
   // ── Resize handling ──
   const handleResizeStart = useCallback((handle: string, e: React.MouseEvent) => {
     if (!selectedBridgeId || !selectedRect) return;
     e.preventDefault();
     e.stopPropagation();
+    blockIframe();
     resizeRef.current = {
       active: true,
       handle,
@@ -287,11 +298,8 @@ export default function VisualEditor({ projectId, iframeRef, active, onPatchesCh
     };
 
     const onMouseUp = () => {
+      unblockIframe();
       if (resizeRef.current.active && selectedBridgeId && selectedRect) {
-        // Read final rect from state indirectly — compute from refs
-        void resizeRef.current.origRect;
-        void resizeRef.current.handle;
-        // Use the last rAF values. We need to request the element rect from iframe.
         postToIframe({ type: 'get-element-rect', bridgeId: selectedBridgeId });
       }
       resizeRef.current.active = false;
@@ -301,7 +309,7 @@ export default function VisualEditor({ projectId, iframeRef, active, onPatchesCh
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [selectedBridgeId, selectedRect, postToIframe]);
+  }, [selectedBridgeId, selectedRect, postToIframe, blockIframe, unblockIframe]);
 
   // ── Listen for element-rect response (after resize) to finalize patch ──
   useEffect(() => {

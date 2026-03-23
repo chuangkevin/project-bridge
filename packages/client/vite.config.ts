@@ -9,7 +9,12 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ['111c748', '111C748'],
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        timeout: 0,        // disable proxy timeout for long-running AI generation
+        proxyTimeout: 0,   // disable upstream timeout
+      },
     },
   },
 });

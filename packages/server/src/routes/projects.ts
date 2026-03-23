@@ -22,10 +22,11 @@ router.post('/', (req: Request, res: Response) => {
     const share_token = generateShareToken();
     const now = new Date().toISOString();
 
+    const ownerId = (req as any).user?.id || null;
     const stmt = db.prepare(
-      'INSERT INTO projects (id, name, share_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO projects (id, name, share_token, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
     );
-    stmt.run(id, name.trim(), share_token, now, now);
+    stmt.run(id, name.trim(), share_token, ownerId, now, now);
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     return res.status(201).json(project);
@@ -38,7 +39,12 @@ router.post('/', (req: Request, res: Response) => {
 // GET /api/projects — list all projects
 router.get('/', (_req: Request, res: Response) => {
   try {
-    const projects = db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all();
+    const projects = db.prepare(`
+      SELECT p.*, u.name as owner_name
+      FROM projects p
+      LEFT JOIN users u ON p.owner_id = u.id
+      ORDER BY p.updated_at DESC
+    `).all();
     return res.json(projects);
   } catch (err: any) {
     console.error('Error listing projects:', err);

@@ -127,7 +127,7 @@ export const BRIDGE_SCRIPT = `
       var badge = document.createElement('div');
       badge.className = 'bridge-indicator';
       badge.textContent = ann.number;
-      badge.style.cssText = 'position:fixed;top:' + (rect.top - 8) + 'px;left:' + (rect.right - 8) + 'px;width:20px;height:20px;border-radius:50%;background:#3b82f6;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:700;z-index:99999;pointer-events:auto;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.2);font-family:sans-serif;';
+      badge.style.cssText = 'position:absolute;top:' + (rect.top + window.pageYOffset - 8) + 'px;left:' + (rect.right + window.pageXOffset - 8) + 'px;width:20px;height:20px;border-radius:50%;background:#3b82f6;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:700;z-index:99999;pointer-events:auto;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.2);font-family:sans-serif;';
       badge.setAttribute('data-annotation-bridge-id', ann.bridgeId);
       badge.addEventListener('click', function(e) {
         e.preventDefault();

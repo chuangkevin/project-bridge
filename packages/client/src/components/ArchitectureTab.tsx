@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useArchStore, ArchData } from '../stores/useArchStore';
 import ArchWizard from './ArchWizard';
 import ArchFlowchart from './ArchFlowchart';
@@ -9,10 +10,51 @@ interface Props {
 }
 
 export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchToDesignAndGenerate }: Props) {
-  const { archData, setArchData } = useArchStore();
+  const { archData, setArchData, patchArchData } = useArchStore();
+  const [importing, setImporting] = useState(false);
 
   const handleWizardComplete = (data: ArchData) => {
     setArchData(data);
+  };
+
+  const handleImportFromPrototype = async () => {
+    setImporting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/prototype`);
+      if (!res.ok) return;
+      const data = await res.json();
+      let pageNames: string[] = data.pages || [];
+      if (pageNames.length === 0) {
+        // Single-page prototype — create one node named "主頁面"
+        pageNames = ['主頁面'];
+      }
+
+      const nodes = pageNames.map((name, i) => ({
+        id: `page-imported-${i}`,
+        nodeType: 'page' as const,
+        name,
+        position: { x: 80 + (i % 3) * 260, y: 80 + Math.floor(i / 3) * 200 },
+        referenceFileId: null,
+        referenceFileUrl: null,
+        viewport: null,
+        states: [],
+        components: [],
+      }));
+
+      const archData: ArchData = {
+        type: 'page',
+        subtype: 'website',
+        aiDecidePages: false,
+        nodes,
+        edges: [],
+      };
+      await patchArchData(projectId, archData);
+      setArchData(archData);
+    } catch (err) {
+      console.error('Failed to import from prototype:', err);
+    } finally {
+      setImporting(false);
+    }
   };
 
   const containerStyle: React.CSSProperties = {
@@ -51,8 +93,17 @@ export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchT
             返回設計
           </button>
         </div>
-        <div style={centeredStyle} data-testid="arch-wizard">
+        <div style={{ ...centeredStyle, flexDirection: 'column', gap: 16 }}>
           <ArchWizard projectId={projectId} onComplete={handleWizardComplete} onSkip={onSwitchToDesign} />
+          <button
+            type="button"
+            onClick={handleImportFromPrototype}
+            disabled={importing}
+            style={{ background: 'none', border: '1px solid #C4A8DC', borderRadius: 8, color: '#8E6FA7', fontSize: 13, padding: '7px 18px', cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }}
+            data-testid="import-from-prototype-btn"
+          >
+            {importing ? '匯入中...' : '⬆ 從現有原型匯入頁面'}
+          </button>
         </div>
       </div>
     );

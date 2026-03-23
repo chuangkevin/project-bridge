@@ -1,16 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { useArchStore, ArchComponent } from '../stores/useArchStore';
 import ComponentEditorModal from './ComponentEditorModal';
+import ArchLinkingOverlay from './ArchLinkingOverlay';
 import './ArchFlowchart.css';
 
-const TYPE_ICONS: Record<string, string> = {
-  button: '🔘', input: '✏️', select: '📋', radio: '🔘', tab: '📑', card: '🃏', link: '🔗',
-};
+
 
 interface ArchPageNodeData {
   name: string;
   referenceFileUrl: string | null;
+  projectId?: string;
   viewport?: 'mobile' | 'desktop' | null;
   components?: ArchComponent[];
   onRename: (id: string, name: string) => void;
@@ -23,12 +23,31 @@ interface ArchPageNodeData {
 
 export default function ArchPageNode({ id, data }: { id: string; data: ArchPageNodeData }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [editingComp, setEditingComp] = useState<ArchComponent | null | 'new'>(null);
+  const [protoHtml, setProtoHtml] = useState<string | null>(null);
+  const [linkingOpen, setLinkingOpen] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const { setTargetPage } = useArchStore();
 
   const components = data.components || [];
   const pageNames = data.pageNames || [];
+
+  // Lazy-load prototype HTML for thumbnail preview
+  useEffect(() => {
+    if (data.referenceFileUrl || !data.projectId) return;
+    let cancelled = false;
+    fetch(`/api/projects/${data.projectId}/prototype`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d?.html) setProtoHtml(d.html); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [data.projectId, data.referenceFileUrl]);
+
+  // After iframe loads, navigate to the correct page
+  const handleIframeLoad = () => {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'navigate', page: data.name }, '*');
+    iframeRef.current?.contentWindow?.postMessage({ type: 'navigate-page', page: data.name }, '*');
+  };
 
   const handleViewportChange = (v: 'mobile' | 'desktop' | null) => {
     data.onViewportChange(id, data.viewport === v ? null : v);
@@ -45,23 +64,36 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
     setEditingComp(null);
   };
 
-  const handleDeleteComponent = (compId: string) => {
-    const updated = components.filter(c => c.id !== compId);
-    data.onComponentsChange?.(id, updated);
-  };
-
   return (
     <div
       data-testid={`page-node-${data.name}`}
       className="arch-page-node"
       onContextMenu={(e) => { e.preventDefault(); setMenuOpen(true); }}
-      style={{ minWidth: expanded ? 220 : undefined }}
+      style={{}}
     >
       <Handle type="target" position={Position.Left} />
 
       <div className="arch-page-node__thumb">
         {data.referenceFileUrl ? (
           <img src={data.referenceFileUrl} alt="ref" />
+        ) : protoHtml ? (
+          <div style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative', borderRadius: 4 }}>
+            <iframe
+              ref={iframeRef}
+              sandbox="allow-scripts allow-same-origin"
+              srcDoc={protoHtml}
+              title={data.name}
+              onLoad={handleIframeLoad}
+              style={{
+                width: '1440px',
+                height: '900px',
+                transform: 'scale(0.138) translateX(-3px)',
+                transformOrigin: '0 0',
+                pointerEvents: 'none',
+                border: 'none',
+              }}
+            />
+          </div>
         ) : (
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="#B0B0B0" strokeWidth="1.5">
             <rect x="4" y="4" width="24" height="24" rx="3" />
@@ -103,44 +135,15 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
           {data.referenceFileUrl ? '換參考圖' : '+ 參考圖'}
         </button>
 
-        {/* Component list toggle */}
+        {/* Navigation connections summary + open linking overlay */}
         <button
           type="button"
           className="arch-page-node__upload-btn"
-          onClick={() => setExpanded(!expanded)}
-          style={{ marginTop: 4, fontSize: 11 }}
+          onClick={() => setLinkingOpen(true)}
+          style={{ marginTop: 4, fontSize: 11, background: components.filter(c=>c.navigationTo).length > 0 ? '#EBE3F2' : undefined, color: components.filter(c=>c.navigationTo).length > 0 ? '#8E6FA7' : undefined }}
         >
-          {expanded ? '▼' : '▶'} 元件 ({components.length})
+          🔗 設定導航 {components.filter(c => c.navigationTo).length > 0 && `(${components.filter(c => c.navigationTo).length})`}
         </button>
-
-        {/* Expanded component list */}
-        {expanded && (
-          <div style={{ marginTop: 4, fontSize: 11, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {components.map(c => (
-              <div
-                key={c.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px', borderRadius: 4, background: '#f8f6fb', cursor: 'pointer' }}
-                onClick={() => setEditingComp(c)}
-                title={c.description || c.name}
-              >
-                <span>{TYPE_ICONS[c.type] || '·'}</span>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-                {c.navigationTo && <span style={{ color: '#8E6FA7', fontSize: 10 }}>→</span>}
-                {c.states.length > 0 && <span style={{ color: '#64748b', fontSize: 10 }}>{c.states.length}態</span>}
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 10, padding: 0 }}
-                  onClick={(e) => { e.stopPropagation(); handleDeleteComponent(c.id); }}
-                >✕</button>
-              </div>
-            ))}
-            <button
-              type="button"
-              style={{ padding: '2px 4px', border: '1px dashed #cbd5e1', borderRadius: 4, background: 'none', color: '#64748b', fontSize: 11, cursor: 'pointer' }}
-              onClick={() => setEditingComp('new')}
-            >+ 新增元件</button>
-          </div>
-        )}
       </div>
 
       <Handle type="source" position={Position.Right} />
@@ -168,13 +171,25 @@ export default function ArchPageNode({ id, data }: { id: string; data: ArchPageN
         </>
       )}
 
-      {/* Component Editor Modal */}
+      {/* Component Editor Modal (for advanced: states/constraints) */}
       {editingComp !== null && (
         <ComponentEditorModal
           component={editingComp === 'new' ? null : editingComp}
           pageNames={pageNames}
           onSave={handleSaveComponent}
           onCancel={() => setEditingComp(null)}
+        />
+      )}
+
+      {/* Visual linking overlay */}
+      {linkingOpen && data.projectId && (
+        <ArchLinkingOverlay
+          projectId={data.projectId}
+          pageName={data.name}
+          pageNames={pageNames}
+          components={components}
+          onUpdate={(updated) => data.onComponentsChange?.(id, updated)}
+          onClose={() => setLinkingOpen(false)}
         />
       )}
     </div>
