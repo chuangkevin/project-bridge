@@ -18,6 +18,10 @@ export async function generatePageFragment(
 
   const systemPrompt = `You are a UI prototype engineer generating a SINGLE PAGE FRAGMENT for a multi-page prototype.
 
+CRITICAL RULES:
+- Use placeholder/dummy data only (e.g. "商品名稱", "NT$ 0", "使用者名稱"). Never generate fake real addresses, fake property listings, or fake real estate data.
+- Only generate the content that was requested for this specific page. Do not add listing pages or browse pages unless explicitly requested.
+
 OUTPUT FORMAT:
 Return ONLY an HTML fragment — a single <div> element:
 <div class="page" id="page-${pageName}" data-page="${pageName}" style="display:none">

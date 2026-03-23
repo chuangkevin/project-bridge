@@ -40,6 +40,11 @@ export async function planGeneration(
 
   const prompt = `You are a UI architecture planner. Given the analysis of a specification document, produce a JSON generation plan.
 
+CRITICAL RULES:
+- Only generate pages that are explicitly requested. Do NOT add listing pages, property listing pages, or browse/search pages unless the user specifically asked for them.
+- Use placeholder/dummy data only (e.g. "商品名稱", "NT$ 0", "使用者名稱"). Never generate fake real addresses, fake property listings, or fake real estate data.
+- Generate ONLY what is needed for the requested feature.
+
 INPUT:
 ${architectureBlock ? `Architecture:\n${architectureBlock}\n` : ''}
 ${projectContext ? `Context:\n${projectContext}\n` : ''}
