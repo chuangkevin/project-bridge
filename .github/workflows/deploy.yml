@@ -1,11 +1,16 @@
-name: Deploy to ArgoCD
+name: Deploy to Server via Tailscale
 
 on:
   workflow_run:
     workflows: ["Build and Push Docker Image"]
-    types: [completed]
-    branches: [main]
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
+
+env:
+  DOCKERHUB_USERNAME: kevin950805
 
 jobs:
   deploy:
@@ -13,11 +18,11 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -25,52 +30,93 @@ jobs:
 
       - name: Test Tailscale Connection
         run: |
-          echo "Testing Tailscale connection..."
+          echo "Testing connection to deployment server..."
           tailscale status
-          ping -c 3 srvhpgit1 || true
+          ping -c 3 ${{ secrets.DEPLOY_SERVER_IP }}
 
-      - name: Set Image Tag
-        run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
-
-      - name: Update Image Tag in Argo App Repo
-        env:
-          GIT_USER: ${{ secrets.GIT_USERNAME }}
-          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+      - name: Setup SSH
         run: |
-          git clone --branch main https://${GIT_USER}:${GIT_TOKEN}@gitea.housefun.com.tw/HF_RD/argo-app.git argo-app
-          cd argo-app
-          git config user.email "github-actions@github.com"
-          git config user.name "GitHub Actions"
-          sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" project-bridge/kustomization.yaml
-          git add project-bridge/kustomization.yaml
-          git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
-          git push https://${GIT_USER}:${GIT_TOKEN}@gitea.housefun.com.tw/HF_RD/argo-app.git HEAD:main
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: ArgoCD Sync
+      - name: Sync docker-compose.yml to server
         env:
-          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
-          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+          DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          docker run --rm -i --network host \
-            --add-host srvhpgit.evertrust.com.tw:10.202.1.14 \
-            -e ARGOCD_USERNAME="${ARGOCD_USERNAME}" \
-            -e ARGOCD_PASSWORD="${ARGOCD_PASSWORD}" \
-            argoproj/argocd:v2.6.15 /bin/sh -c '
-              set -e
-              echo "y" | argocd login srvhpgit.evertrust.com.tw:30091 --insecure \
-                --username "$ARGOCD_USERNAME" \
-                --password "$ARGOCD_PASSWORD" \
-                --grpc-web
-              argocd app sync project-bridge --force --grpc-web
-            '
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_SERVER_IP}" "mkdir -p '${DEPLOY_PATH}'"
+          scp -i ~/.ssh/deploy_key docker-compose.yml "${DEPLOY_USER}@${DEPLOY_SERVER_IP}:${DEPLOY_PATH}/docker-compose.yml"
+
+      - name: Deploy via SSH
+        env:
+          DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_SERVER_IP} "
+            set -e
+
+            retry_pull() {
+              local max_attempts=3
+              local attempt=1
+              local delay=10
+
+              while [ \$attempt -le \$max_attempts ]; do
+                echo \"Pulling Docker images (attempt \$attempt/\$max_attempts)...\"
+                if docker compose -f docker-compose.yml pull; then
+                  echo \"Pull successful!\"
+                  return 0
+                fi
+
+                if [ \$attempt -lt \$max_attempts ]; then
+                  echo \"Pull failed, retrying in \${delay}s...\"
+                  sleep \$delay
+                  delay=\$((delay * 2))
+                fi
+                attempt=\$((attempt + 1))
+              done
+
+              echo \"Pull failed after \$max_attempts attempts\"
+              return 1
+            }
+
+            echo \"Navigating to deployment directory...\"
+            cd \"${DEPLOY_PATH}\"
+
+            retry_pull
+
+            echo \"Stopping existing containers...\"
+            docker compose -f docker-compose.yml down --remove-orphans --volumes=false
+
+            echo \"Starting updated containers...\"
+            docker compose -f docker-compose.yml up -d --force-recreate
+
+            echo \"Cleaning up old images...\"
+            docker image prune -af --filter \"until=24h\" || true
+
+            echo \"Deployment completed successfully!\"
+            docker compose -f docker-compose.yml ps
+          "
+
+      - name: Health Check
+        run: |
+          echo "Performing health check..."
+          sleep 10
+          curl -f http://${{ secrets.DEPLOY_SERVER_IP }}:5123/ || exit 1
+          echo "Health check passed!"
 
       - name: Deployment Summary
         if: always()
         run: |
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image**: \`srvhpgit1:32050/project-bridge:$IMAGE_TAG\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Deployed at**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ env.DOCKERHUB_USERNAME }}/project-bridge:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deployed at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
       - name: Notify on Failure
         if: failure()

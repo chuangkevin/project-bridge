@@ -1,6 +1,6 @@
 services:
   project-bridge:
-    image: srvhpgit1:32050/project-bridge:latest
+    image: kevin950805/project-bridge:latest
     container_name: project-bridge
     restart: unless-stopped
     ports:
