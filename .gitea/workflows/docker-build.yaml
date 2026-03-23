@@ -47,24 +47,23 @@ jobs:
 
       - name: Update Image Tag in Argo App Repo
         run: |
-          git clone --branch main https://${GIT_USER}:${GIT_TOKEN}@gitea.housefun.com.tw/HF_RD/argo-app.git argo-app
+          git clone --branch main http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git argo-app
           cd argo-app
           git config user.email "gitea-actions@gitea.local"
           git config user.name "Gitea Bot"
           sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" project-bridge/kustomization.yaml
           git add project-bridge/kustomization.yaml
           git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
-          git push https://${GIT_USER}:${GIT_TOKEN}@gitea.housefun.com.tw/HF_RD/argo-app.git HEAD:main
+          git push http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git HEAD:main
 
       - name: ArgoCD Sync
         run: |
           docker run --rm -i --network host \
-            --add-host srvhpgit.evertrust.com.tw:10.202.1.14 \
             -e ARGOCD_USERNAME="${ARGOCD_USERNAME}" \
             -e ARGOCD_PASSWORD="${ARGOCD_PASSWORD}" \
             argoproj/argocd:v2.6.15 /bin/sh -c '
               set -e
-              echo "y" | argocd login srvhpgit.evertrust.com.tw:30091 --insecure \
+              echo "y" | argocd login srvhpgit1:30091 --insecure \
                 --username "$ARGOCD_USERNAME" \
                 --password "$ARGOCD_PASSWORD" \
                 --grpc-web
