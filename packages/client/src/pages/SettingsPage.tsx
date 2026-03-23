@@ -55,7 +55,7 @@ type AuthState = 'loading' | 'setup' | 'login' | 'authenticated';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { user: authUser, requireAuth } = useAuth();
+  const { user: authUser, loading: authLoading, requireAuth } = useAuth();
 
   // Auth state
   const [authState, setAuthState] = useState<AuthState>('loading');
@@ -105,7 +105,17 @@ export default function SettingsPage() {
   const [userActionError, setUserActionError] = useState('');
 
   // ─── Auth flow ─────────────────────────────────────
+  // If new-system admin is logged in, skip old auth entirely
   useEffect(() => {
+    if (!authLoading && authUser?.role === 'admin') {
+      setAuthState('authenticated');
+    }
+  }, [authUser, authLoading]);
+
+  useEffect(() => {
+    if (authLoading) return; // wait for AuthContext to resolve
+    if (authUser?.role === 'admin') return; // handled above
+
     (async () => {
       try {
         const res = await fetch('/api/auth/status');
@@ -117,10 +127,9 @@ export default function SettingsPage() {
           return;
         }
 
-        // Has password — check if we have a valid token
+        // Has password — check if we have a valid token (old system)
         const token = getToken();
         if (token) {
-          // Verify token by making a test request to settings
           const testRes = await fetch('/api/settings', {
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -128,16 +137,14 @@ export default function SettingsPage() {
             setAuthState('authenticated');
             return;
           }
-          // Token invalid, clear it
           sessionStorage.removeItem('admin_token');
         }
         setAuthState('login');
       } catch {
-        // If auth status check fails, assume no auth needed
         setAuthState('authenticated');
       }
     })();
-  }, []);
+  }, [authLoading, authUser]);
 
   const handleSetup = async () => {
     setAuthError('');
@@ -231,7 +238,7 @@ export default function SettingsPage() {
   // ─── Settings data loading ─────────────────────────
   const fetchKeys = useCallback(async () => {
     try {
-      const res = await fetch('/api/settings/api-keys', { headers: authHeaders() });
+      const res = await fetch('/api/settings/api-keys', { headers: bridgeAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setKeys(data.keys || []);
@@ -242,7 +249,7 @@ export default function SettingsPage() {
 
   const fetchUsage = useCallback(async () => {
     try {
-      const res = await fetch('/api/settings/token-usage', { headers: authHeaders() });
+      const res = await fetch('/api/settings/token-usage', { headers: bridgeAuthHeaders() });
       if (res.ok) setUsage(await res.json());
     } catch { /* ignore */ }
   }, []);
@@ -252,7 +259,7 @@ export default function SettingsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/settings', { headers: authHeaders() });
+        const res = await fetch('/api/settings', { headers: bridgeAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           if (!cancelled) setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
@@ -268,10 +275,14 @@ export default function SettingsPage() {
   const fetchUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const res = await fetch('/api/users', { headers: bridgeAuthHeaders() });
+      const res = await fetch('/api/users/all', { headers: bridgeAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setUsers(data.users || data || []);
+        const list = data.users || data || [];
+        setUsers(list.map((u: any) => ({
+          ...u,
+          status: u.is_active === 1 || u.is_active === true ? 'active' : 'disabled',
+        })));
       }
     } catch { /* ignore */ }
     setUsersLoading(false);
@@ -352,9 +363,10 @@ export default function SettingsPage() {
     if (!window.confirm('確定將管理員權限轉移給 ' + u.name + '?')) return;
     setUserActionError('');
     try {
-      const res = await fetch(`/api/users/${u.id}/transfer-admin`, {
+      const res = await fetch('/api/users/transfer-admin', {
         method: 'POST',
-        headers: bridgeAuthHeaders(),
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({ targetUserId: u.id }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -379,7 +391,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/settings/api-keys', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
         body: JSON.stringify({ apiKey: trimmed }),
       });
       const data = await res.json();
@@ -402,7 +414,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`/api/settings/api-keys/${suffix}`, {
         method: 'DELETE',
-        headers: authHeaders(),
+        headers: bridgeAuthHeaders(),
       });
       if (res.ok) {
         const data = await res.json();
@@ -419,7 +431,7 @@ export default function SettingsPage() {
     localStorage.setItem('pb-default-model', newModel);
     await fetch('/api/settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
       body: JSON.stringify({ key: 'gemini_model', value: newModel }),
     });
   };
