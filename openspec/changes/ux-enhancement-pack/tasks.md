@@ -1,8 +1,18 @@
 ## 1. 修復標註模式 (Bug Fix)
 
-- [ ] 1.1 修改 bridgeScript.ts click handler — annotation/apiBinding 模式優先判斷，visual-edit 最後處理
+- [x] 1.1 修改 bridgeScript.ts click handler — annotation/apiBinding 模式優先判斷，visual-edit 最後處理
 - [ ] 1.2 驗證標註模式可正確選取元素並開啟編輯器
 - [ ] 1.3 驗證 API 綁定模式也能正確觸發 element-click
+
+## 1b. 修復架構圖右鍵選單 (Bug Fix)
+
+- [x] 1b.1 ArchPageNode.tsx onContextMenu 加入 stopPropagation 防止事件冒泡
+- [x] 1b.2 ArchFlowchart.tsx 加入 onPaneContextMenu 防止畫布右鍵觸發瀏覽器選單
+
+## 1c. 刪除專案確認 (GitHub-style)
+
+- [x] 1c.1 HomePage 刪除改為 modal 對話框，需輸入完整專案名稱才能刪除
+- [ ] 1c.2 驗證刪除確認流程（名稱不符時按鈕 disabled、Enter 快捷鍵）
 
 ## 2. 專案建立模式選擇
 
@@ -41,3 +51,4 @@
 - [ ] 6.2 E2E 測試：新增專案模式選擇
 - [ ] 6.3 API 測試：頁面層級 API binding CRUD
 - [ ] 6.4 E2E 測試：深色模式切換
+- [ ] 6.5 E2E 測試：刪除專案確認對話框
