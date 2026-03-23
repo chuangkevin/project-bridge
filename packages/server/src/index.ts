@@ -24,6 +24,9 @@ import componentDependenciesRouter from './routes/componentDependencies';
 import elementConstraintsRouter from './routes/elementConstraints';
 import exportRouter from './routes/export'; // eslint-disable-line @typescript-eslint/no-unused-vars
 import patchesRouter from './routes/patches';
+import usersRouter from './routes/users';
+import forkRouter from './routes/fork';
+import pageMappingsRouter from './routes/pageMappings';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,6 +55,9 @@ app.use('/api/projects', componentDependenciesRouter);
 app.use('/api/projects', elementConstraintsRouter);
 app.use('/api/projects', exportRouter);
 app.use('/api/projects', patchesRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/projects', forkRouter);
+app.use('/api/projects', pageMappingsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
