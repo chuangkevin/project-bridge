@@ -19,7 +19,6 @@ test.describe('E2E: Platform Shell — DesignPanel', () => {
 
   test('DesignPanel shows Platform Shell section with extract button', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     await expect(page.getByTestId('extract-shell-btn')).toBeVisible({ timeout: 5000 });
@@ -28,7 +27,6 @@ test.describe('E2E: Platform Shell — DesignPanel', () => {
 
   test('shell-active-badge not visible before shell is set', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     await expect(page.getByTestId('extract-shell-btn')).toBeVisible({ timeout: 5000 });
@@ -37,7 +35,6 @@ test.describe('E2E: Platform Shell — DesignPanel', () => {
 
   test('save shell manually via textarea shows success toast and badge appears', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     // Open manual input
@@ -63,7 +60,6 @@ test.describe('E2E: Platform Shell — DesignPanel', () => {
     });
 
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     await expect(page.getByTestId('shell-active-badge')).toBeVisible({ timeout: 5000 });
@@ -71,7 +67,6 @@ test.describe('E2E: Platform Shell — DesignPanel', () => {
 
   test('extract-shell-btn shows error toast when no prototype exists', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
     await expect(page.getByTestId('extract-shell-btn')).toBeVisible({ timeout: 5000 });

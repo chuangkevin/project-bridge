@@ -34,8 +34,6 @@ export interface ArchEdge {
   source: string;
   target: string;
   label?: string;
-  triggerBridgeId?: string | null;
-  triggerLabel?: string | null;
 }
 
 export interface ArchData {

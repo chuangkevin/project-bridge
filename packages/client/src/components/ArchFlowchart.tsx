@@ -241,7 +241,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
   const onConnect = useCallback((connection: Connection) => {
     const newEdge = { ...connection, id: `edge-${Date.now()}` };
     setEdges(eds => {
-      const updated = addEdge(newEdge, eds as any);
+      const updated = addEdge(newEdge, eds);
       saveChanges(nodes, updated);
       return updated;
     });

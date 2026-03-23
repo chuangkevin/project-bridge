@@ -41,12 +41,12 @@ test.describe('E2E: Share Page', () => {
 
     // The preview panel should exist - even without HTML it shows an empty state
     // When html is null, it shows the empty state message
-    await expect(page.getByText('在對話面板中描述你的 UI 來生成原型')).toBeVisible();
+    await expect(page.getByText('Describe your UI in the chat panel', { exact: false })).toBeVisible();
   });
 
   test('invalid share token shows not found', async ({ page }) => {
     await page.goto('/share/invalid-token-xyz');
 
-    await expect(page.getByText('找不到專案')).toBeVisible();
+    await expect(page.getByText('Project not found')).toBeVisible();
   });
 });

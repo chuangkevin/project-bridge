@@ -21,7 +21,6 @@ test.describe('E2E: Device Size Selector', () => {
 
   test('device size buttons are visible and desktop is default', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
 
     // Wait for workspace to load (loading state resolves)
     await expect(page.getByTestId('device-desktop')).toBeVisible();
@@ -29,9 +28,8 @@ test.describe('E2E: Device Size Selector', () => {
     await expect(page.getByTestId('device-mobile')).toBeVisible();
   });
 
-  test('clicking tablet activates tablet button', async ({ page }) => {
+  test('clicking tablet changes iframe dimensions', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
 
     const tabletBtn = page.getByTestId('device-tablet');
     await expect(tabletBtn).toBeVisible();
@@ -41,9 +39,8 @@ test.describe('E2E: Device Size Selector', () => {
     await expect(tabletBtn).toHaveCSS('color', 'rgb(59, 130, 246)');
   });
 
-  test('clicking mobile activates mobile button', async ({ page }) => {
+  test('clicking mobile changes selector state', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
 
     const mobileBtn = page.getByTestId('device-mobile');
     await expect(mobileBtn).toBeVisible();
@@ -55,7 +52,6 @@ test.describe('E2E: Device Size Selector', () => {
 
   test('clicking desktop after another mode returns to desktop', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
 
     // Switch to tablet first
     const tabletBtn = page.getByTestId('device-tablet');

@@ -289,6 +289,10 @@ export default function VisualEditor({ projectId, iframeRef, active, onPatchesCh
     const onMouseUp = () => {
       if (resizeRef.current.active && selectedBridgeId && selectedRect) {
         // Read final rect from state indirectly — compute from refs
+        const orig = resizeRef.current.origRect;
+        const h = resizeRef.current.handle;
+        const dx = 0; // final position already applied via rAF
+        const dy = 0;
         // Use the last rAF values. We need to request the element rect from iframe.
         postToIframe({ type: 'get-element-rect', bridgeId: selectedBridgeId });
       }

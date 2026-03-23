@@ -1,5 +1,5 @@
 import yauzl from 'yauzl';
-import { getGeminiModel, trackUsage, withRetry } from './geminiKeys';
+import { getGeminiModel, trackUsage } from './geminiKeys';
 
 export async function extractImagesFromDocument(filePath: string, mimeType: string): Promise<Buffer[]> {
   const ext = mimeType.toLowerCase();
@@ -57,27 +57,25 @@ export async function extractImagesFromDocument(filePath: string, mimeType: stri
 }
 
 export async function analyzeArtStyle(images: Buffer[], apiKey: string): Promise<string> {
-  return withRetry(async (retryKey) => {
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genai = new GoogleGenerativeAI(retryKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      generationConfig: { maxOutputTokens: 150 },
-    });
-
-    const imageParts = images.map(buf => ({
-      inlineData: {
-        mimeType: 'image/png' as const,
-        data: buf.toString('base64'),
-      },
-    }));
-
-    const result = await model.generateContent([
-      ...imageParts,
-      { text: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.' },
-    ]);
-    try { trackUsage(retryKey, getGeminiModel(), 'art-style', result.response.usageMetadata); } catch {}
-
-    return result.response.text().trim() || '';
+  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  const genai = new GoogleGenerativeAI(apiKey);
+  const model = genai.getGenerativeModel({
+    model: getGeminiModel(),
+    generationConfig: { maxOutputTokens: 150 },
   });
+
+  const imageParts = images.map(buf => ({
+    inlineData: {
+      mimeType: 'image/png' as const,
+      data: buf.toString('base64'),
+    },
+  }));
+
+  const result = await model.generateContent([
+    ...imageParts,
+    { text: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.' },
+  ]);
+  try { trackUsage(apiKey, getGeminiModel(), 'art-style', result.response.usageMetadata); } catch {}
+
+  return result.response.text().trim() || '';
 }

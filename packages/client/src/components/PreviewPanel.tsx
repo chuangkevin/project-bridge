@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { BRIDGE_SCRIPT } from '../utils/bridgeScript';
 
-export type InteractionMode = 'browse' | 'annotate' | 'api-binding' | 'visual-edit' | 'page-mapping';
+export type InteractionMode = 'browse' | 'annotate' | 'api-binding' | 'visual-edit';
 
 interface Props {
   html: string | null;
@@ -54,7 +54,6 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     if (!iframe?.contentWindow) return;
     iframe.contentWindow.postMessage({ type: 'set-api-binding-mode', enabled: effectiveMode === 'api-binding' }, '*');
     iframe.contentWindow.postMessage({ type: 'set-visual-edit-mode', enabled: effectiveMode === 'visual-edit' }, '*');
-    iframe.contentWindow.postMessage({ type: 'set-page-mapping-mode', enabled: effectiveMode === 'page-mapping' }, '*');
   }, [effectiveMode]);
 
   // Send annotation indicators to iframe

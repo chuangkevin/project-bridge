@@ -1,55 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import db from '../db/connection';
 import { extractComponent, replaceComponent } from '../services/componentExtractor';
-import { getGeminiApiKey, getGeminiModel, trackUsage, withRetry } from '../services/geminiKeys';
+import { getGeminiApiKey, getGeminiModel, trackUsage } from '../services/geminiKeys';
 import { validateNavigation } from '../services/prototypeValidator';
 
 const router = Router();
-
-// POST /:id/prototype/seed — seed a prototype version directly (for testing / internal use)
-router.post('/:id/prototype/seed', (req: Request, res: Response) => {
-  try {
-    const projectId = req.params.id;
-    const { html } = req.body;
-
-    if (typeof html !== 'string' || html.trim().length === 0) {
-      return res.status(400).json({ error: 'html string is required' });
-    }
-
-    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-
-    // Find current max version for this project
-    const maxRow = db.prepare(
-      'SELECT COALESCE(MAX(version), 0) as maxV FROM prototype_versions WHERE project_id = ?'
-    ).get(projectId) as { maxV: number };
-    const newVersion = maxRow.maxV + 1;
-
-    // Deactivate existing current versions
-    db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
-
-    // Extract pages from data-page attributes
-    const pageMatches = [...html.matchAll(/data-page="([^"]+)"/g)].map(m => m[1]);
-    const uniquePages = [...new Set(pageMatches)];
-    const isMultiPage = uniquePages.length > 1 ? 1 : 0;
-
-    // Insert new version
-    const id = uuidv4();
-    db.prepare(
-      'INSERT INTO prototype_versions (id, project_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, 1, ?, ?)'
-    ).run(id, projectId, html.trim(), newVersion, isMultiPage, JSON.stringify(uniquePages));
-
-    db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
-
-    return res.status(201).json({ id, version: newVersion, projectId });
-  } catch (err: any) {
-    console.error('Error seeding prototype:', err);
-    return res.status(500).json({ error: 'Failed to seed prototype' });
-  }
-});
 
 // PATCH /api/projects/:id/prototype/styles — upsert tweaker style tag into current prototype version
 router.patch('/:id/prototype/styles', (req: Request, res: Response) => {
@@ -216,25 +171,22 @@ RULES:
 
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    let newComponentHtml = '';
-    await withRetry(async (retryKey) => {
-      newComponentHtml = '';
-      const genai = new GoogleGenerativeAI(retryKey);
-      const model = genai.getGenerativeModel({
-        model: getGeminiModel(),
-        systemInstruction: systemPrompt,
-        generationConfig: { maxOutputTokens: 4096 },
-      });
-      const result = await model.generateContentStream(`Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`);
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
-        if (text) {
-          newComponentHtml += text;
-          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-        }
-      }
-      try { const resp = await result.response; trackUsage(retryKey, getGeminiModel(), 'component-regen', resp.usageMetadata); } catch {}
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: getGeminiModel(),
+      systemInstruction: systemPrompt,
+      generationConfig: { maxOutputTokens: 4096 },
     });
+    const result = await model.generateContentStream(`Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`);
+    let newComponentHtml = '';
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      if (text) {
+        newComponentHtml += text;
+        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+      }
+    }
+    try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'component-regen', resp.usageMetadata); } catch {}
 
     // Strip markdown fences if AI wrapped in code block
     newComponentHtml = newComponentHtml.trim();
@@ -244,6 +196,7 @@ RULES:
     // Replace in full HTML and save new version
     const updatedHtml = replaceComponent(version.html, bridgeId, newComponentHtml);
     const newVersion = version.version + 1;
+    const { v4: uuidv4 } = await import('uuid');
     db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
     db.prepare(
       'INSERT INTO prototype_versions (id, project_id, html, version, is_current) VALUES (?, ?, ?, ?, 1)'

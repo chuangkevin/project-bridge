@@ -29,8 +29,8 @@ test.describe('E2E: Home Page', () => {
     await page.getByTestId('new-project-btn').click();
 
     // Fill in project name in the dialog
-    await expect(page.getByText('專案名稱')).toBeVisible();
-    await page.getByPlaceholder('我的原型專案').fill('E2E Home Test Project');
+    await expect(page.getByText('Project Name')).toBeVisible();
+    await page.getByPlaceholder('My awesome prototype').fill('E2E Home Test Project');
 
     // Submit the form
     await page.getByTestId('create-project-btn').click();
@@ -38,8 +38,8 @@ test.describe('E2E: Home Page', () => {
     // Verify redirect to workspace
     await expect(page).toHaveURL(/\/project\/[\w-]+/, { timeout: 10000 });
 
-    // Verify we're on the workspace page (project list button visible in top bar)
-    await expect(page.getByRole('button', { name: '專案列表' })).toBeVisible();
+    // Verify we're on the workspace page with the project name visible
+    await expect(page.getByText('E2E Home Test Project')).toBeVisible();
   });
 
   test('project card appears on home page after creation', async ({ page, request }) => {

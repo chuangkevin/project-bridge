@@ -16,26 +16,26 @@ test.describe('Architecture Mode', () => {
 
   test('Architecture tab is visible in project page', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await expect(page.getByRole('tab', { name: '架構圖' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Architecture' })).toBeVisible();
   });
 
   test('Clicking Architecture tab shows arch content', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
+    await page.getByRole('tab', { name: 'Architecture' }).click();
     await expect(page.getByTestId('arch-wizard')).toBeVisible();
   });
 
   test('New project defaults to Architecture tab', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
     // New project with no arch_data → should default to architecture mode
-    const archTab = page.getByRole('tab', { name: '架構圖' });
+    const archTab = page.getByRole('tab', { name: 'Architecture' });
     await expect(archTab).toBeVisible();
     await expect(page.getByTestId('arch-wizard')).toBeVisible();
   });
 
   test('Wizard Q1: shows page/component choice', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
+    await page.getByRole('tab', { name: 'Architecture' }).click();
     await expect(page.getByTestId('wizard-question')).toBeVisible();
     await expect(page.getByTestId('wizard-option-page')).toBeVisible();
     await expect(page.getByTestId('wizard-option-component')).toBeVisible();
@@ -43,7 +43,7 @@ test.describe('Architecture Mode', () => {
 
   test('Wizard: selecting 頁面 advances to Q2', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
+    await page.getByRole('tab', { name: 'Architecture' }).click();
     await page.getByTestId('wizard-option-page').click();
     // Q2: type selection
     await expect(page.getByTestId('wizard-option-website')).toBeVisible();
@@ -51,7 +51,7 @@ test.describe('Architecture Mode', () => {
 
   test('Wizard: completing flow shows flowchart', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
+    await page.getByRole('tab', { name: 'Architecture' }).click();
     // Q1: page
     await page.getByTestId('wizard-option-page').click();
     // Q2: website
@@ -72,7 +72,7 @@ test.describe('Architecture Mode', () => {
 
   test('Flowchart: shows nodes after wizard completion', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
+    await page.getByRole('tab', { name: 'Architecture' }).click();
     await page.getByTestId('wizard-option-page').click();
     await page.getByTestId('wizard-option-website').click();
     await page.getByTestId('wizard-option-2-3').click();
@@ -88,7 +88,7 @@ test.describe('Architecture Mode', () => {
 
   test('Context menu: 前往此頁面 switches to Design tab', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
+    await page.getByRole('tab', { name: 'Architecture' }).click();
 
     // Complete wizard
     await page.getByTestId('wizard-option-page').click();
@@ -106,12 +106,12 @@ test.describe('Architecture Mode', () => {
     await page.getByText('前往此頁面').dispatchEvent('click');
 
     // Should now be in Design tab
-    await expect(page.getByRole('tab', { name: '設計' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Design' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('Flowchart: add new page node via toolbar', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '架構圖' }).click();
+    await page.getByRole('tab', { name: 'Architecture' }).click();
     // Complete wizard first
     await page.getByTestId('wizard-option-page').click();
     await page.getByTestId('wizard-option-website').click();

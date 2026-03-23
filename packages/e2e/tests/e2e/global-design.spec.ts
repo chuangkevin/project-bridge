@@ -76,51 +76,47 @@ test.describe('E2E: DesignPanel — inheritance UI', () => {
 
   test('DesignPanel shows inheritance toggle when global design exists', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
-    // The toggle label text should be visible (the checkbox itself is display:none)
-    await expect(page.getByText('繼承全域設計')).toBeVisible({ timeout: 5000 });
-    // Toggle should be checked by default
+    // The toggle checkbox has aria-label="繼承全域設計"
     const toggle = page.getByLabel('繼承全域設計');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
+    // Toggle should be checked by default
     await expect(toggle).toBeChecked();
   });
 
   test('supplement textarea visible when inheritGlobal is true', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
-    // Toggle label text should be visible (the checkbox itself is display:none)
-    await expect(page.getByText('繼承全域設計')).toBeVisible({ timeout: 5000 });
+    // Toggle is on by default, supplement should be visible
+    await expect(page.getByLabel('繼承全域設計')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('supplement-textarea')).toBeVisible();
   });
 
   test('toggle off hides supplement textarea', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
-    // Verify toggle label is visible and checkbox is on
-    await expect(page.getByText('繼承全域設計')).toBeVisible({ timeout: 5000 });
+    // Verify toggle is visible and on
     const toggle = page.getByLabel('繼承全域設計');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
     await expect(toggle).toBeChecked();
 
-    // Click the parent <label> element (the visual toggle) to turn it off
-    // The checkbox itself is display:none, so we click its wrapping label
-    await page.locator('label').filter({ has: toggle }).click();
-    await expect(toggle).not.toBeChecked({ timeout: 5000 });
+    // Click the visual toggle label to turn it off
+    await toggle.click({ force: true });
+    await expect(toggle).not.toBeChecked();
 
     // Supplement textarea should be hidden
-    await expect(page.getByTestId('supplement-textarea')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('supplement-textarea')).not.toBeVisible();
   });
 
   test('save supplement content and verify it persists', async ({ page, request }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
-    await expect(page.getByText('繼承全域設計')).toBeVisible({ timeout: 5000 });
+    const toggle = page.getByLabel('繼承全域設計');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
 
     const supplementText = '此專案按鈕使用橘色 #f97316';
     await page.getByTestId('supplement-textarea').fill(supplementText);
@@ -137,15 +133,14 @@ test.describe('E2E: DesignPanel — inheritance UI', () => {
 
   test('inheritGlobal false saved and reflected on reload', async ({ page, request }) => {
     await page.goto(`/project/${projectId}`);
-    await page.getByRole('tab', { name: '設計' }).click();
     await page.getByTestId('tab-design').click();
 
-    await expect(page.getByText('繼承全域設計')).toBeVisible({ timeout: 5000 });
     const toggle = page.getByLabel('繼承全域設計');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
 
-    // Turn off inheritance by clicking the parent <label> (visual toggle)
-    await page.locator('label').filter({ has: toggle }).click();
-    await expect(toggle).not.toBeChecked({ timeout: 5000 });
+    // Turn off inheritance
+    await toggle.click({ force: true });
+    await expect(toggle).not.toBeChecked();
 
     await page.getByTestId('save-design-btn').click();
     await expect(page.getByText('已儲存，下次生成將套用此設計')).toBeVisible({ timeout: 5000 });

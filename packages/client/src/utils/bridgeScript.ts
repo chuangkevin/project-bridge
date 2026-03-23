@@ -4,8 +4,6 @@ export const BRIDGE_SCRIPT = `
   var annotationMode = false;
   var apiBindingMode = false;
   var visualEditMode = false;
-  var pageMappingMode = false;
-  var pageMappingHoveredEl = null;
   var visualHoveredEl = null;
   var indicators = [];
   var apiIndicators = [];
@@ -23,21 +21,8 @@ export const BRIDGE_SCRIPT = `
   var hoveredEl = null;
 
   document.addEventListener('mouseover', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode && !pageMappingMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
     var target = findBridgeId(e.target);
-    if (pageMappingMode) {
-      if (pageMappingHoveredEl && pageMappingHoveredEl !== target) {
-        pageMappingHoveredEl.style.outline = '';
-        pageMappingHoveredEl.style.outlineOffset = '';
-        pageMappingHoveredEl = null;
-      }
-      if (target) {
-        target.style.outline = '2px solid #8b5cf6';
-        target.style.outlineOffset = '2px';
-        pageMappingHoveredEl = target;
-      }
-      return;
-    }
     if (visualEditMode) {
       if (visualHoveredEl && visualHoveredEl !== target) {
         visualHoveredEl.style.outline = '';
@@ -69,16 +54,7 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('mouseout', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode && !pageMappingMode) return;
-    if (pageMappingMode) {
-      var pmTarget = findBridgeId(e.target);
-      if (pmTarget && pmTarget === pageMappingHoveredEl) {
-        pmTarget.style.outline = '';
-        pmTarget.style.outlineOffset = '';
-        pageMappingHoveredEl = null;
-      }
-      return;
-    }
+    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
     if (visualEditMode) {
       var vTarget = findBridgeId(e.target);
       if (vTarget && vTarget === visualHoveredEl) {
@@ -97,27 +73,13 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('click', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode && !pageMappingMode) return;
-    var target = findBridgeId(e.target);
-    if (!target) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
     e.preventDefault();
     e.stopPropagation();
+    var target = findBridgeId(e.target);
+    if (!target) return;
     var bridgeId = target.getAttribute('data-bridge-id');
     var rect = target.getBoundingClientRect();
-    if (pageMappingMode) {
-      // Find which data-page this element belongs to
-      var pageEl = target.closest('[data-page]');
-      var pageName = pageEl ? pageEl.getAttribute('data-page') : '';
-      window.parent.postMessage({
-        type: 'page-mapping-element-selected',
-        bridgeId: bridgeId,
-        tag: target.tagName.toLowerCase(),
-        textContent: (target.textContent || '').trim().substring(0, 100),
-        pageName: pageName,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-      }, '*');
-      return;
-    }
     if (visualEditMode) {
       var cs = window.getComputedStyle(target);
       window.parent.postMessage({
@@ -317,21 +279,6 @@ export const BRIDGE_SCRIPT = `
           pEl.style[p.property] = p.value;
         }
       });
-    } else if (e.data.type === 'set-page-mapping-mode') {
-      pageMappingMode = !!e.data.enabled;
-      if (pageMappingMode) {
-        annotationMode = false;
-        apiBindingMode = false;
-        visualEditMode = false;
-        document.body.style.cursor = 'pointer';
-      } else {
-        document.body.style.cursor = '';
-        if (pageMappingHoveredEl) {
-          pageMappingHoveredEl.style.outline = '';
-          pageMappingHoveredEl.style.outlineOffset = '';
-          pageMappingHoveredEl = null;
-        }
-      }
     }
   });
 

@@ -13,11 +13,9 @@ import TokenPanel, { DesignToken } from '../components/TokenPanel';
 import ApiBindingPanel from '../components/ApiBindingPanel';
 import ConstraintPanel from '../components/ConstraintPanel';
 import VisualEditor from '../components/VisualEditor';
-import PageMappingPanel from '../components/PageMappingPanel';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
-import { useAuth, authFetch } from '../contexts/AuthContext';
 
 // Strip [Attached files] block from user message display content
 function stripFileContent(content: string): string {
@@ -40,13 +38,11 @@ interface Project {
   isMultiPage?: boolean;
   pages?: string[];
   arch_data?: any;
-  owner_id?: string;
 }
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [html, setHtml] = useState<string | null>(null);
@@ -54,7 +50,7 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style' | 'page-mapping'>('chat');
+  const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
   const [activeMode, setActiveMode] = useState<'design' | 'architecture'>('design');
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
   const { setArchData, targetPage, setTargetPage } = useArchStore();
@@ -140,31 +136,9 @@ export default function WorkspacePage() {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
 
-  // Permission: owner or admin can edit, others are read-only
-  const isOwnerOrAdmin = user?.role === 'admin' || project?.owner_id === user?.id;
-  const readOnly = !isOwnerOrAdmin;
-
-  // Fork handler for non-owners
-  const handleFork = useCallback(async () => {
-    if (!id) return;
-    try {
-      const res = await authFetch(`/api/projects/${id}/fork`, { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        navigate(`/workspace/${data.id}`);
-        setToastMsg('Project forked successfully');
-      } else {
-        const err = await res.json().catch(() => ({ error: 'Fork failed' }));
-        setToastMsg(err.error || 'Fork failed');
-      }
-    } catch {
-      setToastMsg('Fork failed');
-    }
-  }, [id, navigate]);
-
   const checkDesignActive = useCallback(async () => {
     try {
-      const res = await authFetch(`/api/projects/${id}/design`);
+      const res = await fetch(`/api/projects/${id}/design`);
       if (res.ok) {
         const data = await res.json();
         const profile = data.profile;
@@ -182,7 +156,7 @@ export default function WorkspacePage() {
 
   const checkDesignSpec = useCallback(async () => {
     try {
-      const res = await authFetch(`/api/projects/${id}/upload/spec-status`);
+      const res = await fetch(`/api/projects/${id}/upload/spec-status`);
       if (res.ok) {
         const data = await res.json();
         setHasDesignSpec(!!data.hasVisualAnalysis);
@@ -196,7 +170,7 @@ export default function WorkspacePage() {
     setShowTokens(true);
     setTokensLoading(true);
     try {
-      const res = await authFetch(`/api/projects/${id}/prototype/tokens`);
+      const res = await fetch(`/api/projects/${id}/prototype/tokens`);
       if (res.ok) {
         const data = await res.json();
         setTokens(data.tokens || []);
@@ -211,8 +185,8 @@ export default function WorkspacePage() {
   const fetchProject = useCallback(async () => {
     try {
       const [projRes, convRes] = await Promise.all([
-        authFetch(`/api/projects/${id}`),
-        authFetch(`/api/projects/${id}/conversations`),
+        fetch(`/api/projects/${id}`),
+        fetch(`/api/projects/${id}/conversations`),
       ]);
 
       if (!projRes.ok) {
@@ -255,7 +229,7 @@ export default function WorkspacePage() {
 
   const fetchAnnotations = useCallback(async () => {
     try {
-      const res = await authFetch(`/api/projects/${id}/annotations`);
+      const res = await fetch(`/api/projects/${id}/annotations`);
       if (res.ok) {
         const data = await res.json();
         setAnnotations(data);
@@ -305,7 +279,7 @@ export default function WorkspacePage() {
 
     // Validate navigation for multi-page prototypes
     if (data.isMultiPage && id) {
-      authFetch(`/api/projects/${id}/prototype/validate-navigation`)
+      fetch(`/api/projects/${id}/prototype/validate-navigation`)
         .then(r => r.json())
         .then(result => {
           if (result.issues && result.issues.length > 0) {
@@ -325,7 +299,7 @@ export default function WorkspacePage() {
     setActivePage(page);
     const iframe = document.querySelector('iframe');
     if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'navigate-page', page }, '*');
+      iframe.contentWindow.postMessage({ type: 'show-page', name: page }, '*');
     }
   }, []);
 
@@ -337,8 +311,7 @@ export default function WorkspacePage() {
   }, []);
 
   const handleSaveStyles = useCallback(async (css: string) => {
-    if (readOnly) return;
-    const res = await authFetch(`/api/projects/${id}/prototype/styles`, {
+    const res = await fetch(`/api/projects/${id}/prototype/styles`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ css }),
@@ -362,7 +335,7 @@ export default function WorkspacePage() {
     setExportingFramework(framework);
     setShowExportMenu(false);
     try {
-      const res = await authFetch(`/api/projects/${id}/export-code`, {
+      const res = await fetch(`/api/projects/${id}/export-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ framework }),
@@ -435,7 +408,7 @@ export default function WorkspacePage() {
   const fetchApiBindingIndicators = useCallback(async () => {
     if (!id) return;
     try {
-      const res = await authFetch(`/api/projects/${id}/api-bindings`);
+      const res = await fetch(`/api/projects/${id}/api-bindings`);
       if (res.ok) {
         const bindings = await res.json();
         setApiBindingIndicators(bindings.map((b: any) => ({ bridgeId: b.bridgeId })));
@@ -484,7 +457,7 @@ export default function WorkspacePage() {
   const handleSaveAnnotation = useCallback(async (text: string) => {
     if (!editingAnnotation || !id) return;
     try {
-      const res = await authFetch(`/api/projects/${id}/annotations`, {
+      const res = await fetch(`/api/projects/${id}/annotations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -515,7 +488,7 @@ export default function WorkspacePage() {
     if (!id) return;
     setSavingSpec(true);
     try {
-      const res = await authFetch(`/api/projects/${id}/annotations/${annotationId}`, {
+      const res = await fetch(`/api/projects/${id}/annotations/${annotationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ specData }),
@@ -611,11 +584,11 @@ export default function WorkspacePage() {
   }, [html]);
 
   const handleQuickRegen = useCallback(async () => {
-    if (readOnly || !quickRegen || !id || !quickRegen.instruction.trim()) return;
+    if (!quickRegen || !id || !quickRegen.instruction.trim()) return;
     setQuickRegen(prev => prev ? { ...prev, loading: true, error: null } : null);
 
     try {
-      const response = await authFetch(`/api/projects/${id}/prototype/regenerate-component`, {
+      const response = await fetch(`/api/projects/${id}/prototype/regenerate-component`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bridgeId: quickRegen.bridgeId, instruction: quickRegen.instruction }),
@@ -647,7 +620,7 @@ export default function WorkspacePage() {
                 iframe.contentWindow.postMessage({ type: 'swap-component', bridgeId: evt.bridgeId, html: evt.html }, '*');
               }
               // Refresh full HTML from server
-              const projRes = await authFetch(`/api/projects/${id}`);
+              const projRes = await fetch(`/api/projects/${id}`);
               if (projRes.ok) {
                 const proj = await projRes.json();
                 setHtml(proj.currentHtml);
@@ -670,13 +643,12 @@ export default function WorkspacePage() {
   };
 
   const handleSaveName = async () => {
-    if (readOnly) { setEditingName(false); return; }
     if (!nameValue.trim() || nameValue === project?.name) {
       setEditingName(false);
       return;
     }
     try {
-      const res = await authFetch(`/api/projects/${id}`, {
+      const res = await fetch(`/api/projects/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: nameValue.trim() }),
@@ -760,7 +732,7 @@ export default function WorkspacePage() {
         <ArchitectureTab
           projectId={id!}
           onSwitchToDesign={() => setActiveMode('design')}
-          onSwitchToDesignAndGenerate={readOnly ? undefined : () => {
+          onSwitchToDesignAndGenerate={() => {
             setActiveMode('design');
             setPendingChatMessage('請依照架構生成所有頁面');
           }}
@@ -788,7 +760,7 @@ export default function WorkspacePage() {
               style={styles.projectNameInput}
             />
           ) : (
-            <span style={styles.projectName} onClick={readOnly ? undefined : handleStartRename} title={readOnly ? project.name : '點擊重新命名'}>
+            <span style={styles.projectName} onClick={handleStartRename} title="點擊重新命名">
               {project.name}
             </span>
           )}
@@ -975,7 +947,7 @@ export default function WorkspacePage() {
                   onClick={async () => {
                     setShowExportMenu(false);
                     try {
-                      const res = await authFetch(`/api/projects/${id}/api-bindings/export`);
+                      const res = await fetch(`/api/projects/${id}/api-bindings/export`);
                       if (res.ok) {
                         const data = await res.json();
                         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1052,35 +1024,11 @@ export default function WorkspacePage() {
               setAnnotationMode(false);
               if (isActive) { /* deactivate */ }
             }}
-            disabled={!html || readOnly}
-            title={readOnly ? 'Read-only: fork to edit' : '視覺編輯模式'}
+            disabled={!html}
+            title="視覺編輯模式"
             data-testid="visual-edit-toggle"
           >
             ✏️ 編輯
-          </button>
-          <button
-            type="button"
-            style={{
-              ...styles.annotateBtn,
-              ...(interactionMode === 'page-mapping' ? { backgroundColor: '#f5f3ff', borderColor: '#8B5CF6', color: '#8B5CF6' } : {}),
-              ...(!html ? { opacity: 0.5 } : {}),
-            }}
-            onClick={() => {
-              const isActive = interactionMode === 'page-mapping';
-              if (isActive) {
-                setInteractionMode('browse');
-                setLeftTab('chat');
-              } else {
-                setInteractionMode('page-mapping');
-                setAnnotationMode(false);
-                setLeftTab('page-mapping');
-              }
-            }}
-            disabled={!html}
-            title="頁面導航對應"
-            data-testid="page-mapping-toggle"
-          >
-            🔗 頁面對應
           </button>
           <button
             type="button"
@@ -1230,51 +1178,6 @@ export default function WorkspacePage() {
           >
             ⌨ ?
           </button>
-          {/* User toolbar: name + logout + fork */}
-          {user && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, borderLeft: '1px solid #e5e7eb', paddingLeft: 8 }}>
-              <span style={{ fontSize: 12, color: '#888', whiteSpace: 'nowrap' }} data-testid="user-name">{user.name}</span>
-              {readOnly && (
-                <button
-                  type="button"
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    border: '1px solid #8B5CF6',
-                    borderRadius: 4,
-                    background: '#f5f3ff',
-                    color: '#8B5CF6',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onClick={handleFork}
-                  title="Fork this project to your own workspace"
-                  data-testid="fork-btn"
-                >
-                  Fork
-                </button>
-              )}
-              <button
-                type="button"
-                style={{
-                  padding: '3px 8px',
-                  fontSize: 11,
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 4,
-                  background: '#fff',
-                  color: '#666',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-                onClick={logout}
-                title="Logout"
-                data-testid="logout-btn"
-              >
-                Logout
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1330,49 +1233,17 @@ export default function WorkspacePage() {
                 pendingMessage={pendingChatMessage}
                 onPendingMessageConsumed={() => setPendingChatMessage(null)}
                 hasPrototype={!!html}
-                readOnly={readOnly}
               />
             ) : leftTab === 'design' ? (
               <DesignPanel
                 projectId={project.id}
                 onSaved={checkDesignActive}
-                readOnly={readOnly}
-              />
-            ) : leftTab === 'page-mapping' ? (
-              <PageMappingPanel
-                projectId={project.id}
-                pages={pages}
-                activePage={activePage}
-                readOnly={readOnly}
-                onPageClick={(page) => {
-                  setActivePage(page);
-                  const iframe = document.querySelector('iframe');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'navigate-page', page }, '*');
-                  }
-                }}
-                archComponents={(() => {
-                  try {
-                    const ad = project.arch_data ? JSON.parse(project.arch_data) : null;
-                    if (!ad?.nodes) return [];
-                    const comps: Array<{ id: string; name: string }> = [];
-                    for (const n of ad.nodes) {
-                      if (n.components) {
-                        for (const c of n.components) {
-                          comps.push({ id: c.id, name: c.name });
-                        }
-                      }
-                    }
-                    return comps;
-                  } catch { return []; }
-                })()}
               />
             ) : (
               <StyleTweakerPanel
                 html={html}
                 onInject={injectStyles}
                 onSave={handleSaveStyles}
-                readOnly={readOnly}
               />
             )}
           </div>
@@ -1517,8 +1388,8 @@ export default function WorkspacePage() {
             <button
               type="button"
               onClick={handleQuickRegen}
-              disabled={readOnly || quickRegen.loading || !quickRegen.instruction.trim()}
-              style={{ ...styles.quickRegenSubmit, background: (readOnly || quickRegen.loading) ? '#94a3b8' : '#3b82f6' }}
+              disabled={quickRegen.loading || !quickRegen.instruction.trim()}
+              style={{ ...styles.quickRegenSubmit, background: quickRegen.loading ? '#94a3b8' : '#3b82f6' }}
             >
               {quickRegen.loading ? '⟳ 生成中...' : '⚡ 修改'}
             </button>

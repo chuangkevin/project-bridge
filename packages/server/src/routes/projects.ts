@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db/connection';
-import { requireAuth, requireOwnerOrAdmin } from '../middleware/auth';
 
 const router = Router();
 
@@ -23,11 +22,10 @@ router.post('/', (req: Request, res: Response) => {
     const share_token = generateShareToken();
     const now = new Date().toISOString();
 
-    const owner_id = req.user?.id || null;
     const stmt = db.prepare(
-      'INSERT INTO projects (id, name, share_token, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO projects (id, name, share_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
     );
-    stmt.run(id, name.trim(), share_token, owner_id, now, now);
+    stmt.run(id, name.trim(), share_token, now, now);
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     return res.status(201).json(project);
@@ -40,7 +38,7 @@ router.post('/', (req: Request, res: Response) => {
 // GET /api/projects — list all projects
 router.get('/', (_req: Request, res: Response) => {
   try {
-    const projects = db.prepare('SELECT p.*, u.name as owner_name FROM projects p LEFT JOIN users u ON p.owner_id = u.id ORDER BY p.updated_at DESC').all();
+    const projects = db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all();
     return res.json(projects);
   } catch (err: any) {
     console.error('Error listing projects:', err);
@@ -51,7 +49,7 @@ router.get('/', (_req: Request, res: Response) => {
 // GET /api/projects/:id — get project with current prototype
 router.get('/:id', (req: Request, res: Response) => {
   try {
-    const project = db.prepare('SELECT p.*, u.name as owner_name FROM projects p LEFT JOIN users u ON p.owner_id = u.id WHERE p.id = ?').get(req.params.id) as any;
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id) as any;
 
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
@@ -76,7 +74,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 // PUT /api/projects/:id — update project name
-router.put('/:id', requireOwnerOrAdmin, (req: Request, res: Response) => {
+router.put('/:id', (req: Request, res: Response) => {
   try {
     const { name } = req.body;
 
@@ -102,7 +100,7 @@ router.put('/:id', requireOwnerOrAdmin, (req: Request, res: Response) => {
 });
 
 // PATCH /api/projects/:id — update project name
-router.patch('/:id', requireOwnerOrAdmin, (req: Request, res: Response) => {
+router.patch('/:id', (req: Request, res: Response) => {
   try {
     const { name } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -119,7 +117,7 @@ router.patch('/:id', requireOwnerOrAdmin, (req: Request, res: Response) => {
 });
 
 // PATCH /api/projects/:id/settings — update generation settings
-router.patch('/:id/settings', requireOwnerOrAdmin, (req: Request, res: Response) => {
+router.patch('/:id/settings', (req: Request, res: Response) => {
   try {
     const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -163,7 +161,7 @@ router.patch('/:id/settings', requireOwnerOrAdmin, (req: Request, res: Response)
 });
 
 // DELETE /api/projects/:id — delete project
-router.delete('/:id', requireOwnerOrAdmin, (req: Request, res: Response) => {
+router.delete('/:id', (req: Request, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
     if (!existing) {

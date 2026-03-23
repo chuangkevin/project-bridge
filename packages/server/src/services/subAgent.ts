@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage, withRetry } from './geminiKeys';
+import { getGeminiModel, trackUsage } from './geminiKeys';
 import { PageAssignment } from './masterAgent';
 
 /**
@@ -67,19 +67,18 @@ ${page.constraints}
 Generate the complete page fragment now. Return ONLY the <div class="page"> element with all content inside.`;
 
   try {
-    let html = await withRetry(async (retryKey) => {
-      const genai = new GoogleGenerativeAI(retryKey);
-      const model = genai.getGenerativeModel({
-        model: getGeminiModel(),
-        systemInstruction: systemPrompt,
-        generationConfig: { maxOutputTokens: 16384 },
-      });
-
-      const result = await model.generateContent(userPrompt);
-      const response = result.response;
-      try { trackUsage(retryKey, getGeminiModel(), `sub-agent-${pageName}`, response.usageMetadata); } catch {}
-      return response.text().trim();
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: getGeminiModel(),
+      systemInstruction: systemPrompt,
+      generationConfig: { maxOutputTokens: 16384 },
     });
+
+    const result = await model.generateContent(userPrompt);
+    const response = result.response;
+    try { trackUsage(apiKey, getGeminiModel(), `sub-agent-${pageName}`, response.usageMetadata); } catch {}
+
+    let html = response.text().trim();
 
     // Strip markdown fences if present
     const fenceMatch = html.match(/```(?:html)?\s*([\s\S]*?)```/);

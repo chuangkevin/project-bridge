@@ -19,27 +19,13 @@ test.describe('E2E: Annotation Mode', () => {
     }
   });
 
-  /** Dismiss onboarding tooltip if visible */
-  async function dismissOnboarding(page: import('@playwright/test').Page) {
-    const skipBtn = page.getByTestId('onboarding-skip');
-    if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await skipBtn.click();
-    }
-  }
-
   test('annotation mode toggle button exists', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await dismissOnboarding(page);
-    await page.getByRole('tab', { name: '設計' }).click();
-    const toggleBtn = page.getByTestId('annotate-toggle');
-    await expect(toggleBtn).toBeVisible();
-    await expect(toggleBtn).toContainText('標注');
+    await expect(page.getByTestId('annotate-toggle')).toBeVisible();
   });
 
   test('clicking annotation mode toggle changes button appearance', async ({ page }) => {
     await page.goto(`/project/${projectId}`);
-    await dismissOnboarding(page);
-    await page.getByRole('tab', { name: '設計' }).click();
 
     const toggleBtn = page.getByTestId('annotate-toggle');
     await expect(toggleBtn).toBeVisible();
@@ -59,9 +45,6 @@ test.describe('E2E: Annotation Mode', () => {
 
     expect(bgBefore).not.toBe(bgAfter);
 
-    // Verify annotation mode banner appears
-    await expect(page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按')).toBeVisible();
-
     // Click again to disable
     await toggleBtn.click();
 
@@ -71,8 +54,5 @@ test.describe('E2E: Annotation Mode', () => {
 
     // Should revert to original style
     expect(bgFinal).toBe(bgBefore);
-
-    // Banner should disappear
-    await expect(page.getByText('✏️ 標注模式 — 點擊元件來修改或標注 · 按')).not.toBeVisible();
   });
 });

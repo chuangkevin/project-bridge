@@ -151,43 +151,6 @@ export function removeApiKey(suffix: string): boolean {
   return true;
 }
 
-// ─── Retry with Key Rotation ─────────────────────────
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 2000;
-
-function is429(err: any): boolean {
-  return err?.status === 429
-    || err?.message?.includes('429')
-    || err?.message?.includes('Resource has been exhausted')
-    || err?.message?.includes('Too Many Requests');
-}
-
-/**
- * Retry wrapper for Gemini API calls — handles 429 rate limits with key rotation.
- * The callback receives an API key; on 429 it retries with a different key.
- */
-export async function withRetry<T>(fn: (apiKey: string) => Promise<T>): Promise<T> {
-  let lastKey = getGeminiApiKey();
-  if (!lastKey) throw new Error('No Gemini API key available');
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      return await fn(lastKey);
-    } catch (err: any) {
-      if (!is429(err) || attempt === MAX_RETRIES) throw err;
-
-      console.warn(`[gemini] 429 on key ...${lastKey.slice(-4)}, rotating key (attempt ${attempt + 1}/${MAX_RETRIES})`);
-      await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
-
-      const nextKey = getGeminiApiKeyExcluding(lastKey);
-      if (nextKey) lastKey = nextKey;
-      // If no other key available, retry with same key after delay
-    }
-  }
-  throw new Error('Unreachable');
-}
-
 /** Get aggregated usage stats (today, 7 days, 30 days) */
 export function getUsageStats(): {
   today: { calls: number; tokens: number };

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import db from '../db/connection';
-import { withRetry } from './geminiKeys';
+import { getGeminiApiKey, getGeminiApiKeyExcluding } from './geminiKeys';
 import { classifyDocument, DocumentType } from './documentClassifier';
 import { extractSpecData, SpecPage } from './specExtractor';
 import { extractDesignData, DesignGlobalStyles } from './designExtractor';
@@ -36,7 +36,33 @@ export interface DocumentAnalysisResult {
   businessContext?: BusinessContextResult;
 }
 
-// withRetry is now imported from geminiKeys.ts
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 3000;
+
+/**
+ * Retry wrapper for Gemini API calls — handles 429 rate limits with key rotation.
+ */
+async function withRetry<T>(fn: (apiKey: string) => Promise<T>): Promise<T> {
+  let lastKey = getGeminiApiKey();
+  if (!lastKey) throw new Error('No Gemini API key available');
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn(lastKey);
+    } catch (err: any) {
+      const is429 = err?.status === 429 || err?.message?.includes('429');
+      if (!is429 || attempt === MAX_RETRIES) throw err;
+
+      console.warn(`[agent] 429 on key ...${lastKey.slice(-4)}, retrying with different key in ${RETRY_DELAY_MS}ms`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+
+      const nextKey = getGeminiApiKeyExcluding(lastKey);
+      if (nextKey) lastKey = nextKey;
+      // If no other key available, retry with same key after delay
+    }
+  }
+  throw new Error('Unreachable');
+}
 
 /**
  * Main document analysis agent — orchestrates classification, extraction, and quality check.

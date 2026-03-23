@@ -23,7 +23,7 @@ router.post('/:id/annotations', (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     db.prepare(
-      'INSERT INTO annotations (id, project_id, bridge_id, label, position_x, position_y, content, spec_data, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO annotations (id, project_id, bridge_id, label, position_x, position_y, content, spec_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       id,
       projectId,
@@ -33,7 +33,6 @@ router.post('/:id/annotations', (req: Request, res: Response) => {
       positionY ?? null,
       content || '',
       typeof specData === 'object' ? JSON.stringify(specData) : (specData || '{}'),
-      req.user?.id || null,
       now,
       now
     );
@@ -57,7 +56,7 @@ router.get('/:id/annotations', (req: Request, res: Response) => {
     }
 
     const annotations = db.prepare(
-      'SELECT a.*, u.name as user_name FROM annotations a LEFT JOIN users u ON a.user_id = u.id WHERE a.project_id = ? ORDER BY a.created_at ASC'
+      'SELECT * FROM annotations WHERE project_id = ? ORDER BY created_at ASC'
     ).all(projectId);
 
     return res.json(annotations);
@@ -106,13 +105,9 @@ router.delete('/:id/annotations/:aid', (req: Request, res: Response) => {
   try {
     const { aid } = req.params;
 
-    const existing = db.prepare('SELECT id, user_id FROM annotations WHERE id = ? AND project_id = ?').get(aid, req.params.id) as any;
+    const existing = db.prepare('SELECT id FROM annotations WHERE id = ? AND project_id = ?').get(aid, req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Annotation not found' });
-    }
-
-    if (req.user && existing.user_id && req.user.id !== existing.user_id && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden: only the annotation author or an admin can delete' });
     }
 
     db.prepare('DELETE FROM annotations WHERE id = ?').run(aid);
