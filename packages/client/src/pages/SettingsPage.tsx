@@ -35,21 +35,21 @@ function getToken(): string | null {
   return sessionStorage.getItem('admin_token');
 }
 
-function authHeaders(): Record<string, string> {
-  const token = getToken();
-  if (token) return { Authorization: `Bearer ${token}` };
-  return {};
-}
-
 function getBridgeToken(): string | null {
   return localStorage.getItem('bridge_token') ?? localStorage.getItem('pb-auth-token');
 }
 
-function bridgeAuthHeaders(): Record<string, string> {
-  const token = getBridgeToken();
-  if (token) return { Authorization: `Bearer ${token}` };
+/** Return auth headers — prefer new session token, fallback to legacy admin token */
+function authHeaders(): Record<string, string> {
+  const bridge = getBridgeToken();
+  if (bridge) return { Authorization: `Bearer ${bridge}` };
+  const legacy = getToken();
+  if (legacy) return { Authorization: `Bearer ${legacy}` };
   return {};
 }
+
+// Alias for backward compat within this file
+const bridgeAuthHeaders = authHeaders;
 
 type AuthState = 'loading' | 'setup' | 'login' | 'authenticated';
 

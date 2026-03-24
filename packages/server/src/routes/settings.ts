@@ -10,14 +10,26 @@ const router = Router();
 
 // ─── Auth middleware for settings routes ────────────
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  // Accept new session-based auth: global authMiddleware populates req.user
+  // 1. New session-based auth: global authMiddleware populates req.user
   const user = (req as any).user;
   if (user?.role === 'admin') {
     next();
     return;
   }
 
-  // Fallback: if no users exist yet (fresh install), allow access
+  // 2. Legacy admin password auth: admin_session_token in settings table
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const stored = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_token'").get() as { value: string } | undefined;
+    const expiry = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_expiry'").get() as { value: string } | undefined;
+    if (stored?.value === token && expiry?.value && new Date(expiry.value) > new Date()) {
+      next();
+      return;
+    }
+  }
+
+  // 3. Fallback: if no users exist yet (fresh install), allow access
   const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number } | undefined)?.count ?? 0;
   if (userCount === 0) {
     next();
