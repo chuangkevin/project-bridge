@@ -15,6 +15,8 @@ import ApiBindingPanel from '../components/ApiBindingPanel';
 import PageApiBindingPanel from '../components/PageApiBindingPanel';
 import ConstraintPanel from '../components/ConstraintPanel';
 import VisualEditor from '../components/VisualEditor';
+import CodePanel from '../components/CodePanel';
+import CodeFileTree from '../components/CodeFileTree';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
@@ -64,6 +66,7 @@ export default function WorkspacePage() {
   const [isMultiPage, setIsMultiPage] = useState(false);
   const [pages, setPages] = useState<string[]>([]);
   const [activePage, setActivePage] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
 
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
@@ -810,6 +813,24 @@ export default function WorkspacePage() {
           )}
         </div>
         <div style={styles.toolbarCenter}>
+          <div style={styles.viewModeToggle}>
+            <button
+              type="button"
+              style={viewMode === 'preview' ? styles.viewModeBtnActive : styles.viewModeBtn}
+              onClick={() => setViewMode('preview')}
+              data-testid="view-mode-preview"
+            >
+              👁 Preview
+            </button>
+            <button
+              type="button"
+              style={viewMode === 'code' ? styles.viewModeBtnActive : styles.viewModeBtn}
+              onClick={() => setViewMode('code')}
+              data-testid="view-mode-code"
+            >
+              {'</>'} Code
+            </button>
+          </div>
           <DeviceSizeSelector value={deviceSize} onChange={setDeviceSize} />
         </div>
         <div style={styles.toolbarRight}>
@@ -1336,69 +1357,98 @@ export default function WorkspacePage() {
         </div>
         </div>
         <div style={styles.previewPane} ref={iframeContainerRef}>
-          {isMultiPage && pages.length > 1 && (
-            <div style={styles.pageSidebar}>
-              <div style={styles.pageSidebarLabel}>頁面</div>
-              {pages.map(page => (
-                <button
-                  key={page}
-                  type="button"
-                  style={{
-                    ...styles.pageSidebarItem,
-                    ...(activePage === page ? styles.pageSidebarItemActive : {}),
-                  }}
-                  onClick={() => handleNavigatePage(page)}
-                  data-testid={`page-tab-${page}`}
-                >
-                  {page}
-                </button>
-              ))}
-            </div>
-          )}
-          <div style={deviceSize === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
-            {!html ? (
+          {viewMode === 'code' ? (
+            /* Code view */
+            !html ? (
               <div style={styles.emptyStateContainer}>
-                <div style={styles.emptyStateCard}>
-                  <div style={styles.emptyStateIcon}>🎨</div>
-                  <div style={styles.emptyStateTitle}>尚未生成原型</div>
-                  <div style={styles.emptyStateSubtitle}>
-                    在左側聊天輸入你的需求，或上傳設計稿 PDF，AI 將生成互動式原型
-                  </div>
-                  <ul style={styles.emptyStateHints}>
-                    <li>💡 描述你想要的頁面設計</li>
-                    <li>📎 上傳設計稿 PDF 讓 AI 分析樣式</li>
-                    <li>⚡ 點擊元素可以直接修改</li>
-                  </ul>
+                <div style={{ ...styles.emptyStateCard, backgroundColor: '#1e1e2e', border: '2px dashed #45475a' }}>
+                  <div style={styles.emptyStateIcon}>💻</div>
+                  <div style={{ ...styles.emptyStateTitle, color: '#cdd6f4' }}>尚未生成原型，請先在對話中描述需求</div>
                 </div>
               </div>
             ) : (
-              <div style={
-                deviceSize === 'mobile'
-                  ? styles.deviceFrameMobile
-                  : deviceSize === 'tablet'
-                    ? styles.deviceFrameTablet
-                    : styles.deviceFrameDesktop
-              }>
-                <PreviewPanel
-                  html={html}
-                  deviceSize={deviceSize}
-                  annotationMode={annotationMode}
-                  interactionMode={interactionMode}
-                  onElementClick={handleElementClick}
-                  onIndicatorClick={handleIndicatorClick}
-                  annotations={annotationIndicators}
-                  apiBindings={apiBindingIndicators}
+              <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                <CodeFileTree
+                  pages={pages}
+                  activePage={activePage || null}
+                  onSelect={handleNavigatePage}
                 />
-                {interactionMode === 'visual-edit' && id && (
-                  <VisualEditor
-                    projectId={id}
-                    iframeRef={{ current: iframeContainerRef.current?.querySelector('iframe') as HTMLIFrameElement | null } as React.RefObject<HTMLIFrameElement>}
-                    active={interactionMode === 'visual-edit'}
-                  />
+                <CodePanel
+                  html={html}
+                  pages={pages}
+                  activePage={activePage}
+                  onPageChange={handleNavigatePage}
+                />
+              </div>
+            )
+          ) : (
+            /* Preview view */
+            <>
+              {isMultiPage && pages.length > 1 && (
+                <div style={styles.pageSidebar}>
+                  <div style={styles.pageSidebarLabel}>頁面</div>
+                  {pages.map(page => (
+                    <button
+                      key={page}
+                      type="button"
+                      style={{
+                        ...styles.pageSidebarItem,
+                        ...(activePage === page ? styles.pageSidebarItemActive : {}),
+                      }}
+                      onClick={() => handleNavigatePage(page)}
+                      data-testid={`page-tab-${page}`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={deviceSize === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
+                {!html ? (
+                  <div style={styles.emptyStateContainer}>
+                    <div style={styles.emptyStateCard}>
+                      <div style={styles.emptyStateIcon}>🎨</div>
+                      <div style={styles.emptyStateTitle}>尚未生成原型</div>
+                      <div style={styles.emptyStateSubtitle}>
+                        在左側聊天輸入你的需求，或上傳設計稿 PDF，AI 將生成互動式原型
+                      </div>
+                      <ul style={styles.emptyStateHints}>
+                        <li>💡 描述你想要的頁面設計</li>
+                        <li>📎 上傳設計稿 PDF 讓 AI 分析樣式</li>
+                        <li>⚡ 點擊元素可以直接修改</li>
+                      </ul>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={
+                    deviceSize === 'mobile'
+                      ? styles.deviceFrameMobile
+                      : deviceSize === 'tablet'
+                        ? styles.deviceFrameTablet
+                        : styles.deviceFrameDesktop
+                  }>
+                    <PreviewPanel
+                      html={html}
+                      deviceSize={deviceSize}
+                      annotationMode={annotationMode}
+                      interactionMode={interactionMode}
+                      onElementClick={handleElementClick}
+                      onIndicatorClick={handleIndicatorClick}
+                      annotations={annotationIndicators}
+                      apiBindings={apiBindingIndicators}
+                    />
+                    {interactionMode === 'visual-edit' && id && (
+                      <VisualEditor
+                        projectId={id}
+                        iframeRef={{ current: iframeContainerRef.current?.querySelector('iframe') as HTMLIFrameElement | null } as React.RefObject<HTMLIFrameElement>}
+                        active={interactionMode === 'visual-edit'}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
         {!focusMode && (
           <SpecPanel
@@ -1756,6 +1806,39 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+  },
+  viewModeToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    marginRight: '12px',
+    backgroundColor: '#f1f5f9',
+    borderRadius: '8px',
+    padding: '2px',
+  },
+  viewModeBtn: {
+    padding: '4px 10px',
+    border: 'none',
+    borderRadius: '6px',
+    backgroundColor: 'transparent',
+    color: '#64748b',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap' as const,
+  },
+  viewModeBtnActive: {
+    padding: '4px 10px',
+    border: 'none',
+    borderRadius: '6px',
+    backgroundColor: '#8E6FA7',
+    color: '#ffffff',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap' as const,
   },
   homeBtn: {
     display: 'flex',
