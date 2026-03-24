@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { authHeaders } from '../contexts/AuthContext';
 
 interface Props {
   projectId: string;
@@ -6,10 +7,38 @@ interface Props {
   onClose: () => void;
 }
 
-export default function FigmaExportDialog({ projectId: _projectId, shareToken, onClose }: Props) {
+type Viewport = 'desktop' | 'tablet' | 'mobile';
+type ExportState = 'idle' | 'exporting' | 'success' | 'error';
+
+export default function FigmaExportDialog({ projectId, shareToken, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [checkingKey, setCheckingKey] = useState(true);
+  const [viewport, setViewport] = useState<Viewport>('desktop');
+  const [exportState, setExportState] = useState<ExportState>('idle');
+  const [exportError, setExportError] = useState('');
 
   const shareUrl = `${window.location.origin}/share/${shareToken}`;
+
+  // Check if code_to_design_api_key is configured
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/settings', { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          const settings: { key: string; value: string }[] = data.settings || [];
+          const ctdKey = settings.find(s => s.key === 'code_to_design_api_key');
+          // A configured key will have a masked non-empty value
+          setApiKeyConfigured(!!ctdKey?.value && ctdKey.value.length > 0);
+        }
+      } catch {
+        // ignore — leave as not configured
+      } finally {
+        setCheckingKey(false);
+      }
+    })();
+  }, []);
 
   const handleCopy = async () => {
     try {
@@ -26,6 +55,29 @@ export default function FigmaExportDialog({ projectId: _projectId, shareToken, o
       document.body.removeChild(textarea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleExportFigma = async () => {
+    setExportState('exporting');
+    setExportError('');
+    try {
+      const res = await fetch(`/api/projects/${projectId}/export/figma`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ viewport }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Export failed' }));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      await navigator.clipboard.writeText(JSON.stringify(data.clipboardData));
+      setExportState('success');
+      setTimeout(() => setExportState('idle'), 4000);
+    } catch (err: any) {
+      setExportError(err.message || 'Export failed');
+      setExportState('error');
     }
   };
 
@@ -97,18 +149,71 @@ export default function FigmaExportDialog({ projectId: _projectId, shareToken, o
           <span style={styles.dividerLine} />
         </div>
 
-        {/* API Export Section (Coming Soon) */}
-        <div style={{ ...styles.section, ...styles.disabledSection }}>
+        {/* API Export Section */}
+        <div style={{
+          ...styles.section,
+          ...(!apiKeyConfigured && !checkingKey ? styles.disabledSection : {}),
+        }}>
           <div style={styles.sectionHeader}>
             <span style={styles.sectionIcon}>🚀</span>
-            <span style={styles.sectionTitle}>API 匯出（即將推出）</span>
+            <span style={styles.sectionTitle}>API 匯出</span>
           </div>
           <p style={styles.sectionDesc}>
             自動轉換，直接貼入 Figma
           </p>
-          <div style={styles.comingSoonNote}>
-            即將推出 — 需設定 code.to.design API Key
-          </div>
+
+          {checkingKey ? (
+            <div style={styles.comingSoonNote}>檢查 API Key 設定中...</div>
+          ) : !apiKeyConfigured ? (
+            <div style={styles.comingSoonNote}>
+              請在<a href="/settings" style={styles.link}>設定頁</a>配置 code.to.design API Key
+            </div>
+          ) : (
+            <>
+              {/* Viewport selector */}
+              <label style={styles.label}>Viewport：</label>
+              <div style={styles.urlRow}>
+                <select
+                  style={styles.selectInput}
+                  value={viewport}
+                  onChange={e => setViewport(e.target.value as Viewport)}
+                  disabled={exportState === 'exporting'}
+                  title="選擇 Viewport 大小"
+                  data-testid="figma-viewport-select"
+                >
+                  <option value="desktop">Desktop (1440px)</option>
+                  <option value="tablet">Tablet (768px)</option>
+                  <option value="mobile">Mobile (390px)</option>
+                </select>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.exportBtn,
+                    ...(exportState === 'exporting' ? styles.btnDisabled : {}),
+                  }}
+                  onClick={handleExportFigma}
+                  disabled={exportState === 'exporting'}
+                  data-testid="figma-export-btn"
+                >
+                  {exportState === 'exporting' && (
+                    <span style={styles.spinner} />
+                  )}
+                  {exportState === 'exporting' ? '轉換中...' : '匯出到剪貼簿'}
+                </button>
+              </div>
+
+              {exportState === 'success' && (
+                <div style={styles.successNote}>
+                  已複製！在 Figma 中按 Ctrl+V 貼上
+                </div>
+              )}
+              {exportState === 'error' && (
+                <div style={styles.errorNote}>
+                  {exportError}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -263,6 +368,64 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#94a3b8',
     backgroundColor: '#f8fafc',
     border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    padding: '10px 12px',
+    lineHeight: '1.5',
+  },
+  selectInput: {
+    flex: 1,
+    padding: '8px 10px',
+    fontSize: '13px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    backgroundColor: '#f8fafc',
+    color: '#334155',
+    outline: 'none',
+    minWidth: 0,
+    cursor: 'pointer',
+  },
+  exportBtn: {
+    padding: '8px 16px',
+    fontSize: '13px',
+    fontWeight: 500,
+    backgroundColor: '#8E6FA7',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'background-color 0.15s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  btnDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  spinner: {
+    display: 'inline-block',
+    width: '14px',
+    height: '14px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderTopColor: '#ffffff',
+    borderRadius: '50%',
+    animation: 'figma-spin 0.6s linear infinite',
+  },
+  successNote: {
+    fontSize: '13px',
+    color: '#16a34a',
+    backgroundColor: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    borderRadius: '6px',
+    padding: '10px 12px',
+    lineHeight: '1.5',
+  },
+  errorNote: {
+    fontSize: '13px',
+    color: '#dc2626',
+    backgroundColor: '#fef2f2',
+    border: '1px solid #fecaca',
     borderRadius: '6px',
     padding: '10px 12px',
     lineHeight: '1.5',

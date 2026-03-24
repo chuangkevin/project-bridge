@@ -85,6 +85,12 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [envKeySet, setEnvKeySet] = useState(false);
 
+  // code.to.design API key
+  const [ctdApiKey, setCtdApiKey] = useState('');
+  const [ctdSavedKey, setCtdSavedKey] = useState(''); // masked display value
+  const [ctdSaving, setCtdSaving] = useState(false);
+  const [ctdMsg, setCtdMsg] = useState('');
+
   // Usage stats
   const [usage, setUsage] = useState<UsageStats | null>(null);
 
@@ -267,7 +273,11 @@ export default function SettingsPage() {
         const res = await fetch('/api/settings', { headers: bridgeAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
-          if (!cancelled) setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
+          if (!cancelled) {
+            setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
+            const ctdSetting = (data.settings || []).find((s: any) => s.key === 'code_to_design_api_key');
+            if (ctdSetting?.value) setCtdSavedKey(ctdSetting.value);
+          }
         }
       } catch { /* ignore */ }
       await Promise.all([fetchKeys(), fetchUsage()]);
@@ -429,6 +439,33 @@ export default function SettingsPage() {
         alert(data.error || '刪除失敗');
       }
     } catch { /* ignore */ }
+  };
+
+  const handleSaveCtdKey = async () => {
+    if (!ctdApiKey.trim()) return;
+    setCtdSaving(true);
+    setCtdMsg('');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({ key: 'code_to_design_api_key', value: ctdApiKey.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCtdSavedKey(data.value);
+        setCtdApiKey('');
+        setCtdMsg('已儲存');
+        setTimeout(() => setCtdMsg(''), 2000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setCtdMsg(data.error || '儲存失敗');
+      }
+    } catch {
+      setCtdMsg('儲存失敗');
+    } finally {
+      setCtdSaving(false);
+    }
   };
 
   const handleSaveModel = async (newModel: string) => {
@@ -741,6 +778,46 @@ export default function SettingsPage() {
               </div>
               {addError && <p style={styles.errorText}>{addError}</p>}
             </>
+          )}
+        </section>
+
+        {/* ── Section: code.to.design API Key ─────────── */}
+        <section style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>code.to.design API Key（Figma 匯出用）</h2>
+            <div style={styles.sectionDivider} />
+          </div>
+
+          {ctdSavedKey && (
+            <div style={{ marginBottom: '10px' }}>
+              <code style={styles.keySuffix}>{ctdSavedKey}</code>
+            </div>
+          )}
+
+          <div style={styles.inputRow}>
+            <input
+              type="password"
+              style={styles.input}
+              value={ctdApiKey}
+              onChange={e => { setCtdApiKey(e.target.value); setCtdMsg(''); }}
+              placeholder={ctdSavedKey ? '輸入新的 API Key 以更新' : '貼上 code.to.design API Key'}
+              disabled={ctdSaving}
+              onKeyDown={e => e.key === 'Enter' && handleSaveCtdKey()}
+            />
+            <button
+              type="button"
+              style={{
+                ...styles.primaryBtn,
+                ...(ctdSaving ? styles.btnDisabled : {}),
+              }}
+              onClick={handleSaveCtdKey}
+              disabled={ctdSaving || !ctdApiKey.trim()}
+            >
+              {ctdSaving ? '儲存中...' : '儲存'}
+            </button>
+          </div>
+          {ctdMsg && (
+            <p style={ctdMsg === '已儲存' ? styles.successText : styles.errorText}>{ctdMsg}</p>
           )}
         </section>
 
@@ -1188,6 +1265,7 @@ const styles: Record<string, React.CSSProperties> = {
   inputRow: { display: 'flex', gap: '8px', alignItems: 'center' },
   input: { width: '100%', padding: '10px 12px', border: '1px solid var(--border-primary)', borderRadius: '8px', fontSize: '14px', outline: 'none', color: 'var(--text-primary)', backgroundColor: 'var(--bg-input)', fontFamily: 'monospace', boxSizing: 'border-box' as const },
   errorText: { margin: '6px 0 0', fontSize: '12px', color: '#ef4444' },
+  successText: { margin: '6px 0 0', fontSize: '12px', color: '#16a34a' },
   primaryBtn: { padding: '9px 20px', border: 'none', borderRadius: '8px', backgroundColor: '#3b82f6', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'background-color 0.15s', minWidth: '80px', whiteSpace: 'nowrap' as const },
   btnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
   // Table

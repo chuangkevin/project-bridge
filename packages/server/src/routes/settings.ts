@@ -42,7 +42,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
 // Apply auth middleware to all settings routes
 router.use(requireAuth);
 
-const SENSITIVE_KEYS = ['gemini_api_key', 'gemini_api_keys', 'openai_api_key'];
+const SENSITIVE_KEYS = ['gemini_api_key', 'gemini_api_keys', 'openai_api_key', 'code_to_design_api_key'];
 
 function maskValue(key: string, value: string): string {
   if (SENSITIVE_KEYS.includes(key) && value.length > 4) {
