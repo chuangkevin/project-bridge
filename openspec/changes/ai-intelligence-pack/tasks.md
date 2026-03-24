@@ -1,20 +1,20 @@
 ## 1. 資料庫與基礎設施
 
-- [ ] 1.1 建立 skills 資料表（id, name, triggers, content, scope, project_id, created_by, created_at, updated_at）
-- [ ] 1.2 建立 prompt_templates 資料表（id, name, category, content, is_system, created_by, created_at, updated_at）
-- [ ] 1.3 修改 generation_versions 表新增 quality_score 欄位（TEXT, nullable）
-- [ ] 1.4 建立系統預設提示詞模板 seed data（form, dashboard, landing, list, detail）
+- [x] 1.1 建立 skills 資料表（id, name, triggers, content, scope, project_id, created_by, created_at, updated_at）
+- [x] 1.2 建立 prompt_templates 資料表（id, name, category, content, is_system, created_by, created_at, updated_at）
+- [x] 1.3 修改 generation_versions 表新增 quality_score 欄位（TEXT, nullable）
+- [x] 1.4 建立系統預設提示詞模板 seed data（form, dashboard, landing, list, detail）
 
 ## 2. 生成任務佇列（generation-task-queue）
 
-- [ ] 2.1 實作 GenerationQueue 類別：記憶體內佇列、任務排序、狀態管理（pending/processing/completed/failed）
-- [ ] 2.2 實作可設定的並行控制（預設為 API key 數量）
-- [ ] 2.3 實作預估等待時間計算（平均生成時間 × 前方任務數）
-- [ ] 2.4 建立 GET /api/queue/status 端點：回傳 pending 數、processing 數、並行上限、平均生成時間
-- [ ] 2.5 建立 GET /api/queue/tasks/:taskId 端點：回傳任務狀態、佇列位置、預估等待時間
-- [ ] 2.6 修改現有 AI 生成流程，將直接 API 呼叫改為透過佇列處理
-- [ ] 2.7 實作前端 QueueStatusIndicator 元件：顯示佇列狀態、排隊位置、預估時間
-- [ ] 2.8 整合 QueueStatusIndicator 至主要版面
+- [x] 2.1 實作 GenerationQueue 類別：記憶體內佇列、任務排序、狀態管理（pending/processing/completed/failed）
+- [x] 2.2 實作可設定的並行控制（預設為 API key 數量）
+- [x] 2.3 實作預估等待時間計算（平均生成時間 × 前方任務數）
+- [x] 2.4 建立 GET /api/queue/status 端點：回傳 pending 數、processing 數、並行上限、平均生成時間
+- [x] 2.5 建立 GET /api/queue/tasks/:taskId 端點：回傳任務狀態、佇列位置、預估等待時間
+- [x] 2.6 修改現有 AI 生成流程，將直接 API 呼叫改為透過佇列處理
+- [x] 2.7 實作前端 QueueStatusIndicator 元件：顯示佇列狀態、排隊位置、預估時間
+- [x] 2.8 整合 QueueStatusIndicator 至主要版面
 
 ## 3. Skill 管理系統（skill-management）
 
@@ -38,22 +38,22 @@
 
 ## 5. 生成品質評分（generation-quality-score）
 
-- [ ] 5.1 實作品質評分 Gemini 提示詞（HTML 有效性、無障礙性、響應式設計、設計一致性四維度）
-- [ ] 5.2 實作非同步評分流程：生成完成後將評分任務加入佇列
-- [ ] 5.3 實作評分結果儲存至 generation_versions.quality_score
-- [ ] 5.4 建立 GET /api/generations/:id/quality-score 端點
-- [ ] 5.5 實作版本歷史評分徽章元件（顏色：綠/黃/紅、點擊展開詳細）
-- [ ] 5.6 整合評分徽章至版本歷史列表元件
+- [x] 5.1 實作品質評分 Gemini 提示詞（HTML 有效性、無障礙性、響應式設計、設計一致性四維度）
+- [x] 5.2 實作非同步評分流程：生成完成後將評分任務加入佇列
+- [x] 5.3 實作評分結果儲存至 generation_versions.quality_score
+- [x] 5.4 建立 GET /api/projects/:id/prototype/quality 端點
+- [x] 5.5 實作版本歷史評分徽章元件（顏色：綠/黃/紅、點擊展開詳細）
+- [x] 5.6 整合評分徽章至版本歷史列表元件
 - [ ] 5.7 實作評分中載入狀態（前端輪詢或 WebSocket）
 
 ## 6. 提示詞模板庫（prompt-template-library）
 
-- [ ] 6.1 建立 /api/prompt-templates CRUD 路由（GET 清單含分類過濾、POST 建立、PUT 更新、DELETE 刪除）
-- [ ] 6.2 實作系統模板保護（is_system = true 不可刪除）
-- [ ] 6.3 實作 admin 權限檢查（POST/PUT/DELETE 限 admin）
-- [ ] 6.4 建立前端 PromptTemplateSelector 元件（書本圖示按鈕、分類清單、模板預覽）
-- [ ] 6.5 實作選擇模板後自動填入 ChatInput（附加模式、佔位符高亮）
-- [ ] 6.6 整合 PromptTemplateSelector 至 ChatInput 元件旁
+- [x] 6.1 建立 /api/prompt-templates CRUD 路由（GET 清單含分類過濾、POST 建立、PUT 更新、DELETE 刪除）
+- [x] 6.2 實作系統模板保護（is_system = true 不可刪除）
+- [x] 6.3 實作 admin 權限檢查（POST/PUT/DELETE 限 admin）
+- [x] 6.4 建立前端 PromptTemplateSelector 元件（書本圖示按鈕、分類清單、模板預覽）
+- [x] 6.5 實作選擇模板後自動填入 ChatInput（附加模式、佔位符高亮）
+- [x] 6.6 整合 PromptTemplateSelector 至 ChatInput 元件旁
 
 ## 7. 設計規格文件匯出（design-spec-export）
 
