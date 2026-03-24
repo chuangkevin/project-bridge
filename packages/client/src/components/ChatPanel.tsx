@@ -116,10 +116,16 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Scroll to bottom only when new messages are added (not during streaming)
-  const prevMsgCount = useRef(messages.length);
+  // Scroll to bottom on initial load + when new messages are added (not during streaming)
+  const prevMsgCount = useRef(0);
+  const initialScrollDone = useRef(false);
   useEffect(() => {
-    if (messages.length > prevMsgCount.current) {
+    if (!initialScrollDone.current && messages.length > 0) {
+      // First load — scroll to bottom immediately (no animation)
+      initialScrollDone.current = true;
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior }), 50);
+    } else if (messages.length > prevMsgCount.current) {
+      // New message added — smooth scroll
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
     prevMsgCount.current = messages.length;
