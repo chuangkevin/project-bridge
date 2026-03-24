@@ -122,24 +122,28 @@ export default function FigmaExportDialog({ projectId, shareToken, onClose }: Pr
           </div>
 
           {/* Steps */}
+          <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#92400e' }}>
+            ⚠️ 內網網址無法被 Figma 插件直接存取。請改用 <strong>Chrome 擴充功能</strong>（步驟 1b）在瀏覽器中擷取。
+          </div>
           <div style={styles.stepsHeader}>步驟：</div>
           <ol style={styles.stepsList}>
             <li style={styles.stepItem}>
-              安裝 html.to.design 插件
-              <br />
-              <a
-                href="https://www.figma.com/community/plugin/1159123024924461424/html-to-design"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={styles.link}
-              >
-                前往 Figma Community →
-              </a>
+              <strong>方法 A：</strong>安裝
+              {' '}<a href="https://chromewebstore.google.com/detail/htmltodesign/ldnheaepmnmbjjjahokphckbpgciiaed" target="_blank" rel="noopener noreferrer" style={styles.link}>html.to.design Chrome 擴充功能</a>
+              {' '}（推薦，支援內網）
             </li>
-            <li style={styles.stepItem}>在 Figma 中開啟插件</li>
-            <li style={styles.stepItem}>貼上上方連結</li>
-            <li style={styles.stepItem}>選擇 viewport 大小並匯入</li>
+            <li style={styles.stepItem}>在瀏覽器開啟上方分享連結</li>
+            <li style={styles.stepItem}>點擊 Chrome 擴充功能圖示 → 擷取頁面 → 下載 .h2d 檔案</li>
+            <li style={styles.stepItem}>在 Figma 開啟 html.to.design 插件 → 匯入 .h2d 檔案</li>
           </ol>
+          <details style={{ marginTop: 4, fontSize: 12, color: 'var(--text-secondary, #64748b)' }}>
+            <summary style={{ cursor: 'pointer' }}>方法 B：Figma 插件直接匯入（僅限公開網址）</summary>
+            <ol style={{ ...styles.stepsList, marginTop: 4 }}>
+              <li style={styles.stepItem}>安裝 <a href="https://www.figma.com/community/plugin/1159123024924461424/html-to-design" target="_blank" rel="noopener noreferrer" style={styles.link}>Figma 插件</a></li>
+              <li style={styles.stepItem}>在 Figma 中開啟插件 → 貼上連結</li>
+              <li style={styles.stepItem}>選擇 viewport 大小並匯入</li>
+            </ol>
+          </details>
         </div>
 
         {/* Divider */}
