@@ -20,7 +20,7 @@ import CodeFileTree from '../components/CodeFileTree';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
-import FigmaExportDialog from '../components/FigmaExportDialog';
+// import FigmaExportDialog from '../components/FigmaExportDialog'; // disabled: internal URLs not supported
 
 // Strip [Attached files] block from user message display content
 function stripFileContent(content: string): string {
@@ -125,7 +125,7 @@ export default function WorkspacePage() {
   // Export dropdown state
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportingFramework, setExportingFramework] = useState<string | null>(null);
-  const [showFigmaExport, setShowFigmaExport] = useState(false);
+  // const [showFigmaExport, setShowFigmaExport] = useState(false); // disabled
 
   // Share panel state
   const [showSharePanel, setShowSharePanel] = useState(false);
@@ -1038,28 +1038,7 @@ export default function WorkspacePage() {
                 >
                   📋 API Bindings (JSON)
                 </button>
-                <div style={{ borderTop: '1px solid #3a3a4a' }} />
-                <button
-                  type="button"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 14px',
-                    background: 'none',
-                    border: 'none',
-                    color: '#e0e0f0',
-                    fontSize: 13,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  onClick={() => { setShowFigmaExport(true); setShowExportMenu(false); }}
-                  data-testid="export-figma"
-                >
-                  Figma ↗ 匯出到 Figma
-                </button>
+                {/* Figma export disabled — internal URLs not supported by html.to.design */}
               </div>
             )}
           </div>
@@ -1729,13 +1708,7 @@ export default function WorkspacePage() {
         </div>
       )}
 
-      {showFigmaExport && project && (
-        <FigmaExportDialog
-          projectId={project.id}
-          shareToken={project.share_token}
-          onClose={() => setShowFigmaExport(false)}
-        />
-      )}
+      {/* Figma export disabled */}
 
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
 
