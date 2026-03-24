@@ -114,8 +114,8 @@ router.patch('/:id', (req: Request, res: Response) => {
     }
     const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
-    db.prepare("UPDATE projects SET name = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(name.trim(), req.params.id);
+    db.prepare("UPDATE projects SET name = ?, updated_at = ? WHERE id = ?")
+      .run(name.trim(), new Date().toISOString(), req.params.id);
     return res.json({ success: true, name: name.trim() });
   } catch (err: any) {
     return res.status(500).json({ error: 'Failed to update project' });
@@ -153,7 +153,8 @@ router.patch('/:id/settings', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
-    updates.push("updated_at = datetime('now')");
+    updates.push("updated_at = ?");
+    values.push(new Date().toISOString());
     values.push(req.params.id);
 
     db.prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id = ?`).run(...values);

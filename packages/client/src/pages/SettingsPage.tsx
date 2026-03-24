@@ -116,35 +116,52 @@ export default function SettingsPage() {
     if (authLoading) return; // wait for AuthContext to resolve
     if (authUser?.role === 'admin') return; // handled above
 
-    (async () => {
-      try {
-        const res = await fetch('/api/auth/status');
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+    // If logged in but not admin, show page with limited access
+    if (authUser) {
+      setAuthState('authenticated');
+      return;
+    }
 
-        if (!data.hasPassword) {
-          setAuthState('setup');
-          return;
-        }
+    // No user logged in via new system — try to trigger user picker
+    {
+      (async () => {
+        try {
+          const res = await fetch('/api/auth/status');
+          if (!res.ok) throw new Error();
+          const data = await res.json();
 
-        // Has password — check if we have a valid token (old system)
-        const token = getToken();
-        if (token) {
-          const testRes = await fetch('/api/settings', {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (testRes.ok) {
-            setAuthState('authenticated');
+          if (!data.hasPassword && !data.hasUsers) {
+            setAuthState('setup');
             return;
           }
-          sessionStorage.removeItem('admin_token');
+
+          // Has users in new system — trigger login via requireAuth (user picker)
+          if (data.hasUsers) {
+            await requireAuth();
+            return; // authUser will update, triggering re-render
+          }
+
+          // Legacy: old password system only
+          const token = getToken();
+          if (token) {
+            const testRes = await fetch('/api/settings', {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (testRes.ok) {
+              setAuthState('authenticated');
+              return;
+            }
+            sessionStorage.removeItem('admin_token');
+          }
+          setAuthState('login');
+        } catch {
+          // If status check fails, try requireAuth as fallback
+          await requireAuth().catch(() => {});
         }
-        setAuthState('login');
-      } catch {
-        setAuthState('authenticated');
-      }
-    })();
-  }, [authLoading, authUser]);
+      })();
+      return;
+    }
+  }, [authLoading, authUser, requireAuth]);
 
   const handleSetup = async () => {
     setAuthError('');

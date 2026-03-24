@@ -13,9 +13,17 @@ interface Project {
   owner_name?: string;
 }
 
+/** Normalize SQLite datetime strings (no TZ) to UTC */
+function parseUTC(dateStr: string): number {
+  // SQLite datetime('now') → '2026-03-23 17:00:00' (UTC but no Z)
+  // JS treats it as local time without indicator — append Z to force UTC
+  const s = dateStr.includes('T') || dateStr.includes('Z') || dateStr.includes('+') ? dateStr : dateStr.replace(' ', 'T') + 'Z';
+  return new Date(s).getTime();
+}
+
 function relativeTime(dateStr: string): string {
   const now = Date.now();
-  const then = new Date(dateStr).getTime();
+  const then = parseUTC(dateStr);
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
@@ -113,8 +121,8 @@ export default function HomePage() {
   const filteredProjects = projects
     .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
-      if (sortBy === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sortBy === 'newest') return parseUTC(b.created_at) - parseUTC(a.created_at);
+      if (sortBy === 'oldest') return parseUTC(a.created_at) - parseUTC(b.created_at);
       return a.name.localeCompare(b.name);
     });
 
