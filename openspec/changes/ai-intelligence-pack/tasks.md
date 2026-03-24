@@ -18,14 +18,14 @@
 
 ## 3. Skill 管理系統（skill-management）
 
-- [ ] 3.1 建立 /api/skills CRUD 路由（GET 清單、GET 依專案過濾、POST 建立、PUT 更新、DELETE 刪除）
-- [ ] 3.2 實作 admin 權限檢查中介層（POST/PUT/DELETE 限 admin）
+- [x] 3.1 建立 /api/skills CRUD 路由（GET 清單、GET 依專案過濾、POST 建立、PUT 更新、DELETE 刪除）
+- [x] 3.2 實作 admin 權限檢查中介層（POST/PUT/DELETE 限 admin）
 - [ ] 3.3 實作 AI Agent skill 觸發邏輯：關鍵字匹配 + Gemini 語意分析
-- [ ] 3.4 實作 skill 內容注入系統提示詞（上限 3 個、分隔標記）
-- [ ] 3.5 建立前端 SkillManagementPage（/skills 路由）
-- [ ] 3.6 實作 skill CRUD 表單元件（名稱、觸發關鍵字、Markdown 內容、scope 選擇）
-- [ ] 3.7 實作 skill 清單元件（含搜尋、篩選、刪除確認）
-- [ ] 3.8 新增 /skills 路由至 React Router 並加入導覽列（admin only）
+- [x] 3.4 實作 skill 內容注入系統提示詞（上限 5 個、分隔標記）
+- [x] 3.5 建立前端 SkillManagement UI（在 SettingsPage 中）
+- [x] 3.6 實作 skill CRUD 表單元件（名稱、說明、Markdown 內容、scope 選擇）
+- [x] 3.7 實作 skill 清單元件（含啟用/停用、編輯、刪除確認）
+- [x] 3.8 實作 SKILLS_DIR 環境變數自動匯入外部 skill 檔案
 
 ## 4. API 標註 AI 推薦（api-ai-recommendation）
 

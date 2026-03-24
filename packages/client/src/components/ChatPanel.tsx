@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
 import AnalysisPreviewPanel from './AnalysisPreviewPanel';
 import { compressImage } from '../utils/imageCompress';
+import PromptTemplateSelector from './PromptTemplateSelector';
 
 function isHtmlContent(content: string): boolean {
   const t = content.trimStart().toLowerCase();
@@ -1062,6 +1063,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             <path d="M14 8.5l-5.5 5.5a3.5 3.5 0 01-5-5L9 3.5a2.33 2.33 0 013.3 3.3L6.8 12.3a1.17 1.17 0 01-1.6-1.6L10.7 5" />
           </svg>
         </button>
+        <PromptTemplateSelector onSelect={(content) => setInput(content)} disabled={streaming} />
         <textarea
           ref={textareaRef}
           style={styles.textarea}
