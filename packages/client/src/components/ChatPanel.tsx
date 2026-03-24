@@ -81,7 +81,6 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [streamingContent, setStreamingContent] = useState('');
   const [generationPhase, setGenerationPhase] = useState<'idle' | 'analyzing' | 'planning' | 'generating' | 'done' | 'parallel'>('idle');
   const [thinkingContent, setThinkingContent] = useState('');
-  const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [tokenCount, setTokenCount] = useState(0);
   const thinkingEndRef = useRef<HTMLDivElement>(null);
   const [activeSkillNames, setActiveSkillNames] = useState<string[]>([]);
@@ -120,13 +119,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     thinkingEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thinkingContent]);
 
-  // Auto-collapse thinking panel 1s after generation completes
-  useEffect(() => {
-    if (generationPhase === 'done') {
-      const t = setTimeout(() => setThinkingExpanded(false), 1000);
-      return () => clearTimeout(t);
-    }
-  }, [generationPhase]);
+  // No-op: thinking now shown inline in chat flow
 
   const fetchArtStyle = useCallback(async () => {
     try {
@@ -377,7 +370,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setStreamingContent('');
     setGenerationPhase('analyzing');
     setThinkingContent('');
-    setThinkingExpanded(true);
+    setActiveSkillNames([]);
     setTokenCount(0);
     setError(null);
 
@@ -601,32 +594,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             </div>
           ) : (
             <>
-              {/* Thinking Panel — only shown for generation (not question/micro-adjust) */}
-              {streaming && thinkingContent && (
-                <div style={{ background: '#f8f5ff', border: '1px solid #e8dff5', borderRadius: 8, margin: '8px 0', overflow: 'hidden' }} data-testid="thinking-panel">
-                  <div
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', userSelect: 'none' as const }}
-                    onClick={() => setThinkingExpanded(prev => !prev)}
-                  >
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#8E6FA7' }}>
-                      {'\uD83E\uDDE0'} AI 正在思考...
-                    </span>
-                    <button
-                      type="button"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#8E6FA7', padding: '2px 6px' }}
-                      onClick={(e) => { e.stopPropagation(); setThinkingExpanded(prev => !prev); }}
-                    >
-                      {thinkingExpanded ? '收合 ▲' : '展開 ▼'}
-                    </button>
-                  </div>
-                  {thinkingExpanded && (
-                    <div style={{ maxHeight: 200, overflowY: 'auto' as const, padding: '0 12px 8px 12px', fontFamily: 'monospace', fontSize: 12, color: '#5b4878', whiteSpace: 'pre-wrap' as const, lineHeight: 1.5 }}>
-                      {thinkingContent}
-                      <div ref={thinkingEndRef} />
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Stepper only — thinking moved to chat flow */}
               {/* 4-step stepper */}
               <div style={styles.generationSteps}>
                 {(['analyzing', 'planning', 'generating', 'done'] as const).map((phase, idx) => {
@@ -793,13 +761,31 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             </div>
           );
         })}
+        {/* Thinking bubble in chat flow */}
+        {streaming && thinkingContent && (
+          <div style={styles.assistantMsgRow}>
+            <div style={{ ...styles.assistantBubble, background: 'var(--accent-light, #f8f5ff)', borderLeft: '3px solid var(--accent, #8E6FA7)' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent, #8E6FA7)', marginBottom: 4 }}>🧠 AI 思考中...</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary, #64748b)', whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: 200, overflowY: 'auto' }}>
+                {thinkingContent}
+                <div ref={thinkingEndRef} />
+              </div>
+              {activeSkillNames.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>
+                  🔧 使用技能: {activeSkillNames.join(', ')}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {streaming && streamingContent && (
           <div style={styles.assistantMsgRow}>
             {isHtmlContent(streamingContent) ? (
               <div style={styles.generateBubble}>
                 <span style={styles.generateTag}>
-                  {generationPhase === 'done' ? '✅ 即將完成...' : generationPhase === 'generating' ? '✏ 生成中...' : '🤔 分析中...'}
+                  {generationPhase === 'done' ? '✅ 即將完成...' : '✏ 生成中...'}
                 </span>
+                {tokenCount > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', marginLeft: 8 }}>約 {tokenCount.toLocaleString()} 字</span>}
               </div>
             ) : (
               <div style={styles.assistantBubble}>
@@ -809,7 +795,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             )}
           </div>
         )}
-        {streaming && !streamingContent && (
+        {streaming && !streamingContent && !thinkingContent && (
           <div style={styles.assistantMsgRow}>
             <div style={styles.assistantBubble}>
               <span style={styles.thinking}>思考中...</span>
@@ -1536,9 +1522,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-primary)',
     borderRadius: '10px',
     fontSize: '14px',
-    resize: 'vertical' as const,
-    minHeight: '40px',
-    maxHeight: '200px',
+    resize: 'none' as const,
     outline: 'none',
     fontFamily: 'inherit',
     lineHeight: '1.4',
