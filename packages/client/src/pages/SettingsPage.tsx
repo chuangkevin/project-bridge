@@ -113,63 +113,43 @@ export default function SettingsPage() {
   const [userActionError, setUserActionError] = useState('');
 
   // ─── Auth flow ─────────────────────────────────────
-  // If new-system admin is logged in, skip old auth entirely
+  // Settings page ALWAYS requires admin password — user selection alone is not enough
   useEffect(() => {
-    if (!authLoading && authUser?.role === 'admin') {
-      setAuthState('authenticated');
-    }
-  }, [authUser, authLoading]);
+    if (authLoading) return;
 
-  useEffect(() => {
-    if (authLoading) return; // wait for AuthContext to resolve
-    if (authUser?.role === 'admin') return; // handled above
+    (async () => {
+      try {
+        // Check if admin password exists
+        const res = await fetch('/api/auth/status');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
 
-    // If logged in but not admin, show page with limited access
-    if (authUser) {
-      setAuthState('authenticated');
-      return;
-    }
+        if (!data.hasPassword) {
+          // No password set yet — show setup form
+          setAuthState('setup');
+          return;
+        }
 
-    // No user logged in via new system — try to trigger user picker
-    {
-      (async () => {
-        try {
-          const res = await fetch('/api/auth/status');
-          if (!res.ok) throw new Error();
-          const data = await res.json();
-
-          if (!data.hasPassword && !data.hasUsers) {
-            setAuthState('setup');
+        // Password exists — check if we have a valid admin token
+        const token = getToken();
+        if (token) {
+          const testRes = await fetch('/api/settings', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (testRes.ok) {
+            setAuthState('authenticated');
             return;
           }
-
-          // Has users in new system — trigger login via requireAuth (user picker)
-          if (data.hasUsers) {
-            await requireAuth();
-            return; // authUser will update, triggering re-render
-          }
-
-          // Legacy: old password system only
-          const token = getToken();
-          if (token) {
-            const testRes = await fetch('/api/settings', {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (testRes.ok) {
-              setAuthState('authenticated');
-              return;
-            }
-            sessionStorage.removeItem('admin_token');
-          }
-          setAuthState('login');
-        } catch {
-          // If status check fails, try requireAuth as fallback
-          await requireAuth().catch(() => {});
+          sessionStorage.removeItem('admin_token');
         }
-      })();
-      return;
-    }
-  }, [authLoading, authUser, requireAuth]);
+
+        // Must enter password
+        setAuthState('login');
+      } catch {
+        setAuthState('login');
+      }
+    })();
+  }, [authLoading]);
 
   const handleSetup = async () => {
     setAuthError('');

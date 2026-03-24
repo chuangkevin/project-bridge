@@ -701,15 +701,18 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             architectureBlock += `Pages with NO outgoing edges should have a back/home button that returns to the first page.\n`;
           }
 
-          // Per-page design specs
+          // Per-page design specs (check visual_analysis, analysis_result, or both)
           const perPageSpecs: string[] = [];
           for (const node of archData.nodes) {
             if (node.referenceFileId) {
-              const fileRow = db.prepare('SELECT visual_analysis FROM uploaded_files WHERE id = ?').get(node.referenceFileId) as any;
-              if (fileRow?.visual_analysis) {
+              const fileRow = db.prepare('SELECT visual_analysis, analysis_result FROM uploaded_files WHERE id = ?').get(node.referenceFileId) as any;
+              const specContent = fileRow?.visual_analysis || (fileRow?.analysis_result ? (() => {
+                try { const ar = JSON.parse(fileRow.analysis_result); return ar.summary || JSON.stringify(ar.pages || ar, null, 2); } catch { return fileRow.analysis_result; }
+              })() : null);
+              if (specContent) {
                 const viewportLabel = node.viewport ? ` [${node.viewport === 'mobile' ? '手機版' : '電腦版'}]` : '';
                 const mobileHint = node.viewport === 'mobile' ? ' MOBILE LAYOUT — must be single column, touch-friendly, max-width 480px' : node.viewport === 'desktop' ? ' DESKTOP LAYOUT' : '';
-                perPageSpecs.push(`  [${node.name}]${viewportLabel}${mobileHint} <<< DESIGN SPEC FOR ${node.name} — implement exactly this layout >>>\n${fileRow.visual_analysis.slice(0, 4000)}\n  <<< END DESIGN SPEC FOR ${node.name} >>>`);
+                perPageSpecs.push(`  [${node.name}]${viewportLabel}${mobileHint} <<< DESIGN SPEC FOR ${node.name} — implement exactly this layout >>>\n${specContent.slice(0, 4000)}\n  <<< END DESIGN SPEC FOR ${node.name} >>>`);
               }
             }
           }

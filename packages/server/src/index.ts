@@ -87,8 +87,13 @@ if (process.env.SKILLS_DIR) {
   syncSkillsFromDirectory(process.env.SKILLS_DIR);
 }
 
-app.listen(Number(PORT), '0.0.0.0', () => {
+const server = app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
+
+// Disable socket timeout for SSE / long-running AI generation
+server.timeout = 0;
+server.keepAliveTimeout = 120_000; // 2 min keep-alive
+server.headersTimeout = 125_000;
 
 export default app;
