@@ -20,6 +20,7 @@ import CodeFileTree from '../components/CodeFileTree';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
+import FigmaExportDialog from '../components/FigmaExportDialog';
 
 // Strip [Attached files] block from user message display content
 function stripFileContent(content: string): string {
@@ -124,6 +125,7 @@ export default function WorkspacePage() {
   // Export dropdown state
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportingFramework, setExportingFramework] = useState<string | null>(null);
+  const [showFigmaExport, setShowFigmaExport] = useState(false);
 
   // Share panel state
   const [showSharePanel, setShowSharePanel] = useState(false);
@@ -1031,6 +1033,28 @@ export default function WorkspacePage() {
                 >
                   📋 API Bindings (JSON)
                 </button>
+                <div style={{ borderTop: '1px solid #3a3a4a' }} />
+                <button
+                  type="button"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 14px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#e0e0f0',
+                    fontSize: 13,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  onClick={() => { setShowFigmaExport(true); setShowExportMenu(false); }}
+                  data-testid="export-figma"
+                >
+                  Figma ↗ 匯出到 Figma
+                </button>
               </div>
             )}
           </div>
@@ -1670,6 +1694,14 @@ export default function WorkspacePage() {
         </div>
       )}
 
+      {showFigmaExport && project && (
+        <FigmaExportDialog
+          projectId={project.id}
+          shareToken={project.share_token}
+          onClose={() => setShowFigmaExport(false)}
+        />
+      )}
+
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
 
       {/* Onboarding tour tooltip */}
@@ -1748,6 +1780,8 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     height: '100%',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
   },
   loadingContainer: {
     display: 'flex',
@@ -1755,9 +1789,10 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     height: '100vh',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    backgroundColor: 'var(--bg-primary)',
   },
   loadingText: {
-    color: '#64748b',
+    color: 'var(--text-secondary)',
     fontSize: '14px',
   },
   errorContainer: {
@@ -1768,18 +1803,19 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100vh',
     gap: '16px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    backgroundColor: 'var(--bg-primary)',
   },
   errorTitle: {
-    color: '#1e293b',
+    color: 'var(--text-primary)',
     fontSize: '18px',
     fontWeight: 600,
   },
   backBtn: {
     padding: '8px 16px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    color: '#475569',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
     fontSize: '14px',
     cursor: 'pointer',
   },
@@ -1788,8 +1824,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '8px 16px',
-    backgroundColor: '#ffffff',
-    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-primary)',
     minHeight: '48px',
     flexShrink: 0,
   },
@@ -1812,7 +1848,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '2px',
     marginRight: '12px',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--bg-hover)',
     borderRadius: '8px',
     padding: '2px',
   },
@@ -1821,7 +1857,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderRadius: '6px',
     backgroundColor: 'transparent',
-    color: '#64748b',
+    color: 'var(--text-secondary)',
     fontSize: '12px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -1846,38 +1882,39 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     width: '32px',
     height: '32px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '6px',
-    backgroundColor: '#ffffff',
-    color: '#64748b',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
   },
   projectName: {
     fontSize: '14px',
     fontWeight: 600,
-    color: '#1e293b',
+    color: 'var(--text-primary)',
     cursor: 'pointer',
     textDecoration: 'underline dotted',
   },
   projectNameInput: {
     fontSize: '14px',
     fontWeight: 600,
-    color: '#1e293b',
+    color: 'var(--text-primary)',
     border: '1px solid #3b82f6',
     borderRadius: '4px',
     padding: '2px 6px',
     outline: 'none',
     width: '200px',
+    backgroundColor: 'var(--bg-input)',
   },
   historyBtn: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     padding: '6px 12px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    color: '#475569',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
     fontSize: '13px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -1887,10 +1924,10 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '6px',
     padding: '6px 12px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    color: '#475569',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
     fontSize: '13px',
     fontWeight: 500,
     cursor: 'pointer',
