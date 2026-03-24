@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import NewProjectDialog from '../components/NewProjectDialog';
+import ThemeToggle from '../components/ThemeToggle';
 import { useAuth, authHeaders } from '../contexts/AuthContext';
 
 interface Project {
@@ -268,6 +269,7 @@ export default function HomePage() {
           <span style={styles.subtitle}>AI-powered prototype generator</span>
         </div>
         <div style={styles.headerRight}>
+          <ThemeToggle />
           <button type="button" style={styles.settingsBtn} onClick={() => navigate('/settings')} title="設定" data-testid="settings-btn">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="10" cy="10" r="3" />
@@ -279,13 +281,13 @@ export default function HomePage() {
           </button>
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: '#555', fontWeight: 500 }}
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}
                 data-testid="home-user-name">
-                👤 {user.name}{user.role === 'admin' && <span style={{ fontSize: 10, color: '#8E6FA7', marginLeft: 4 }}>管理員</span>}
+                👤 {user.name}{user.role === 'admin' && <span style={{ fontSize: 10, color: 'var(--accent)', marginLeft: 4 }}>管理員</span>}
               </span>
               <button type="button"
                 onClick={logout}
-                style={{ fontSize: 12, color: '#999', background: 'none', border: '1px solid #e2e8f0', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
+                style={{ fontSize: 12, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
                 data-testid="home-logout-btn">
                 登出
               </button>
@@ -293,7 +295,7 @@ export default function HomePage() {
           ) : (
             <button type="button"
               onClick={handleLogin}
-              style={{ fontSize: 13, color: '#8E6FA7', background: 'none', border: '1px solid #C4A8DC', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 500 }}
+              style={{ fontSize: 13, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 500 }}
               data-testid="home-login-btn">
               👤 登入
             </button>
@@ -418,20 +420,20 @@ export default function HomePage() {
         <div style={styles.modalOverlay} onClick={() => setDeleteTarget(null)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 8px', color: '#dc2626' }}>刪除專案</h3>
-            <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: 14 }}>
-              此操作無法復原。請輸入 <strong style={{ color: '#1e293b' }}>{deleteTarget.name}</strong> 以確認刪除。
+            <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 14 }}>
+              此操作無法復原。請輸入 <strong style={{ color: 'var(--text-primary)' }}>{deleteTarget.name}</strong> 以確認刪除。
             </p>
             <input
               type="text"
               value={deleteInput}
               onChange={e => setDeleteInput(e.target.value)}
               placeholder={deleteTarget.name}
-              style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-primary)', borderRadius: 6, fontSize: 14, boxSizing: 'border-box', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
               autoFocus
               onKeyDown={e => { if (e.key === 'Enter') confirmDelete(); }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setDeleteTarget(null)} style={{ padding: '8px 16px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer' }}>取消</button>
+              <button type="button" onClick={() => setDeleteTarget(null)} style={{ padding: '8px 16px', border: '1px solid var(--border-primary)', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', cursor: 'pointer' }}>取消</button>
               <button
                 type="button"
                 onClick={confirmDelete}
@@ -522,13 +524,13 @@ function SortableProjectCard({ project, navigate, user, handleDelete, handleFork
       }}
       onMouseEnter={e => {
         if (!isDragging) {
-          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+          (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)';
           (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6';
         }
       }}
       onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
-        (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-sm)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-primary)';
       }}
     >
       <div style={styles.cardContent}>
@@ -568,19 +570,20 @@ function SortableProjectCard({ project, navigate, user, handleDelete, handleFork
 
 const styles: Record<string, React.CSSProperties> = {
   modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modalContent: { background: '#fff', borderRadius: 12, padding: 24, width: 420, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' },
+  modalContent: { background: 'var(--bg-card)', borderRadius: 12, padding: 24, width: 420, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', color: 'var(--text-primary)' },
   container: {
     minHeight: '100vh',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg-primary)',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    color: 'var(--text-primary)',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 32px',
-    backgroundColor: '#ffffff',
-    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-primary)',
   },
   headerLeft: {
     display: 'flex',
@@ -596,11 +599,11 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: '20px',
     fontWeight: 700,
-    color: '#1e293b',
+    color: 'var(--text-primary)',
   },
   subtitle: {
     fontSize: '14px',
-    color: '#64748b',
+    color: 'var(--text-secondary)',
   },
   settingsBtn: {
     display: 'flex',
@@ -608,10 +611,10 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     width: '36px',
     height: '36px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    color: '#64748b',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
   },
   globalDesignBtn: {
@@ -641,7 +644,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   loadingText: {
     textAlign: 'center' as const,
-    color: '#64748b',
+    color: 'var(--text-secondary)',
     fontSize: '14px',
   },
   errorText: {
@@ -659,7 +662,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '16px',
   },
   emptyText: {
-    color: '#64748b',
+    color: 'var(--text-secondary)',
     fontSize: '16px',
   },
   toolbar: {
@@ -670,20 +673,20 @@ const styles: Record<string, React.CSSProperties> = {
   searchInput: {
     flex: 1,
     padding: '8px 12px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '8px',
     fontSize: '14px',
-    color: '#1e293b',
-    backgroundColor: '#ffffff',
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--bg-input)',
     outline: 'none',
   },
   sortSelect: {
     padding: '8px 12px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '8px',
     fontSize: '14px',
-    color: '#1e293b',
-    backgroundColor: '#ffffff',
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--bg-input)',
     cursor: 'pointer',
   },
   grid: {
@@ -696,15 +699,15 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '20px',
-    backgroundColor: '#ffffff',
-    border: '1px solid #e2e8f0',
+    backgroundColor: 'var(--bg-card)',
+    border: '1px solid var(--border-primary)',
     borderRadius: '12px',
     cursor: 'pointer',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+    boxShadow: 'var(--shadow-sm)',
     transition: 'box-shadow 0.15s, border-color 0.15s, transform 0.15s, opacity 0.15s',
   },
   cardDragOverlay: {
-    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+    boxShadow: 'var(--shadow-md)',
     transform: 'scale(1.03)',
     cursor: 'grabbing',
     opacity: 1,
@@ -717,7 +720,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 4px',
     fontSize: '16px',
     fontWeight: 600,
-    color: '#1e293b',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
@@ -725,12 +728,12 @@ const styles: Record<string, React.CSSProperties> = {
   cardOwner: {
     margin: '0 0 2px',
     fontSize: '12px',
-    color: '#64748b',
+    color: 'var(--text-secondary)',
   },
   cardDate: {
     margin: 0,
     fontSize: '13px',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
   },
   deleteBtn: {
     display: 'flex',
@@ -741,7 +744,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderRadius: '6px',
     backgroundColor: 'transparent',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     cursor: 'pointer',
     flexShrink: 0,
     marginLeft: '8px',
@@ -750,13 +753,13 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 16px',
     fontSize: '15px',
     fontWeight: 600,
-    color: '#475569',
+    color: 'var(--text-secondary)',
   },
   sectionHeadingSecond: {
     margin: '32px 0 16px',
     fontSize: '15px',
     fontWeight: 600,
-    color: '#475569',
+    color: 'var(--text-secondary)',
   },
   forkBtn: {
     display: 'flex',
@@ -764,10 +767,10 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     height: '32px',
     padding: '0 10px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border-primary)',
     borderRadius: '6px',
     backgroundColor: 'transparent',
-    color: '#64748b',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
     flexShrink: 0,
     marginLeft: '8px',
