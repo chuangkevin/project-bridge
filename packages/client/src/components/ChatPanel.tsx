@@ -890,7 +890,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       >
         <div style={{ width: 40, height: 3, borderRadius: 2, background: 'var(--text-muted, #94a3b8)' }} />
       </div>
-      <div style={{ height: inputAreaHeight, minHeight: 120, maxHeight: 500, flex: 'none', display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
+      <div style={{ height: inputAreaHeight, minHeight: 120, maxHeight: 500, flex: 'none', display: 'flex', flexDirection: 'column' as const, overflow: 'auto' }}>
       <ConstraintsBar projectId={projectId} onChange={handleConstraintsChange} />
 
       {/* Generation Settings */}

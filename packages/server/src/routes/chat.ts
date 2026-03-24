@@ -975,7 +975,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
             : { multiPage: false, pages: [] as string[] };
 
-          finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
+          // When user requests new pages or force regenerate, prefer analyzer result over existing
+          if ((isPageRequest || effectiveForceRegenerate) && pageStructure.pages.length > 0) {
+            finalPages = pageStructure.pages;
+          } else {
+            finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
+          }
           isMultiPage = finalPages.length > 1;
         }
       }
@@ -1087,15 +1092,30 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       }],
     }));
 
-    // ── Phase 1: Quick analysis call — stream thinking content to frontend ──
+    // ── Phase 1: Analysis + step-by-step status ──
     res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
+
+    // Step 1: AI analysis — detailed reasoning
     try {
       const analyzeGenai = new GoogleGenerativeAI(apiKey);
       const analyzeModel = analyzeGenai.getGenerativeModel({
         model: getGeminiModel(),
-        generationConfig: { maxOutputTokens: 300, temperature: 0.3 },
+        generationConfig: { maxOutputTokens: 800, temperature: 0.5 },
       });
-      const analyzePrompt = `你是 UI 設計分析師。用戶要求：「${userContent.slice(0, 500)}」\n\n請用 3-5 行簡短分析：\n1. 需求理解\n2. 頁面規劃\n3. 重點元件\n\n直接回答，不要加標題或 markdown。`;
+      const pageContext = isMultiPage && finalPages.length > 0
+        ? `\n偵測到的頁面：${finalPages.join('、')}`
+        : '';
+      const analyzePrompt = `你是 UI 設計分析師。用戶要求：「${userContent.slice(0, 500)}」${pageContext}
+
+請用繁體中文詳細分析這個需求（8-15行）：
+
+1. 需求理解：用戶想要什麼？目標用戶是誰？
+2. 頁面規劃：需要哪些頁面？每頁的核心功能？
+3. UI 元件：每個頁面需要哪些關鍵元件？（表格、卡片、表單等）
+4. 互動流程：頁面之間如何導航？用戶操作流程？
+5. 設計重點：色彩、排版、RWD 等注意事項
+
+直接回答，使用數字列表，不要加 markdown 標題。`;
       const analyzeResult = await analyzeModel.generateContentStream(analyzePrompt);
       for await (const chunk of analyzeResult.stream) {
         const text = chunk.text();
@@ -1104,11 +1124,30 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
         }
       }
     } catch (e: any) {
-      // Analysis failed — not critical, continue with generation
       console.warn('[chat] Analysis call failed:', e.message?.slice(0, 80));
     }
 
-    // Send active skills info to frontend
+    // Step 2: Emit processing steps
+    res.write(`data: ${JSON.stringify({ type: 'thinking', content: '\n\n' })}\n\n`);
+
+    // Report what's being loaded
+    const steps: string[] = [];
+    if (designSpecPrefix) steps.push('📋 載入設計規格');
+    if (architectureBlock) steps.push('🏗️ 載入架構圖配置');
+    if (designConvention) steps.push('🎨 載入設計風格 (Design Convention)');
+    if (supplement.trim()) steps.push('📎 載入專案補充說明');
+    if (activeSkills.length > 0) steps.push(`🔧 注入 ${activeSkills.length} 個專案技能`);
+    if (isMultiPage) steps.push(`📄 多頁面模式：${finalPages.join('、')}`);
+    if (steps.length > 0) {
+      res.write(`data: ${JSON.stringify({ type: 'thinking', content: '--- 準備生成 ---\n' + steps.join('\n') + '\n' })}\n\n`);
+    }
+
+    // Send page list event
+    if (finalPages.length > 0) {
+      res.write(`data: ${JSON.stringify({ type: 'pages', pages: finalPages })}\n\n`);
+    }
+
+    // Send active skills info
     if (activeSkills.length > 0) {
       res.write(`data: ${JSON.stringify({ type: 'skills', skills: activeSkills.map(s => s.name) })}\n\n`);
     }
