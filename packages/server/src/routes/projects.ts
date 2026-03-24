@@ -12,11 +12,13 @@ function generateShareToken(): string {
 // POST /api/projects — create a new project
 router.post('/', (req: Request, res: Response) => {
   try {
-    const { name } = req.body;
+    const { name, mode } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return res.status(400).json({ error: 'Project name is required' });
     }
+
+    const projectMode = mode === 'design' ? 'design' : 'architecture';
 
     const id = uuidv4();
     const share_token = generateShareToken();
@@ -24,9 +26,9 @@ router.post('/', (req: Request, res: Response) => {
 
     const ownerId = (req as any).user?.id || null;
     const stmt = db.prepare(
-      'INSERT INTO projects (id, name, share_token, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO projects (id, name, share_token, owner_id, mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
-    stmt.run(id, name.trim(), share_token, ownerId, now, now);
+    stmt.run(id, name.trim(), share_token, ownerId, projectMode, now, now);
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     return res.status(201).json(project);

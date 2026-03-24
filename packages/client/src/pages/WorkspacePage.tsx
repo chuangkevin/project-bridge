@@ -12,6 +12,7 @@ import SpecPanel, { Annotation } from '../components/SpecPanel';
 import VersionHistoryPanel from '../components/VersionHistoryPanel';
 import TokenPanel, { DesignToken } from '../components/TokenPanel';
 import ApiBindingPanel from '../components/ApiBindingPanel';
+import PageApiBindingPanel from '../components/PageApiBindingPanel';
 import ConstraintPanel from '../components/ConstraintPanel';
 import VisualEditor from '../components/VisualEditor';
 import { SpecData } from '../components/SpecForm';
@@ -39,6 +40,7 @@ interface Project {
   isMultiPage?: boolean;
   pages?: string[];
   arch_data?: any;
+  mode?: 'architecture' | 'design';
   owner_id?: string;
   owner_name?: string;
 }
@@ -85,6 +87,7 @@ export default function WorkspacePage() {
   const [apiBindingIndicators, setApiBindingIndicators] = useState<{ bridgeId: string }[]>([]);
   const [apiBindingsFull, setApiBindingsFull] = useState<{ id: string; bridgeId: string; method: string; url: string }[]>([]);
   const [showConstraintPanel, setShowConstraintPanel] = useState(false);
+  const [showPageApiPanel, setShowPageApiPanel] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<{
     bridgeId: string;
     tagName: string;
@@ -236,7 +239,8 @@ export default function WorkspacePage() {
       // Always reset arch store to this project's data (prevents bleed from previous project)
       setArchData(projData.arch_data ?? null);
       if (!projData.arch_data && !projData.currentHtml) {
-        setActiveMode('architecture'); // truly new projects → architecture tab first
+        // Brand new project: respect the mode chosen at creation time
+        setActiveMode(projData.mode === 'design' ? 'design' : 'architecture');
       } else if (projData.currentHtml) {
         setActiveMode('design'); // has prototype → go to design
       }
@@ -1261,8 +1265,16 @@ export default function WorkspacePage() {
       )}
       {/* API binding mode banner */}
       {interactionMode === 'api-binding' && (
-        <div style={{ ...styles.annotationBanner, background: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #2563eb' }}>
-          API Binding Mode — Click any element to define its API endpoint binding
+        <div style={{ ...styles.annotationBanner, background: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #2563eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>API Binding Mode — Click any element to define its API endpoint binding</span>
+          <button
+            type="button"
+            onClick={() => setShowPageApiPanel(true)}
+            style={{ background: '#8E6FA7', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            data-testid="open-page-api-btn"
+          >
+            Page-level API
+          </button>
         </div>
       )}
 
@@ -1508,6 +1520,17 @@ export default function WorkspacePage() {
           bridgeId={apiBindingElement.bridgeId}
           tagName={apiBindingElement.tagName}
           onClose={() => { setApiBindingElement(null); setShowConstraintPanel(false); }}
+          onSaved={fetchApiBindingIndicators}
+        />
+      )}
+
+      {/* Page-level API Binding Panel */}
+      {showPageApiPanel && interactionMode === 'api-binding' && (
+        <PageApiBindingPanel
+          projectId={project.id}
+          activePage={activePage}
+          pages={pages}
+          onClose={() => setShowPageApiPanel(false)}
           onSaved={fetchApiBindingIndicators}
         />
       )}
