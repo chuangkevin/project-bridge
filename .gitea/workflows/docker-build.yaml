@@ -58,7 +58,7 @@ jobs:
 
       - name: ArgoCD Sync
         run: |
-          docker run --rm -i --dns 10.43.0.10 --dns 8.8.8.8 \
+          docker run --rm -i --network host \
             -e ARGOCD_USERNAME="${ARGOCD_USERNAME}" \
             -e ARGOCD_PASSWORD="${ARGOCD_PASSWORD}" \
             argoproj/argocd:v2.6.15 /bin/sh -c '
