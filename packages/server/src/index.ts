@@ -30,6 +30,7 @@ import pageMappingsRouter from './routes/pageMappings';
 import skillsRouter from './routes/skills';
 import preferencesRouter from './routes/preferences';
 import promptTemplatesRouter from './routes/promptTemplates';
+import queueRouter from './routes/queue';
 import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
 
@@ -67,6 +68,7 @@ app.use('/api/projects', forkRouter);
 app.use('/api/projects', pageMappingsRouter);
 app.use('/api/skills', skillsRouter);
 app.use('/api/prompt-templates', promptTemplatesRouter);
+app.use('/api/queue', queueRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

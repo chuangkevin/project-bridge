@@ -6,6 +6,7 @@ import DesignPanel from '../components/DesignPanel';
 import StyleTweakerPanel from '../components/StyleTweakerPanel';
 import PreviewPanel, { InteractionMode } from '../components/PreviewPanel';
 import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector';
+import QueueStatusIndicator from '../components/QueueStatusIndicator';
 import Toast from '../components/Toast';
 import AnnotationEditor from '../components/AnnotationEditor';
 import SpecPanel, { Annotation } from '../components/SpecPanel';
@@ -839,6 +840,7 @@ export default function WorkspacePage() {
             </button>
           </div>
           <DeviceSizeSelector value={deviceSize} onChange={setDeviceSize} />
+          <QueueStatusIndicator />
         </div>
         <div style={styles.toolbarRight}>
           {designActive && (
