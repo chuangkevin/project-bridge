@@ -235,8 +235,10 @@ export default function WorkspacePage() {
       setPages(projData.pages || []);
       // Always reset arch store to this project's data (prevents bleed from previous project)
       setArchData(projData.arch_data ?? null);
-      if (!projData.arch_data) {
-        setActiveMode('architecture'); // new projects → architecture tab first
+      if (!projData.arch_data && !projData.currentHtml) {
+        setActiveMode('architecture'); // truly new projects → architecture tab first
+      } else if (projData.currentHtml) {
+        setActiveMode('design'); // has prototype → go to design
       }
 
       if (convRes.ok) {
