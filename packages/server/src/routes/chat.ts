@@ -12,8 +12,24 @@ import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlS
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { generateParallel } from '../services/parallelGenerator';
 import { getActiveSkills } from './skills';
+import { scorePrototype } from '../services/qualityScorer';
+import { generationQueue } from '../services/generationQueue';
 
 const router = Router();
+
+/** Fire-and-forget quality scoring for a prototype version */
+function triggerQualityScoring(versionId: string, html: string, apiKey: string) {
+  setImmediate(async () => {
+    try {
+      const score = await scorePrototype(html, apiKey);
+      db.prepare('UPDATE prototype_versions SET quality_score = ? WHERE id = ?')
+        .run(JSON.stringify(score), versionId);
+      console.log(`[quality] Scored version ${versionId}: overall=${score.overall}`);
+    } catch (e: any) {
+      console.warn('[quality] Scoring failed:', e.message);
+    }
+  });
+}
 
 const systemPrompt = fs.readFileSync(
   path.resolve(__dirname, '../prompts/system.txt'),
@@ -150,6 +166,13 @@ function formatGeminiError(err: any): string {
 
 // POST /api/projects/:id/chat — SSE chat with AI
 router.post('/:id/chat', async (req: Request, res: Response) => {
+  // Track this generation request in the queue
+  const queueProjectId = req.params.id as string;
+  const queueUserId = (req as any).user?.id || null;
+  const queueTask = generationQueue.enqueue(queueProjectId, queueUserId);
+  // Immediately dequeue to mark as processing (informational queue)
+  generationQueue.dequeue();
+
   try {
     const projectId = req.params.id;
     const { message, fileIds, forceRegenerate } = req.body;
@@ -395,6 +418,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
               const pageMatches = [...newHtml.matchAll(/data-page="([^"]+)"/g)].map(m => m[1]);
               db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(versionId, projectId, assistantMsgId, newHtml, newVersion, pageMatches.length > 1 ? 1 : 0, JSON.stringify(pageMatches));
               db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+              triggerQualityScoring(versionId, newHtml, apiKey);
 
               res.write(`data: ${JSON.stringify({ content: `✓ 已修改元件 (${targetId}): ${visionResult.reasoning}` })}\n\n`);
               res.write(`data: ${JSON.stringify({ done: true, html: newHtml, messageType: 'micro-adjust', intent: 'micro-adjust', isMultiPage: pageMatches.length > 1, pages: pageMatches })}\n\n`);
@@ -489,6 +513,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         const isMulti = pageMatches.length > 1;
         db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(versionId, projectId, assistantMsgId, html, newVersion, isMulti ? 1 : 0, JSON.stringify(pageMatches));
         db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+        triggerQualityScoring(versionId, html, apiKey);
 
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
         res.write(`data: ${JSON.stringify({ done: true, html, messageType: 'micro-adjust', intent: 'micro-adjust', isMultiPage: isMulti, pages: pageMatches })}\n\n`);
@@ -1051,6 +1076,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           ).run(versionId, projectId, assistantMsgId, parallelResult.html, newVersion, 1, JSON.stringify(parallelResult.pages));
 
           db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+          triggerQualityScoring(versionId, parallelResult.html, apiKey);
 
           res.write(`data: ${JSON.stringify({
             done: true,
@@ -1312,6 +1338,7 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       db.prepare(
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?"
       ).run(projectId);
+      triggerQualityScoring(versionId, html, currentKey);
 
       // Send page list as separate event before done
       if (finalPages.length > 0) {
@@ -1349,8 +1376,10 @@ ${html.slice(0, 2000)}`;
       res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: generateMessageType, intent })}\n\n`);
     }
 
+    generationQueue.complete(queueTask.id, true);
     res.end();
   } catch (err: any) {
+    generationQueue.complete(queueTask.id, false);
     console.error('Chat error:', err);
     if (res.headersSent) {
       res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);

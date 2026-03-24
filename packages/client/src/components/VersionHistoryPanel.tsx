@@ -1,4 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
+import QualityBadge from './QualityBadge';
+
+interface QualityScore {
+  overall: number;
+  html: number;
+  accessibility: number;
+  responsive: number;
+  consistency: number;
+}
 
 interface Version {
   id: string;
@@ -7,6 +16,7 @@ interface Version {
   is_multi_page: number;
   created_at: string;
   preview?: string;
+  quality_score?: QualityScore | null;
 }
 
 interface Props {
@@ -82,6 +92,7 @@ export default function VersionHistoryPanel({ projectId, currentVersion, onResto
                     <span style={styles.versionNum}>v{v.version}</span>
                     {v.is_current ? <span style={styles.currentBadge}>目前</span> : null}
                     {v.is_multi_page ? <span style={styles.multiPageBadge}>多頁</span> : null}
+                    {v.quality_score && <QualityBadge score={v.quality_score} />}
                     <span style={styles.timestamp}>{new Date(v.created_at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <div style={styles.btnGroup}>

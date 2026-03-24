@@ -323,10 +323,10 @@ router.get('/:id/prototype/versions', (req: Request, res: Response) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const versions = db.prepare(
-    'SELECT id, version, is_current, is_multi_page, created_at, substr(html, 1, 500) as preview FROM prototype_versions WHERE project_id = ? ORDER BY version DESC'
-  ).all(projectId) as { id: string; version: number; is_current: number; is_multi_page: number; created_at: string; preview: string }[];
+    'SELECT id, version, is_current, is_multi_page, created_at, quality_score, substr(html, 1, 500) as preview FROM prototype_versions WHERE project_id = ? ORDER BY version DESC'
+  ).all(projectId) as { id: string; version: number; is_current: number; is_multi_page: number; created_at: string; quality_score: string | null; preview: string }[];
 
-  return res.json({ versions });
+  return res.json({ versions: versions.map(v => ({ ...v, quality_score: v.quality_score ? JSON.parse(v.quality_score) : null })) });
 });
 
 // GET /:id/prototype/versions/:versionA/diff/:versionB — line-count diff between two versions
@@ -415,6 +415,27 @@ router.get('/:id/prototype/validate-navigation', (req: Request, res: Response) =
 
   const result = validateNavigation(version.html);
   return res.json(result);
+});
+
+// GET /:id/prototype/quality — return quality score for the current version
+router.get('/:id/prototype/quality', (req: Request, res: Response) => {
+  const projectId = req.params.id;
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const version = db.prepare(
+    'SELECT quality_score FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+  ).get(projectId) as { quality_score: string | null } | undefined;
+
+  if (!version || !version.quality_score) {
+    return res.json({ score: null });
+  }
+
+  try {
+    return res.json({ score: JSON.parse(version.quality_score) });
+  } catch {
+    return res.json({ score: null });
+  }
 });
 
 export default router;
