@@ -90,7 +90,6 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     const saved = localStorage.getItem('pb-input-area-height');
     return saved ? parseInt(saved, 10) : 180;
   });
-  const inputResizing = useRef(false);
   const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -815,25 +814,31 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Vertical resize handle */}
+      {/* Vertical resize handle — drag up to expand input area */}
       <div
-        style={{ height: 6, cursor: 'row-resize', background: 'var(--border-primary, #e2e8f0)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}
+        style={{ height: 8, cursor: 'row-resize', background: 'var(--border-primary, #e2e8f0)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         onMouseDown={(e) => {
           e.preventDefault();
-          inputResizing.current = true;
           const startY = e.clientY;
-          const startH = inputAreaHeight;
+          const wrapper = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement;
+          const startH = wrapper?.offsetHeight || 180;
           const handle = e.currentTarget as HTMLDivElement;
           handle.style.background = 'var(--accent, #8E6FA7)';
+          document.body.style.cursor = 'row-resize';
+          document.body.style.userSelect = 'none';
           const onMove = (ev: MouseEvent) => {
-            if (!inputResizing.current) return;
-            const newH = Math.max(120, Math.min(500, startH - (ev.clientY - startY)));
-            setInputAreaHeight(newH);
+            const delta = startY - ev.clientY;
+            const newH = Math.max(120, Math.min(500, startH + delta));
+            if (wrapper) wrapper.style.height = newH + 'px';
           };
-          const onUp = () => {
-            inputResizing.current = false;
+          const onUp = (ev: MouseEvent) => {
+            const delta = startY - ev.clientY;
+            const finalH = Math.max(120, Math.min(500, startH + delta));
+            setInputAreaHeight(finalH);
+            localStorage.setItem('pb-input-area-height', String(finalH));
             handle.style.background = 'var(--border-primary, #e2e8f0)';
-            localStorage.setItem('pb-input-area-height', String(inputAreaHeight));
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
           };
@@ -841,11 +846,11 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           document.addEventListener('mouseup', onUp);
         }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent, #8E6FA7)'; }}
-        onMouseLeave={(e) => { if (!inputResizing.current) (e.currentTarget as HTMLDivElement).style.background = 'var(--border-primary, #e2e8f0)'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--border-primary, #e2e8f0)'; }}
       >
         <div style={{ width: 40, height: 3, borderRadius: 2, background: 'var(--text-muted, #94a3b8)' }} />
       </div>
-      <div style={{ height: inputAreaHeight, flexShrink: 0, display: 'flex', flexDirection: 'column' as const, overflow: 'auto' }}>
+      <div style={{ height: inputAreaHeight, minHeight: 120, maxHeight: 500, flexShrink: 0, display: 'flex', flexDirection: 'column' as const, overflow: 'auto' }}>
       <ConstraintsBar projectId={projectId} onChange={handleConstraintsChange} />
 
       {/* Generation Settings */}
