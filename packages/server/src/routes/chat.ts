@@ -1043,28 +1043,46 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       }],
     }));
 
-    try {
-      const genai = new GoogleGenerativeAI(apiKey);
-      const model = genai.getGenerativeModel({
-        model: getGeminiModel(),
-        systemInstruction: effectiveSystemPrompt,
-        generationConfig: { maxOutputTokens: 65536, temperature: generationTemperature },
-      });
-      const chatSession = model.startChat({ history: trimmedHistory });
-      const result = await chatSession.sendMessageStream(userContent);
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
-        if (text) {
-          fullResponse += text;
-          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+    // Generate with auto-retry on 429 (rotate to different API key)
+    let currentKey = apiKey;
+    let retries = 0;
+    const maxRetries = 2;
+    while (retries <= maxRetries) {
+      try {
+        const genai = new GoogleGenerativeAI(currentKey);
+        const model = genai.getGenerativeModel({
+          model: getGeminiModel(),
+          systemInstruction: effectiveSystemPrompt,
+          generationConfig: { maxOutputTokens: 65536, temperature: generationTemperature },
+        });
+        const chatSession = model.startChat({ history: trimmedHistory });
+        const result = await chatSession.sendMessageStream(userContent);
+        for await (const chunk of result.stream) {
+          const text = chunk.text();
+          if (text) {
+            fullResponse += text;
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          }
         }
+        try { const resp = await result.response; trackUsage(currentKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
+        break; // success
+      } catch (err: any) {
+        const msg = err?.message || '';
+        const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
+        if (isRateLimit && retries < maxRetries) {
+          const altKey = getGeminiApiKeyExcluding(currentKey);
+          if (altKey) {
+            console.warn(`[chat] 429 on key ...${currentKey.slice(-4)}, retrying with ...${altKey.slice(-4)} (attempt ${retries + 1})`);
+            currentKey = altKey;
+            retries++;
+            continue;
+          }
+        }
+        console.error('Gemini API error:', err);
+        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+        res.end();
+        return;
       }
-      try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
-    } catch (err: any) {
-      console.error('Gemini API error:', err);
-      res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-      res.end();
-      return;
     }
 
     // Save user message
