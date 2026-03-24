@@ -137,6 +137,11 @@ export default function WorkspacePage() {
 
   // Focus mode state
   const [focusMode, setFocusMode] = useState(false);
+  const [chatPaneWidth, setChatPaneWidth] = useState(() => {
+    const saved = localStorage.getItem('pb-chat-pane-width');
+    return saved ? parseInt(saved, 10) : 350;
+  });
+  const chatResizing = useRef(false);
 
   // Keyboard shortcuts help overlay state
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -1327,7 +1332,7 @@ export default function WorkspacePage() {
       <div style={styles.body}>
         <div style={styles.chatPaneWrapper}>
         {isReadOnly && <div style={styles.readOnlyOverlay} data-testid="readonly-overlay" />}
-        <div style={{ ...styles.chatPane, ...(focusMode ? { width: 0, overflow: 'hidden', borderRight: 'none' } : {}) }}>
+        <div style={{ ...styles.chatPane, width: focusMode ? 0 : chatPaneWidth, ...(focusMode ? { overflow: 'hidden', borderRight: 'none' } : {}) }}>
           {/* Tab switcher */}
           <div style={styles.tabBar}>
             <button
@@ -1380,6 +1385,36 @@ export default function WorkspacePage() {
           </div>
         </div>
         </div>
+        {/* Resize handle for chat pane */}
+        {!focusMode && (
+          <div
+            style={{ width: 5, cursor: 'col-resize', background: 'transparent', flexShrink: 0, zIndex: 20, transition: 'background 0.15s' }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              chatResizing.current = true;
+              const startX = e.clientX;
+              const startW = chatPaneWidth;
+              const handle = e.currentTarget as HTMLDivElement;
+              handle.style.background = 'var(--accent, #8E6FA7)';
+              const onMove = (ev: MouseEvent) => {
+                if (!chatResizing.current) return;
+                const newW = Math.max(250, Math.min(700, startW + (ev.clientX - startX)));
+                setChatPaneWidth(newW);
+              };
+              const onUp = () => {
+                chatResizing.current = false;
+                handle.style.background = 'transparent';
+                localStorage.setItem('pb-chat-pane-width', String(chatPaneWidth));
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--border-primary, #e2e8f0)'; }}
+            onMouseLeave={(e) => { if (!chatResizing.current) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+          />
+        )}
         <div style={styles.previewPane} ref={iframeContainerRef}>
           {viewMode === 'code' ? (
             /* Code view */
@@ -1963,7 +1998,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   chatPane: {
-    width: '300px',
+    width: '350px', // default, overridden by chatPaneWidth state
     flexShrink: 0,
     borderRight: '1px solid var(--border-primary)',
     overflow: 'hidden',

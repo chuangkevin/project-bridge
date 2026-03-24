@@ -1,7 +1,25 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db/connection';
-import { requireAdmin } from '../middleware/auth';
+
+// Accept both new session auth AND legacy admin password token
+function requireSkillAdmin(req: Request, res: Response, next: NextFunction): void {
+  // 1. New session auth
+  if (req.user?.role === 'admin') { next(); return; }
+
+  // 2. Legacy admin token from settings table
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const stored = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_token'").get() as { value: string } | undefined;
+    const expiry = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_expiry'").get() as { value: string } | undefined;
+    if (stored?.value === token && expiry?.value && new Date(expiry.value) > new Date()) {
+      next(); return;
+    }
+  }
+
+  res.status(401).json({ error: '需要管理員權限' });
+}
 
 const router = Router();
 
@@ -52,7 +70,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 // POST /api/skills — create skill (admin only)
-router.post('/', requireAdmin, (req: Request, res: Response) => {
+router.post('/', requireSkillAdmin, (req: Request, res: Response) => {
   try {
     const { name, description, content, scope, project_id } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -83,7 +101,7 @@ router.post('/', requireAdmin, (req: Request, res: Response) => {
 });
 
 // PUT /api/skills/:id — update skill (admin only)
-router.put('/:id', requireAdmin, (req: Request, res: Response) => {
+router.put('/:id', requireSkillAdmin, (req: Request, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM agent_skills WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Skill not found' });
@@ -116,7 +134,7 @@ router.put('/:id', requireAdmin, (req: Request, res: Response) => {
 });
 
 // DELETE /api/skills/:id — delete skill (admin only)
-router.delete('/:id', requireAdmin, (req: Request, res: Response) => {
+router.delete('/:id', requireSkillAdmin, (req: Request, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM agent_skills WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Skill not found' });
@@ -129,7 +147,7 @@ router.delete('/:id', requireAdmin, (req: Request, res: Response) => {
 });
 
 // PATCH /api/skills/:id/toggle — toggle enabled (admin only)
-router.patch('/:id/toggle', requireAdmin, (req: Request, res: Response) => {
+router.patch('/:id/toggle', requireSkillAdmin, (req: Request, res: Response) => {
   try {
     const skill = db.prepare('SELECT * FROM agent_skills WHERE id = ?').get(req.params.id) as AgentSkill | undefined;
     if (!skill) return res.status(404).json({ error: 'Skill not found' });
