@@ -259,11 +259,12 @@ export default function WorkspacePage() {
       if (convRes.ok) {
         const convData = await convRes.json();
         setMessages(
-          convData.map((c: { id: string; role: string; content: string; message_type?: string }) => ({
+          convData.map((c: { id: string; role: string; content: string; message_type?: string; metadata?: string }) => ({
             id: c.id,
             role: c.role as 'user' | 'assistant',
             content: stripFileContent(c.content),
             messageType: (c.message_type as 'user' | 'generate' | 'answer') || undefined,
+            metadata: c.metadata ? (() => { try { return JSON.parse(c.metadata); } catch { return undefined; } })() : undefined,
           }))
         );
       }
