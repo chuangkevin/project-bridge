@@ -968,8 +968,11 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // When user explicitly requests pages or force regenerate, ALWAYS re-analyze
     if (isPageRequest || effectiveForceRegenerate) {
+      console.log('[chat] isPageRequest=true, forcing analyzePageStructure...');
       const pageStructure = await analyzePageStructure(userContent.slice(0, 8000), apiKey);
-      finalPages = pageStructure.pages.length > 0 ? pageStructure.pages : existingPages;
+      console.log('[chat] analyzer returned:', pageStructure.pages);
+      // Do NOT fallback to existingPages — if analyzer fails, generate as single page
+      finalPages = pageStructure.pages;
       isMultiPage = finalPages.length > 1;
     } else if (archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0) {
       // Use architecture data

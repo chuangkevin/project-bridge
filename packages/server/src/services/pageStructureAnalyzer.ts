@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getGeminiModel, trackUsage, getGeminiApiKeyExcluding } from './geminiKeys';
 
 export interface PageStructure {
   multiPage: boolean;
@@ -7,6 +7,8 @@ export interface PageStructure {
 }
 
 export async function analyzePageStructure(message: string, apiKey: string): Promise<PageStructure> {
+  let currentKey = apiKey;
+  for (let attempt = 0; attempt < 3; attempt++) {
   try {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
@@ -42,14 +44,23 @@ Examples:
     });
 
     const result = await model.generateContent(message.slice(0, 8000));
-    try { trackUsage(apiKey, getGeminiModel(), 'page-structure', result.response.usageMetadata); } catch {}
+    try { trackUsage(currentKey, getGeminiModel(), 'page-structure', result.response.usageMetadata); } catch {}
     const content = result.response.text();
+    console.log('[pageStructure] Raw response:', content);
     const parsed = JSON.parse(content);
     return {
       multiPage: !!parsed.multiPage,
       pages: Array.isArray(parsed.pages) ? parsed.pages : [],
     };
-  } catch {
+  } catch (err: any) {
+    const msg = err?.message || '';
+    if ((msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) && attempt < 2) {
+      const altKey = getGeminiApiKeyExcluding(currentKey);
+      if (altKey) { currentKey = altKey; console.warn(`[pageStructure] 429, retry with different key (attempt ${attempt + 1})`); continue; }
+    }
+    console.error('[pageStructure] Failed:', msg.slice(0, 100));
     return { multiPage: false, pages: [] };
   }
+  }
+  return { multiPage: false, pages: [] };
 }
