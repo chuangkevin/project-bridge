@@ -86,6 +86,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [activeSkillNames, setActiveSkillNames] = useState<string[]>([]);
   const [lastThinkingSummary, setLastThinkingSummary] = useState('');
   const [lastSkillNames, setLastSkillNames] = useState<string[]>([]);
+  const [lastGenerationSummary, setLastGenerationSummary] = useState('');
+  const [lastGeneratedPages, setLastGeneratedPages] = useState<string[]>([]);
   const [inputAreaHeight, setInputAreaHeight] = useState(() => {
     const saved = localStorage.getItem('pb-input-area-height');
     return saved ? parseInt(saved, 10) : 180;
@@ -377,6 +379,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setActiveSkillNames([]);
     setTokenCount(0);
     setError(null);
+    setLastGenerationSummary('');
+    setLastGeneratedPages([]);
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -453,6 +457,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             if (data.type === 'skills' && Array.isArray(data.skills)) {
               setActiveSkillNames(data.skills);
             }
+            if (data.type === 'pages' && Array.isArray(data.pages)) {
+              setLastGeneratedPages(data.pages);
+              setThinkingContent(prev => prev + '\n\n📄 偵測到 ' + data.pages.length + ' 個頁面: ' + data.pages.join(', '));
+            }
             if (data.type === 'phase') {
               if (data.phase === 'analyzing' || data.phase === 'planning' || data.phase === 'generating' || data.phase === 'done') {
                 setGenerationPhase(data.phase);
@@ -485,6 +493,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               }
               if (data.pages) {
                 receivedPages = data.pages;
+                setLastGeneratedPages(data.pages);
+              }
+              if (data.summary) {
+                setLastGenerationSummary(data.summary);
               }
             }
           } catch {
@@ -741,17 +753,45 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                     <span style={styles.generateTag}>✅ 已生成子頁</span>
                   </div>
                 ) : (msg.messageType === 'generate' || isHtmlContent(msg.content)) ? (
-                  <div style={styles.generateBubble}>
-                    <span style={styles.generateTag}>✅ 已生成原型</span>
-                    {/* Show thinking summary and skills for the most recent generation */}
+                  <div style={{ ...styles.assistantBubble, padding: '12px 16px' }}>
+                    {/* Reasoning — collapsible */}
                     {idx === messages.length - 1 && lastThinkingSummary && (
-                      <details style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary, #64748b)' }}>
-                        <summary style={{ cursor: 'pointer', userSelect: 'none' }}>🧠 思考過程</summary>
-                        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 11, margin: '4px 0', maxHeight: 150, overflow: 'auto', background: 'var(--bg-hover, #f1f5f9)', padding: 8, borderRadius: 6 }}>{lastThinkingSummary}</pre>
+                      <details style={{ marginBottom: 8 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--accent, #8E6FA7)', userSelect: 'none' as const }}>
+                          🧠 Reasoning
+                        </summary>
+                        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 12, color: 'var(--text-secondary, #64748b)', margin: '6px 0 0', lineHeight: 1.5 }}>
+                          {lastThinkingSummary}
+                        </pre>
                       </details>
                     )}
+
+                    {/* Generated pages — collapsible */}
+                    {idx === messages.length - 1 && lastGeneratedPages.length > 0 && (
+                      <details style={{ marginBottom: 8 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #1e293b)', userSelect: 'none' as const }}>
+                          📄 生成了 {lastGeneratedPages.length} 個頁面
+                        </summary>
+                        <div style={{ margin: '6px 0 0', fontSize: 12 }}>
+                          {lastGeneratedPages.map(p => (
+                            <div key={p} style={{ padding: '2px 0', color: 'var(--text-secondary, #64748b)' }}>✓ {p}</div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {/* Summary */}
+                    {idx === messages.length - 1 && lastGenerationSummary ? (
+                      <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary, #1e293b)', whiteSpace: 'pre-wrap' }}>
+                        {lastGenerationSummary}
+                      </div>
+                    ) : (
+                      <span style={styles.generateTag}>✅ 已生成原型</span>
+                    )}
+
+                    {/* Skills used */}
                     {idx === messages.length - 1 && lastSkillNames.length > 0 && (
-                      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>
+                      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>
                         🔧 Skills: {lastSkillNames.join(', ')}
                       </div>
                     )}

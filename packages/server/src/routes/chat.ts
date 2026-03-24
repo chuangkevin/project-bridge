@@ -1269,7 +1269,30 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?"
       ).run(projectId);
 
-      res.write(`data: ${JSON.stringify({ done: true, html, messageType: generateMessageType, intent, isMultiPage, pages: finalPages })}\n\n`);
+      // Send page list as separate event before done
+      if (finalPages.length > 0) {
+        res.write(`data: ${JSON.stringify({ type: 'pages', pages: finalPages })}\n\n`);
+      }
+
+      // Quick summary call (after generation completes)
+      let generationSummary = '';
+      try {
+        const summaryGenai = new GoogleGenerativeAI(currentKey);
+        const summaryModel = summaryGenai.getGenerativeModel({
+          model: getGeminiModel(),
+          generationConfig: { maxOutputTokens: 500, temperature: 0.3 },
+        });
+        const summaryPrompt = `你是 UI 設計助手。以下是剛生成的 HTML prototype。請用繁體中文簡短描述（3-5 行）：
+1. 這個網站/應用的概述（1行）
+2. 主要功能（用 • 列點，每個頁面一點）
+
+直接回答，不要加標題。HTML 如下（前2000字）：
+${html.slice(0, 2000)}`;
+        const summaryResult = await summaryModel.generateContent(summaryPrompt);
+        generationSummary = summaryResult.response.text();
+      } catch { /* ignore summary failure */ }
+
+      res.write(`data: ${JSON.stringify({ done: true, html, messageType: generateMessageType, intent, isMultiPage, pages: finalPages, summary: generationSummary, pageCount: finalPages.length })}\n\n`);
     } else {
       res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: generateMessageType, intent })}\n\n`);
     }
