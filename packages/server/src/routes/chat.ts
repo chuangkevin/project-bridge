@@ -245,6 +245,23 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     if (isPageRequest) {
       intent = 'full-page';
     } else if (currentPrototype && !effectiveForceRegenerate && (intent === 'full-page' || intent === 'in-shell')) {
+      // Ambiguous: user sent a generation-like message but prototype exists
+      // Ask user to choose: micro-adjust or regenerate
+      if (!forceRegenerate && isObviousGenerate) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.write(`data: ${JSON.stringify({
+          type: 'confirm',
+          message: '已有原型，請選擇操作方式：',
+          options: [
+            { id: 'micro-adjust', label: '✏️ 微調現有原型', description: '在目前的設計上修改' },
+            { id: 'regenerate', label: '🔄 重新生成', description: '從頭重新設計所有頁面' },
+          ]
+        })}\n\n`);
+        res.end();
+        return;
+      }
       intent = 'micro-adjust';
     }
 

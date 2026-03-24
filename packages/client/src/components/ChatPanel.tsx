@@ -95,6 +95,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; options: { id: string; label: string; description: string }[]; originalText: string } | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -460,6 +461,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             if (data.error) {
               setError(data.error);
               break;
+            }
+            // Handle confirm dialog (server asks user to choose)
+            if (data.type === 'confirm') {
+              setStreaming(false);
+              setConfirmDialog({ message: data.message, options: data.options, originalText: text });
+              return; // stop processing, wait for user choice
             }
             // Handle thinking transparency events
             if (data.type === 'thinking' && data.content) {
@@ -854,6 +861,44 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           <div style={styles.assistantMsgRow}>
             <div style={styles.assistantBubble}>
               <span style={styles.thinking}>思考中...</span>
+            </div>
+          </div>
+        )}
+        {/* Confirm dialog — server asks user to choose action */}
+        {confirmDialog && (
+          <div style={styles.assistantMsgRow}>
+            <div style={{ ...styles.assistantBubble, padding: '14px 18px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-primary)' }}>{confirmDialog.message}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {confirmDialog.options.map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      const origText = confirmDialog.originalText;
+                      setConfirmDialog(null);
+                      if (opt.id === 'regenerate') {
+                        sendMessage(origText, { forceRegenerate: true });
+                      } else {
+                        sendMessage(origText);
+                      }
+                    }}
+                    style={{
+                      padding: '10px 16px',
+                      border: opt.id === 'regenerate' ? '2px solid var(--accent, #8E6FA7)' : '1px solid var(--border-primary)',
+                      borderRadius: 10,
+                      background: opt.id === 'regenerate' ? 'var(--accent-light, rgba(142,111,167,0.08))' : 'var(--bg-secondary)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      flex: 1,
+                      minWidth: 140,
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{opt.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{opt.description}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
