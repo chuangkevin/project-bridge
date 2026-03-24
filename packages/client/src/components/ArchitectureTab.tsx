@@ -20,13 +20,29 @@ export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchT
   const handleImportFromPrototype = async () => {
     setImporting(true);
     try {
+      // Fetch prototype HTML and pages
       const res = await fetch(`/api/projects/${projectId}/prototype`);
       if (!res.ok) return;
       const data = await res.json();
       let pageNames: string[] = data.pages || [];
       if (pageNames.length === 0) {
-        // Single-page prototype — create one node named "主頁面"
         pageNames = ['主頁面'];
+      }
+
+      // Try AI analysis of HTML to extract navigation links
+      let edges: { id: string; source: string; target: string }[] = [];
+      if (data.html && pageNames.length > 1) {
+        try {
+          const analyzeRes = await fetch(`/api/projects/${projectId}/architecture/analyze-html`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ html: data.html, pages: pageNames }),
+          });
+          if (analyzeRes.ok) {
+            const analysis = await analyzeRes.json();
+            edges = analysis.edges || [];
+          }
+        } catch { /* fallback: no edges */ }
       }
 
       const nodes = pageNames.map((name, i) => ({
@@ -41,15 +57,15 @@ export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchT
         components: [],
       }));
 
-      const archData: ArchData = {
+      const newArchData: ArchData = {
         type: 'page',
         subtype: 'website',
         aiDecidePages: false,
         nodes,
-        edges: [],
+        edges,
       };
-      await patchArchData(projectId, archData);
-      setArchData(archData);
+      await patchArchData(projectId, newArchData);
+      setArchData(newArchData);
     } catch (err) {
       console.error('Failed to import from prototype:', err);
     } finally {
@@ -115,6 +131,16 @@ export default function ArchitectureTab({ projectId, onSwitchToDesign, onSwitchT
         projectId={projectId}
         onSwitchToDesign={onSwitchToDesign}
         onGenerate={onSwitchToDesignAndGenerate}
+        extraToolbar={
+          <button
+            type="button"
+            onClick={handleImportFromPrototype}
+            disabled={importing}
+            style={{ background: 'none', border: '1px solid #C4A8DC', borderRadius: 8, color: '#8E6FA7', fontSize: 12, padding: '5px 12px', cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }}
+          >
+            {importing ? '分析中...' : '⬆ 從設計重新產生架構'}
+          </button>
+        }
       />
     </div>
   );

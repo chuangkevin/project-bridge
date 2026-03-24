@@ -27,6 +27,7 @@ interface Props {
   onSwitchToDesign: () => void;
   onGenerate?: () => void;
   onArchDataChange?: (data: any) => void;
+  extraToolbar?: React.ReactNode;
 }
 
 interface AnalysisSummaryPage {
@@ -45,7 +46,7 @@ interface AnalysisSummary {
   documentTypes: string[];
 }
 
-export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate, onArchDataChange }: Props) {
+export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate, onArchDataChange, extraToolbar }: Props) {
   const { archData, patchArchData } = useArchStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -447,6 +448,7 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
         }}>
           💾 儲存版本
         </button>
+        {extraToolbar}
         <button type="button" className="arch-flowchart-toolbar-btn-primary" onClick={onGenerate ?? onSwitchToDesign}>
           開始生成 ▶
         </button>

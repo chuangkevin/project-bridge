@@ -73,6 +73,75 @@ router.get('/:id/architecture', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/projects/:id/architecture/analyze-html — extract navigation edges from prototype HTML
+router.post('/:id/architecture/analyze-html', async (req: Request, res: Response) => {
+  try {
+    const { html, pages } = req.body;
+    if (!html || !pages || !Array.isArray(pages)) {
+      return res.status(400).json({ error: 'html and pages required' });
+    }
+
+    // Parse showPage('...') calls from HTML to find navigation edges
+    const edges: { id: string; source: string; target: string }[] = [];
+    const pageSet = new Set(pages as string[]);
+
+    // Match showPage('pageName') or showPage("pageName") patterns
+    const showPageRegex = /showPage\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g;
+
+    // For each page section, find which pages it links to
+    // The HTML is multi-page with <!-- PAGE: name --> markers or data-page attributes
+    const pageSections: { name: string; html: string }[] = [];
+    const pageMarkerRegex = /<!--\s*PAGE:\s*(.+?)\s*-->|data-page="([^"]+)"/g;
+    let lastIndex = 0;
+    let lastPageName = pages[0];
+    let match;
+
+    // Simple split by page markers
+    const markers: { name: string; index: number }[] = [];
+    while ((match = pageMarkerRegex.exec(html)) !== null) {
+      markers.push({ name: match[1] || match[2], index: match.index });
+    }
+
+    if (markers.length > 0) {
+      for (let i = 0; i < markers.length; i++) {
+        const start = markers[i].index;
+        const end = i + 1 < markers.length ? markers[i + 1].index : html.length;
+        pageSections.push({ name: markers[i].name, html: html.slice(start, end) });
+      }
+    } else {
+      // Single section, scan entire HTML
+      pageSections.push({ name: pages[0], html });
+    }
+
+    const edgeSet = new Set<string>();
+    for (const section of pageSections) {
+      const sourceIdx = pages.indexOf(section.name);
+      if (sourceIdx === -1) continue;
+      const sourceId = `page-imported-${sourceIdx}`;
+
+      let spMatch;
+      const sectionRegex = /showPage\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g;
+      while ((spMatch = sectionRegex.exec(section.html)) !== null) {
+        const targetPage = spMatch[1];
+        const targetIdx = pages.indexOf(targetPage);
+        if (targetIdx !== -1 && targetIdx !== sourceIdx) {
+          const targetId = `page-imported-${targetIdx}`;
+          const edgeKey = `${sourceId}->${targetId}`;
+          if (!edgeSet.has(edgeKey)) {
+            edgeSet.add(edgeKey);
+            edges.push({ id: `edge-${sourceId}-${targetId}`, source: sourceId, target: targetId });
+          }
+        }
+      }
+    }
+
+    return res.json({ edges });
+  } catch (err: any) {
+    console.error('Error analyzing HTML:', err);
+    return res.status(500).json({ error: 'Failed to analyze HTML' });
+  }
+});
+
 // PATCH /api/projects/:id/architecture
 router.patch('/:id/architecture', (req: Request, res: Response) => {
   try {
