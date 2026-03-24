@@ -29,6 +29,7 @@ import forkRouter from './routes/fork';
 import pageMappingsRouter from './routes/pageMappings';
 import skillsRouter from './routes/skills';
 import { authMiddleware } from './middleware/auth';
+import { syncSkillsFromDirectory } from './services/skillSync';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -80,6 +81,11 @@ if (process.env.NODE_ENV === 'production') {
 
 // Run migrations on startup
 runMigrations();
+
+// Sync skills from external directory (SKILLS_DIR env var)
+if (process.env.SKILLS_DIR) {
+  syncSkillsFromDirectory(process.env.SKILLS_DIR);
+}
 
 app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
