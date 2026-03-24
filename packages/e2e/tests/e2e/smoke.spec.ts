@@ -18,20 +18,20 @@ test.describe('煙霧測試 — 關鍵路徑', () => {
 
     // 點擊「新增專案」
     await page.getByRole('button', { name: '新增專案' }).click();
-    await expect(page.getByText('專案名稱')).toBeVisible();
+    await expect(page.getByText('新增專案').first()).toBeVisible();
 
-    // 輸入名稱並建立
+    // 選擇模式（預設架構設計）+ 輸入名稱
     await page.getByPlaceholder('我的原型專案').fill('煙霧測試專案');
-    await page.getByRole('button', { name: '建立' }).click();
+    await page.getByTestId('create-project-btn').click();
 
-    // 驗證跳轉到工作區（架構圖 wizard）
+    // 驗證跳轉到工作區
     await expect(page).toHaveURL(/\/project\/[\w-]+/, { timeout: 10000 });
     const url = page.url();
     const idMatch = url.match(/\/project\/([\w-]+)/);
     if (idMatch) createdProjectIds.push(idMatch[1]);
 
     // 驗證在架構圖 wizard 畫面
-    await expect(page.getByText('你想設計的是？')).toBeVisible();
+    await expect(page.getByText('你想設計的是？')).toBeVisible({ timeout: 10000 });
 
     // 返回首頁驗證卡片
     await page.goto('/');
@@ -134,27 +134,33 @@ test.describe('煙霧測試 — 關鍵路徑', () => {
   });
 
   test('刪除專案', async ({ page, request }) => {
+    // Use unique name to avoid leftover conflicts
+    const delName = `煙霧測試-刪除-${Date.now()}`;
     const res = await request.post(`${API}/api/projects`, {
-      data: { name: '煙霧測試-刪除' },
+      data: { name: delName },
     });
     const project = await res.json();
+    createdProjectIds.push(project.id);
 
     await page.goto('/');
-    await expect(page.getByText('煙霧測試-刪除')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(delName)).toBeVisible({ timeout: 10000 });
 
-    // 設定 dialog 自動確認
-    page.on('dialog', dialog => dialog.accept());
+    // Click delete button on the card
+    const card = page.getByTestId(`project-card-${project.id}`);
+    await card.getByTestId(`delete-project-${project.id}`).click();
 
-    // 找到刪除按鈕（在專案卡片上）
-    const card = page.locator('[data-testid="project-card"]', { hasText: '煙霧測試-刪除' });
-    if (await card.count() > 0) {
-      await card.getByRole('button', { name: '刪除' }).click();
+    // GitHub-style delete modal: type project name to confirm
+    const modal = page.locator('text=刪除專案');
+    if (await modal.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await page.locator('input[placeholder]').last().fill(delName);
+      await page.getByRole('button', { name: '刪除此專案' }).click();
     } else {
-      // Fallback: 用 API 刪除
+      // Fallback: API delete
       await request.delete(`${API}/api/projects/${project.id}`);
     }
 
+    await page.waitForTimeout(1000);
     await page.reload();
-    await expect(page.getByText('煙霧測試-刪除')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(delName)).not.toBeVisible({ timeout: 5000 });
   });
 });
