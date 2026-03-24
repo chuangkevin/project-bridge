@@ -13,9 +13,24 @@ router.get('/:id/api-bindings', (req: Request, res: Response) => {
     const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    const bindings = db.prepare(
-      'SELECT * FROM api_bindings WHERE project_id = ? ORDER BY created_at ASC'
-    ).all(projectId);
+    const pageName = req.query.page_name as string | undefined;
+    const pageLevel = req.query.page_level as string | undefined;
+
+    let bindings: any[];
+    if (pageLevel === 'true') {
+      // Return only page-level bindings (page_name IS NOT NULL, no element bridge_id association)
+      bindings = db.prepare(
+        'SELECT * FROM api_bindings WHERE project_id = ? AND page_name IS NOT NULL ORDER BY created_at ASC'
+      ).all(projectId);
+    } else if (pageName) {
+      bindings = db.prepare(
+        'SELECT * FROM api_bindings WHERE project_id = ? AND page_name = ? ORDER BY created_at ASC'
+      ).all(projectId, pageName);
+    } else {
+      bindings = db.prepare(
+        'SELECT * FROM api_bindings WHERE project_id = ? ORDER BY created_at ASC'
+      ).all(projectId);
+    }
 
     return res.json(bindings.map(formatBinding));
   } catch (err: any) {
@@ -31,7 +46,7 @@ router.post('/:id/api-bindings', (req: Request, res: Response) => {
     const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    const { bridgeId, method, url, params, responseSchema, fieldMappings } = req.body;
+    const { bridgeId, method, url, params, responseSchema, fieldMappings, pageName } = req.body;
 
     if (!bridgeId || typeof bridgeId !== 'string') {
       return res.status(400).json({ error: 'bridgeId is required' });
@@ -46,14 +61,15 @@ router.post('/:id/api-bindings', (req: Request, res: Response) => {
     const paramsJson = safeJson(params, '[]');
     const responseSchemaJson = safeJson(responseSchema, '{}');
     const fieldMappingsJson = safeJson(fieldMappings, '[]');
+    const pageNameValue = (pageName && typeof pageName === 'string') ? pageName : null;
 
     const id = uuidv4();
     const now = new Date().toISOString();
 
     db.prepare(
-      `INSERT INTO api_bindings (id, project_id, bridge_id, method, url, params, response_schema, field_mappings, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, projectId, bridgeId, m, url || '', paramsJson, responseSchemaJson, fieldMappingsJson, now, now);
+      `INSERT INTO api_bindings (id, project_id, bridge_id, method, url, params, response_schema, field_mappings, page_name, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, projectId, bridgeId, m, url || '', paramsJson, responseSchemaJson, fieldMappingsJson, pageNameValue, now, now);
 
     const row = db.prepare('SELECT * FROM api_bindings WHERE id = ?').get(id);
     return res.status(201).json(formatBinding(row));
@@ -72,7 +88,7 @@ router.put('/:id/api-bindings/:bindingId', (req: Request, res: Response) => {
     ).get(bindingId, projectId);
     if (!existing) return res.status(404).json({ error: 'Binding not found' });
 
-    const { method, url, params, responseSchema, fieldMappings } = req.body;
+    const { method, url, params, responseSchema, fieldMappings, pageName } = req.body;
 
     const m = method ? method.toUpperCase() : (existing as any).method;
     if (method && !VALID_METHODS.includes(m)) {
@@ -81,7 +97,7 @@ router.put('/:id/api-bindings/:bindingId', (req: Request, res: Response) => {
 
     const now = new Date().toISOString();
     db.prepare(
-      `UPDATE api_bindings SET method = ?, url = ?, params = ?, response_schema = ?, field_mappings = ?, updated_at = ?
+      `UPDATE api_bindings SET method = ?, url = ?, params = ?, response_schema = ?, field_mappings = ?, page_name = ?, updated_at = ?
        WHERE id = ?`
     ).run(
       m,
@@ -89,6 +105,7 @@ router.put('/:id/api-bindings/:bindingId', (req: Request, res: Response) => {
       params !== undefined ? safeJson(params, (existing as any).params) : (existing as any).params,
       responseSchema !== undefined ? safeJson(responseSchema, (existing as any).response_schema) : (existing as any).response_schema,
       fieldMappings !== undefined ? safeJson(fieldMappings, (existing as any).field_mappings) : (existing as any).field_mappings,
+      pageName !== undefined ? (pageName || null) : (existing as any).page_name,
       now,
       bindingId
     );
@@ -178,7 +195,7 @@ router.get('/:id/api-bindings/export', (req: Request, res: Response) => {
     // Group bindings by page (parse page prefix from bridge-id if present, e.g. "page1-btn" -> "page1")
     const pages: Record<string, any[]> = {};
     for (const b of bindings) {
-      const pageName = extractPageFromBridgeId(b.bridge_id);
+      const pageName = b.page_name || extractPageFromBridgeId(b.bridge_id);
       if (!pages[pageName]) pages[pageName] = [];
       pages[pageName].push({
         bridgeId: b.bridge_id,
@@ -187,6 +204,8 @@ router.get('/:id/api-bindings/export', (req: Request, res: Response) => {
         params: safeParse(b.params, []),
         responseSchema: safeParse(b.response_schema, {}),
         fieldMappings: safeParse(b.field_mappings, []),
+        pageName: b.page_name || null,
+        isPageLevel: !!(b.page_name),
         outgoingDependencies: outgoingDepsMap[b.bridge_id] || [],
         incomingDependencies: incomingDepsMap[b.bridge_id] || [],
         constraint: constraintMap[b.bridge_id] || null,
@@ -237,6 +256,7 @@ function formatBinding(row: any) {
     params: safeParse(row.params, []),
     responseSchema: safeParse(row.response_schema, {}),
     fieldMappings: safeParse(row.field_mappings, []),
+    pageName: row.page_name || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
