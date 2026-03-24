@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useArchStore, ArchData, ArchNode, ArchEdge } from '../stores/useArchStore';
+import { compressImage } from '../utils/imageCompress';
 
 interface Props {
   projectId: string;
@@ -99,8 +100,9 @@ export default function ArchWizard({ projectId, onComplete, onSkip }: Props) {
     uploadReferenceImage(uploadingFor, file);
   };
 
-  const uploadReferenceImage = async (_pageIndex: number, file: File) => {
+  const uploadReferenceImage = async (_pageIndex: number, rawFile: File) => {
     setUploadStatus('uploading');
+    const file = await compressImage(rawFile);
     const form = new FormData();
     form.append('file', file);
     try {

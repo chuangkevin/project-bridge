@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
 import AnalysisPreviewPanel from './AnalysisPreviewPanel';
+import { compressImage } from '../utils/imageCompress';
 
 function isHtmlContent(content: string): boolean {
   const t = content.trimStart().toLowerCase();
@@ -204,10 +205,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     }
   }, [projectId]);
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = async (rawFile: File) => {
     setUploading(true);
     setUploadProgress(0);
     try {
+      // Compress large images before upload (prevent server OOM)
+      const file = await compressImage(rawFile);
       const formData = new FormData();
       formData.append('file', file);
 

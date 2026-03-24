@@ -15,6 +15,7 @@ import './ArchFlowchart.css';
 import { useArchStore, type ArchNode } from '../stores/useArchStore';
 import ArchPageNode from './ArchPageNode';
 import ArchComponentNode from './ArchComponentNode';
+import { compressImage } from '../utils/imageCompress';
 
 const nodeTypes = {
   page: ArchPageNode,
@@ -196,7 +197,8 @@ export default function ArchFlowchart({ projectId, onSwitchToDesign, onGenerate,
   }, [edges, saveChanges]);
   handleComponentsChangeRef.current = handleComponentsChange;
 
-  const uploadFile = useCallback(async (file: File, nodeId: string) => {
+  const uploadFile = useCallback(async (rawFile: File, nodeId: string) => {
+    const file = await compressImage(rawFile);
     const nodeName = nodes.find(n => n.id === nodeId)?.data.name as string || '';
     const form = new FormData();
     form.append('file', file);
