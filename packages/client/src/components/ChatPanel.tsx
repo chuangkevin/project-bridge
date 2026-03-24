@@ -78,7 +78,11 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const [generationPhase, setGenerationPhase] = useState<'idle' | 'thinking' | 'writing' | 'finalizing' | 'parallel'>('idle');
+  const [generationPhase, setGenerationPhase] = useState<'idle' | 'analyzing' | 'planning' | 'generating' | 'done' | 'parallel'>('idle');
+  const [thinkingContent, setThinkingContent] = useState('');
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
+  const [tokenCount, setTokenCount] = useState(0);
+  const thinkingEndRef = useRef<HTMLDivElement>(null);
   const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +110,19 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
+
+  // Auto-scroll thinking panel
+  useEffect(() => {
+    thinkingEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thinkingContent]);
+
+  // Auto-collapse thinking panel 1s after generation completes
+  useEffect(() => {
+    if (generationPhase === 'done') {
+      const t = setTimeout(() => setThinkingExpanded(false), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [generationPhase]);
 
   const fetchArtStyle = useCallback(async () => {
     try {
@@ -354,7 +371,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setInput('');
     setStreaming(true);
     setStreamingContent('');
-    setGenerationPhase('thinking');
+    setGenerationPhase('analyzing');
+    setThinkingContent('');
+    setThinkingExpanded(true);
+    setTokenCount(0);
     setError(null);
 
     const userMsg: ChatMessage = {
@@ -425,8 +445,17 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               setError(data.error);
               break;
             }
-            // Handle parallel generation progress events
-            if (data.phase) {
+            // Handle thinking transparency events
+            if (data.type === 'thinking' && data.content) {
+              setThinkingContent(prev => prev + data.content);
+            }
+            if (data.type === 'phase') {
+              if (data.phase === 'analyzing' || data.phase === 'planning' || data.phase === 'generating' || data.phase === 'done') {
+                setGenerationPhase(data.phase);
+              }
+            }
+            // Handle parallel generation progress events (no type field)
+            if (!data.type && data.phase) {
               setGenerationPhase('parallel');
               if (data.phase === 'planning' || data.phase === 'tokens' || data.phase === 'assembling') {
                 setParallelMessage(data.message || data.phase);
@@ -435,15 +464,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 setPageProgress(prev => ({ ...prev, [data.page]: data.status || 'started' }));
               }
             }
-            if (data.content) {
+            if (data.content && data.type !== 'thinking') {
               fullContent += data.content;
               setStreamingContent(fullContent);
-              const len = fullContent.length;
-              if (len > 2000) {
-                setGenerationPhase('finalizing');
-              } else if (len > 200) {
-                setGenerationPhase('writing');
-              }
+              setTokenCount(fullContent.length);
             }
             if (data.done) {
               if (data.html) {
@@ -500,6 +524,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       setGenerationPhase('idle');
       setPageProgress({});
       setParallelMessage('');
+      setTokenCount(0);
     }
   };
 
@@ -565,31 +590,64 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             </div>
           ) : (
             <>
+              {/* Thinking Panel — only shown for generation (not question/micro-adjust) */}
+              {streaming && thinkingContent && (
+                <div style={{ background: '#f8f5ff', border: '1px solid #e8dff5', borderRadius: 8, margin: '8px 0', overflow: 'hidden' }} data-testid="thinking-panel">
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', userSelect: 'none' as const }}
+                    onClick={() => setThinkingExpanded(prev => !prev)}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#8E6FA7' }}>
+                      {'\uD83E\uDDE0'} AI 正在思考...
+                    </span>
+                    <button
+                      type="button"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#8E6FA7', padding: '2px 6px' }}
+                      onClick={(e) => { e.stopPropagation(); setThinkingExpanded(prev => !prev); }}
+                    >
+                      {thinkingExpanded ? '收合 ▲' : '展開 ▼'}
+                    </button>
+                  </div>
+                  {thinkingExpanded && (
+                    <div style={{ maxHeight: 200, overflowY: 'auto' as const, padding: '0 12px 8px 12px', fontFamily: 'monospace', fontSize: 12, color: '#5b4878', whiteSpace: 'pre-wrap' as const, lineHeight: 1.5 }}>
+                      {thinkingContent}
+                      <div ref={thinkingEndRef} />
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* 4-step stepper */}
               <div style={styles.generationSteps}>
-                {(['thinking', 'writing', 'finalizing'] as const).map((phase, idx) => {
-                  const labels: Record<string, string> = { thinking: '思考中', writing: '撰寫中', finalizing: '完成' };
-                  const phaseOrder: Record<string, number> = { thinking: 0, writing: 1, finalizing: 2 };
+                {(['analyzing', 'planning', 'generating', 'done'] as const).map((phase, idx) => {
+                  const labels: Record<string, string> = { analyzing: '分析需求', planning: '規劃結構', generating: '生成程式碼', done: '完成' };
+                  const phaseOrder: Record<string, number> = { analyzing: 0, planning: 1, generating: 2, done: 3 };
                   const isActive = generationPhase === phase;
                   const isPast = (phaseOrder[generationPhase] ?? -1) > idx;
                   const stepStyle: React.CSSProperties = {
                     ...styles.generationStep,
                     fontWeight: isActive ? 700 : 400,
-                    color: isActive ? '#3b82f6' : isPast ? '#22c55e' : '#94a3b8',
+                    color: isActive ? '#8E6FA7' : isPast ? '#22c55e' : '#94a3b8',
                   };
                   return (
                     <span key={phase} style={stepStyle}>
-                      {labels[phase]}
+                      {isPast ? '✓ ' : isActive ? '● ' : '○ '}{labels[phase]}
                     </span>
                   );
                 })}
               </div>
               <div style={styles.generationBarTrack}>
                 {(() => {
-                  const fillWidth = generationPhase === 'thinking' ? '33%' : generationPhase === 'writing' ? '66%' : '100%';
-                  const barFillStyle: React.CSSProperties = { ...styles.generationBarFill, width: fillWidth };
+                  const fillWidth = generationPhase === 'analyzing' ? '25%' : generationPhase === 'planning' ? '50%' : generationPhase === 'generating' ? '75%' : '100%';
+                  const barFillStyle: React.CSSProperties = { ...styles.generationBarFill, width: fillWidth, backgroundColor: '#8E6FA7' };
                   return <div style={barFillStyle} />;
                 })()}
               </div>
+              {/* Token counter */}
+              {tokenCount > 0 && (
+                <div style={{ fontSize: 11, color: '#8E6FA7', textAlign: 'right' as const, padding: '4px 0 0 0' }}>
+                  約 {tokenCount.toLocaleString()} 字
+                </div>
+              )}
             </>
           )}
         </div>
@@ -717,7 +775,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             {isHtmlContent(streamingContent) ? (
               <div style={styles.generateBubble}>
                 <span style={styles.generateTag}>
-                  {generationPhase === 'finalizing' ? '✅ 即將完成...' : generationPhase === 'writing' ? '✏ 撰寫中...' : '🤔 生成中...'}
+                  {generationPhase === 'done' ? '✅ 即將完成...' : generationPhase === 'generating' ? '✏ 生成中...' : '🤔 分析中...'}
                 </span>
               </div>
             ) : (

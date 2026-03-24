@@ -406,6 +406,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
 
       // ─── TEXT-ONLY MICRO-ADJUST ─────
+      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
       const microPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/micro-adjust.txt'), 'utf-8');
 
       try {
@@ -463,8 +464,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(versionId, projectId, assistantMsgId, html, newVersion, isMulti ? 1 : 0, JSON.stringify(pageMatches));
         db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
 
+        res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
         res.write(`data: ${JSON.stringify({ done: true, html, messageType: 'micro-adjust', intent: 'micro-adjust', isMultiPage: isMulti, pages: pageMatches })}\n\n`);
       } else {
+        res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
         res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: 'micro-adjust', intent: 'micro-adjust' })}\n\n`);
       }
       res.end();
@@ -473,6 +476,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     if (intent === 'question') {
       // Q&A path
+      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
       try {
         const genai = new GoogleGenerativeAI(apiKey);
         const model = genai.getGenerativeModel({
@@ -501,6 +505,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         res.end();
         return;
       }
+      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
 
       // Save user message with type 'user'
       const userMsgId = uuidv4();
@@ -1047,27 +1052,70 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     let currentKey = apiKey;
     let retries = 0;
     const maxRetries = 2;
+    let useThinking = true; // Try thinking mode first
     while (retries <= maxRetries) {
       try {
         const genai = new GoogleGenerativeAI(currentKey);
-        const model = genai.getGenerativeModel({
+        const modelConfig: any = {
           model: getGeminiModel(),
           systemInstruction: effectiveSystemPrompt,
           generationConfig: { maxOutputTokens: 65536, temperature: generationTemperature },
-        });
+        };
+        if (useThinking) {
+          modelConfig.thinkingConfig = { thinkingBudget: 2048 };
+        }
+        const model = genai.getGenerativeModel(modelConfig);
         const chatSession = model.startChat({ history: trimmedHistory });
         const result = await chatSession.sendMessageStream(userContent);
+
+        let emittedAnalyzing = false;
+        let emittedGenerating = false;
+
         for await (const chunk of result.stream) {
-          const text = chunk.text();
-          if (text) {
-            fullResponse += text;
-            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          // Check for thinking parts in chunk candidates
+          const parts = chunk.candidates?.[0]?.content?.parts;
+          if (parts && Array.isArray(parts)) {
+            for (const part of parts) {
+              if ((part as any).thought === true && (part as any).text) {
+                // Thinking part
+                if (!emittedAnalyzing) {
+                  emittedAnalyzing = true;
+                  res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
+                }
+                res.write(`data: ${JSON.stringify({ type: 'thinking', content: (part as any).text })}\n\n`);
+              } else if ((part as any).text && !(part as any).thought) {
+                // Regular text part
+                if (!emittedGenerating) {
+                  emittedGenerating = true;
+                  res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'generating', message: '生成程式碼...' })}\n\n`);
+                }
+                fullResponse += (part as any).text;
+                res.write(`data: ${JSON.stringify({ content: (part as any).text })}\n\n`);
+              }
+            }
+          } else {
+            // Fallback: no parts array, use chunk.text()
+            const text = chunk.text();
+            if (text) {
+              if (!emittedGenerating) {
+                emittedGenerating = true;
+                res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'generating', message: '生成程式碼...' })}\n\n`);
+              }
+              fullResponse += text;
+              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+            }
           }
         }
         try { const resp = await result.response; trackUsage(currentKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
         break; // success
       } catch (err: any) {
         const msg = err?.message || '';
+        // If thinking mode is not supported, retry without it
+        if (useThinking && (msg.includes('thinkingConfig') || msg.includes('thinking') || msg.includes('INVALID_ARGUMENT'))) {
+          console.warn('[chat] Thinking mode not supported, retrying without thinkingConfig');
+          useThinking = false;
+          continue;
+        }
         const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
         if (isRateLimit && retries < maxRetries) {
           const altKey = getGeminiApiKeyExcluding(currentKey);
@@ -1084,6 +1132,9 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
         return;
       }
     }
+
+    // Emit done phase before the done event
+    res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
 
     // Save user message
     const userMsgId = uuidv4();
