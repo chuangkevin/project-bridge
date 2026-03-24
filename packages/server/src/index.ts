@@ -27,6 +27,7 @@ import patchesRouter from './routes/patches';
 import usersRouter from './routes/users';
 import forkRouter from './routes/fork';
 import pageMappingsRouter from './routes/pageMappings';
+import skillsRouter from './routes/skills';
 import { authMiddleware } from './middleware/auth';
 
 const app = express();
@@ -60,6 +61,7 @@ app.use('/api/projects', patchesRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/projects', forkRouter);
 app.use('/api/projects', pageMappingsRouter);
+app.use('/api/skills', skillsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

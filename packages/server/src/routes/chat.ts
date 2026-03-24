@@ -11,6 +11,7 @@ import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage }
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { generateParallel } from '../services/parallelGenerator';
+import { getActiveSkills } from './skills';
 
 const router = Router();
 
@@ -841,6 +842,16 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Inject supplement block
     if (supplement.trim().length > 0) {
       effectiveSystemPrompt += `\n\n=== PROJECT SUPPLEMENT ===\n${supplement}\nPROJECT SUPPLEMENT takes priority for any conflicting attributes.\n===========================`;
+    }
+
+    // Inject agent skills
+    const activeSkills = getActiveSkills(projectId as string);
+    if (activeSkills.length > 0) {
+      const skillsBlock = activeSkills
+        .slice(0, 5) // limit to 5 skills max
+        .map(s => `### ${s.name}\n${s.content}`)
+        .join('\n\n');
+      effectiveSystemPrompt += `\n\n=== AGENT SKILLS ===\nFollow these additional instructions when generating:\n\n${skillsBlock}\n====================`;
     }
 
     // Design spec analysis reminder (already injected at top — this just reinforces at end)

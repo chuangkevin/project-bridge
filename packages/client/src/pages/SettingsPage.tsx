@@ -100,6 +100,14 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [newUserName, setNewUserName] = useState('');
+
+  // Skill management
+  interface Skill { id: string; name: string; description: string; content: string; enabled: number; scope: 'global' | 'project'; project_id: string | null; }
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const [showSkillForm, setShowSkillForm] = useState(false);
+  const [skillForm, setSkillForm] = useState({ name: '', description: '', content: '', scope: 'global' as 'global' | 'project' });
   const [newUserSubmitting, setNewUserSubmitting] = useState(false);
   const [newUserError, setNewUserError] = useState('');
   const [userActionError, setUserActionError] = useState('');
@@ -456,6 +464,70 @@ export default function SettingsPage() {
   const handleSaveLanguage = (lang: string) => {
     setLanguage(lang);
     localStorage.setItem('pb-language', lang);
+  };
+
+  // ─── Skill management ─────────────────────────────
+  const fetchSkills = useCallback(async () => {
+    setSkillsLoading(true);
+    try {
+      const res = await fetch('/api/skills', { headers: authHeaders() });
+      if (res.ok) setSkills(await res.json());
+    } catch { /* ignore */ }
+    setSkillsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+    fetchSkills();
+  }, [authState, fetchSkills]);
+
+  const handleSaveSkill = async () => {
+    if (!skillForm.name.trim() || !skillForm.content.trim()) return;
+    try {
+      const url = editingSkill ? `/api/skills/${editingSkill.id}` : '/api/skills';
+      const method = editingSkill ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(skillForm),
+      });
+      if (res.ok) {
+        setShowSkillForm(false);
+        setEditingSkill(null);
+        setSkillForm({ name: '', description: '', content: '', scope: 'global' });
+        await fetchSkills();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || '儲存失敗');
+      }
+    } catch { alert('網路錯誤'); }
+  };
+
+  const handleDeleteSkill = async (id: string) => {
+    if (!window.confirm('確定刪除此技能？')) return;
+    try {
+      await fetch(`/api/skills/${id}`, { method: 'DELETE', headers: authHeaders() });
+      await fetchSkills();
+    } catch { /* ignore */ }
+  };
+
+  const handleToggleSkill = async (id: string) => {
+    try {
+      await fetch(`/api/skills/${id}/toggle`, { method: 'PATCH', headers: authHeaders() });
+      await fetchSkills();
+    } catch { /* ignore */ }
+  };
+
+  const openEditSkill = (s: Skill) => {
+    setEditingSkill(s);
+    setSkillForm({ name: s.name, description: s.description, content: s.content, scope: s.scope });
+    setShowSkillForm(true);
+  };
+
+  const openNewSkill = () => {
+    setEditingSkill(null);
+    setSkillForm({ name: '', description: '', content: '', scope: 'global' });
+    setShowSkillForm(true);
   };
 
   // ─── Auth screens ──────────────────────────────────
@@ -987,6 +1059,130 @@ export default function SettingsPage() {
             {userActionError && <p style={{ ...styles.errorText, marginTop: '8px' }}>{userActionError}</p>}
           </section>
         )}
+
+        {/* ── Section: Agent Skills ────── */}
+        <section style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>Agent Skills</h2>
+            <div style={styles.sectionDivider} />
+            <span style={styles.badge}>{skills.filter(s => s.enabled).length} / {skills.length} 啟用</span>
+          </div>
+          <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+            自訂 AI Agent 技能，在生成時自動注入提示詞。
+          </p>
+
+          {showSkillForm && (
+            <div style={{ background: '#f1f5f9', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>名稱</label>
+                <input
+                  type="text"
+                  value={skillForm.name}
+                  onChange={e => setSkillForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="例：台灣在地化"
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>說明</label>
+                <input
+                  type="text"
+                  value={skillForm.description}
+                  onChange={e => setSkillForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="簡短描述這個技能的用途"
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>內容（Markdown）</label>
+                <textarea
+                  value={skillForm.content}
+                  onChange={e => setSkillForm(f => ({ ...f, content: e.target.value }))}
+                  placeholder={'生成的 UI 必須符合以下規範：\n- 使用繁體中文\n- 貨幣格式為 NT$\n- 日期格式為 YYYY/MM/DD'}
+                  rows={6}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" style={styles.primaryBtn} onClick={handleSaveSkill}>
+                  {editingSkill ? '更新' : '新增'}
+                </button>
+                <button
+                  type="button"
+                  style={{ ...styles.primaryBtn, backgroundColor: '#94a3b8' }}
+                  onClick={() => { setShowSkillForm(false); setEditingSkill(null); }}
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!showSkillForm && (
+            <button type="button" style={{ ...styles.primaryBtn, marginBottom: 12 }} onClick={openNewSkill}>
+              + 新增技能
+            </button>
+          )}
+
+          {skillsLoading ? (
+            <p style={{ color: '#94a3b8', fontSize: 13 }}>載入中...</p>
+          ) : skills.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: 13 }}>尚未建立任何技能。</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>狀態</th>
+                    <th style={styles.th}>名稱</th>
+                    <th style={styles.th}>說明</th>
+                    <th style={styles.th}>範圍</th>
+                    <th style={{ ...styles.th, textAlign: 'right' }}>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {skills.map(s => (
+                    <tr key={s.id} style={{ opacity: s.enabled ? 1 : 0.5 }}>
+                      <td style={styles.td}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSkill(s.id)}
+                          title={s.enabled ? '停用' : '啟用'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}
+                        >
+                          {s.enabled ? '\u2705' : '\u26D4'}
+                        </button>
+                      </td>
+                      <td style={{ ...styles.td, fontWeight: 600 }}>{s.name}</td>
+                      <td style={{ ...styles.td, color: '#64748b', fontSize: 13 }}>{s.description || '—'}</td>
+                      <td style={styles.td}>
+                        <span style={{
+                          fontSize: 11, padding: '2px 6px', borderRadius: 4,
+                          background: s.scope === 'global' ? '#dbeafe' : '#fef3c7',
+                          color: s.scope === 'global' ? '#1e40af' : '#92400e',
+                        }}>
+                          {s.scope === 'global' ? '全域' : '專案'}
+                        </span>
+                      </td>
+                      <td style={{ ...styles.td, textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <button type="button" style={styles.actionBtnNeutral} onClick={() => openEditSkill(s)}>
+                            編輯
+                          </button>
+                          <button type="button" style={styles.deleteBtn} onClick={() => handleDeleteSkill(s.id)} title="刪除">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
       </main>
     </div>
