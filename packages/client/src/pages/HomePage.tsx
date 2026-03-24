@@ -1,5 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import NewProjectDialog from '../components/NewProjectDialog';
 import { useAuth, authHeaders } from '../contexts/AuthContext';
 
@@ -37,15 +54,34 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
+/** Apply saved order to projects, placing new (unseen) projects at the top */
+function applyOrder(projects: Project[], savedOrder: string[]): Project[] {
+  if (!savedOrder || savedOrder.length === 0) return projects;
+  const orderMap = new Map(savedOrder.map((id, idx) => [id, idx]));
+  const known = projects.filter(p => orderMap.has(p.id));
+  const newProjects = projects.filter(p => !orderMap.has(p.id));
+  known.sort((a, b) => orderMap.get(a.id)! - orderMap.get(b.id)!);
+  return [...newProjects, ...known];
+}
+
 export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'custom'>('custom');
+  const [savedOrder, setSavedOrder] = useState<string[]>([]);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, logout, requireAuth } = useAuth();
+  const orderLoadedRef = useRef(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -62,9 +98,49 @@ export default function HomePage() {
     }
   }, []);
 
+  // Fetch saved project order
+  const fetchOrder = useCallback(async () => {
+    try {
+      const res = await fetch('/api/users/preferences/project-order', {
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.value && Array.isArray(data.value)) {
+          setSavedOrder(data.value);
+        }
+      }
+    } catch {
+      // silently fail — order is optional
+    } finally {
+      orderLoadedRef.current = true;
+    }
+  }, []);
+
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
+
+  useEffect(() => {
+    if (user) {
+      fetchOrder();
+    } else {
+      orderLoadedRef.current = true;
+    }
+  }, [user, fetchOrder]);
+
+  const saveOrder = useCallback(async (order: string[]) => {
+    setSavedOrder(order);
+    try {
+      await fetch('/api/users/preferences/project-order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ value: order }),
+      });
+    } catch {
+      // silently fail
+    }
+  }, []);
 
   const handleLogin = async () => {
     await requireAuth();
@@ -118,17 +194,71 @@ export default function HomePage() {
   const isOwn = (p: Project) =>
     !user || p.owner_id === user.id || p.owner_id == null;
 
-  const filteredProjects = projects
-    .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === 'newest') return parseUTC(b.created_at) - parseUTC(a.created_at);
-      if (sortBy === 'oldest') return parseUTC(a.created_at) - parseUTC(b.created_at);
-      return a.name.localeCompare(b.name);
-    });
+  // Apply sorting: if custom sort + no search, apply saved order; otherwise use standard sort
+  const isCustomSort = sortBy === 'custom' && !searchQuery;
 
-  const myProjects = filteredProjects.filter(isOwn);
-  const othersProjects = filteredProjects.filter(p => !isOwn(p));
+  const filteredProjects = projects
+    .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const sortedProjects = isCustomSort
+    ? applyOrder(filteredProjects, savedOrder)
+    : [...filteredProjects].sort((a, b) => {
+        if (sortBy === 'newest' || sortBy === 'custom') return parseUTC(b.created_at) - parseUTC(a.created_at);
+        if (sortBy === 'oldest') return parseUTC(a.created_at) - parseUTC(b.created_at);
+        return a.name.localeCompare(b.name);
+      });
+
+  const myProjects = sortedProjects.filter(isOwn);
+  const othersProjects = sortedProjects.filter(p => !isOwn(p));
   const splitSections = !!user && myProjects.length > 0 && othersProjects.length > 0;
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    // Determine which list the drag happened in
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Only reorder within "my projects" section
+    const myIds = myProjects.map(p => p.id);
+    if (myIds.includes(activeId) && myIds.includes(overId)) {
+      const oldIndex = myIds.indexOf(activeId);
+      const newIndex = myIds.indexOf(overId);
+      const reordered = arrayMove(myProjects, oldIndex, newIndex);
+      // Build full order: reordered my projects + others (preserving others order)
+      const newOrder = [...reordered.map(p => p.id), ...othersProjects.map(p => p.id)];
+      saveOrder(newOrder);
+    }
+
+    // Reorder within "others projects" section
+    const othersIds = othersProjects.map(p => p.id);
+    if (othersIds.includes(activeId) && othersIds.includes(overId)) {
+      const oldIndex = othersIds.indexOf(activeId);
+      const newIndex = othersIds.indexOf(overId);
+      const reordered = arrayMove(othersProjects, oldIndex, newIndex);
+      const newOrder = [...myProjects.map(p => p.id), ...reordered.map(p => p.id)];
+      saveOrder(newOrder);
+    }
+
+    // Single section (no split)
+    if (!splitSections) {
+      const allIds = sortedProjects.map(p => p.id);
+      if (allIds.includes(activeId) && allIds.includes(overId)) {
+        const oldIndex = allIds.indexOf(activeId);
+        const newIndex = allIds.indexOf(overId);
+        const reordered = arrayMove(sortedProjects, oldIndex, newIndex);
+        saveOrder(reordered.map(p => p.id));
+      }
+    }
+  };
+
+  const activeProject = activeDragId ? projects.find(p => p.id === activeDragId) : null;
 
   return (
     <div style={styles.container}>
@@ -202,11 +332,12 @@ export default function HomePage() {
             />
             <select
               value={sortBy}
-              onChange={e => setSortBy(e.target.value as 'newest' | 'oldest' | 'name')}
+              onChange={e => setSortBy(e.target.value as 'newest' | 'oldest' | 'name' | 'custom')}
               style={styles.sortSelect}
               data-testid="sort-select"
               title="排序方式"
             >
+              <option value="custom">自訂排序</option>
               <option value="newest">最新</option>
               <option value="oldest">最舊</option>
               <option value="name">名稱 A-Z</option>
@@ -218,16 +349,62 @@ export default function HomePage() {
             <p style={styles.emptyText}>沒有找到符合的專案</p>
           </div>
         )}
-        {splitSections ? (
-          <>
-            <h2 style={styles.sectionHeading}>我的專案</h2>
-            <ProjectGrid projects={myProjects} navigate={navigate} user={user} handleDelete={handleDelete} handleFork={handleFork} own />
-            <h2 style={styles.sectionHeadingSecond}>其他人的專案</h2>
-            <ProjectGrid projects={othersProjects} navigate={navigate} user={user} handleDelete={handleDelete} handleFork={handleFork} own={false} />
-          </>
-        ) : (
-          <ProjectGrid projects={filteredProjects} navigate={navigate} user={user} handleDelete={handleDelete} handleFork={handleFork} own />
-        )}
+
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          {splitSections ? (
+            <>
+              <h2 style={styles.sectionHeading}>我的專案</h2>
+              <SortableProjectGrid
+                projects={myProjects}
+                navigate={navigate}
+                user={user}
+                handleDelete={handleDelete}
+                handleFork={handleFork}
+                own
+                isDraggable={isCustomSort && !!user}
+              />
+              <h2 style={styles.sectionHeadingSecond}>其他人的專案</h2>
+              <SortableProjectGrid
+                projects={othersProjects}
+                navigate={navigate}
+                user={user}
+                handleDelete={handleDelete}
+                handleFork={handleFork}
+                own={false}
+                isDraggable={isCustomSort && !!user}
+              />
+            </>
+          ) : (
+            <SortableProjectGrid
+              projects={sortedProjects}
+              navigate={navigate}
+              user={user}
+              handleDelete={handleDelete}
+              handleFork={handleFork}
+              own
+              isDraggable={isCustomSort && !!user}
+            />
+          )}
+
+          <DragOverlay>
+            {activeProject ? (
+              <div style={{ ...styles.card, ...styles.cardDragOverlay }}>
+                <div style={styles.cardContent}>
+                  <h3 style={styles.cardTitle}>{activeProject.name}</h3>
+                  {activeProject.owner_name && (
+                    <p style={styles.cardOwner}>{activeProject.owner_name}</p>
+                  )}
+                  <p style={styles.cardDate}>更新於 {relativeTime(activeProject.updated_at)}</p>
+                </div>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </main>
 
       {showNewProject && (
@@ -271,69 +448,120 @@ export default function HomePage() {
   );
 }
 
-interface ProjectGridProps {
+interface SortableProjectGridProps {
   projects: Project[];
   navigate: (path: string) => void;
   user: { id: string; role: string } | null;
   handleDelete: (e: React.MouseEvent, id: string) => void;
   handleFork: (e: React.MouseEvent, id: string) => void;
   own: boolean;
+  isDraggable: boolean;
 }
 
-function ProjectGrid({ projects, navigate, user, handleDelete, handleFork, own }: ProjectGridProps) {
+function SortableProjectGrid({ projects, navigate, user, handleDelete, handleFork, own, isDraggable }: SortableProjectGridProps) {
   return (
-    <div style={styles.grid}>
-      {projects.map(project => {
-        const canDelete = user?.id === project.owner_id || user?.role === 'admin' || project.owner_id == null;
-        return (
-          <div
+    <SortableContext items={projects.map(p => p.id)} strategy={rectSortingStrategy}>
+      <div style={styles.grid}>
+        {projects.map(project => (
+          <SortableProjectCard
             key={project.id}
-            style={styles.card}
-            data-testid={`project-card-${project.id}`}
-            onClick={() => navigate(`/project/${project.id}`)}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-              (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
-              (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0';
-            }}
-          >
-            <div style={styles.cardContent}>
-              <h3 style={styles.cardTitle}>{project.name}</h3>
-              {project.owner_name && (
-                <p style={styles.cardOwner}>{project.owner_name}</p>
-              )}
-              <p style={styles.cardDate}>更新於 {relativeTime(project.updated_at)}</p>
-            </div>
-            {!own && (
-              <button
-                type="button"
-                style={styles.forkBtn}
-                onClick={e => handleFork(e, project.id)}
-                title="Fork 專案"
-                data-testid={`fork-project-${project.id}`}
-              >
-                Fork
-              </button>
-            )}
-            {canDelete && (
-              <button
-                type="button"
-                style={styles.deleteBtn}
-                onClick={e => handleDelete(e, project.id)}
-                title="刪除專案"
-                data-testid={`delete-project-${project.id}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M12.67 4v9.33a1.33 1.33 0 01-1.34 1.34H4.67a1.33 1.33 0 01-1.34-1.34V4" />
-                </svg>
-              </button>
-            )}
-          </div>
-        );
-      })}
+            project={project}
+            navigate={navigate}
+            user={user}
+            handleDelete={handleDelete}
+            handleFork={handleFork}
+            own={own}
+            isDraggable={isDraggable}
+          />
+        ))}
+      </div>
+    </SortableContext>
+  );
+}
+
+interface SortableProjectCardProps {
+  project: Project;
+  navigate: (path: string) => void;
+  user: { id: string; role: string } | null;
+  handleDelete: (e: React.MouseEvent, id: string) => void;
+  handleFork: (e: React.MouseEvent, id: string) => void;
+  own: boolean;
+  isDraggable: boolean;
+}
+
+function SortableProjectCard({ project, navigate, user, handleDelete, handleFork, own, isDraggable }: SortableProjectCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: project.id, disabled: !isDraggable });
+
+  const style: React.CSSProperties = {
+    ...styles.card,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    cursor: isDraggable ? 'grab' : 'pointer',
+    ...(isDragging ? { zIndex: 10 } : {}),
+  };
+
+  const canDelete = user?.id === project.owner_id || user?.role === 'admin' || project.owner_id == null;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...(isDraggable ? listeners : {})}
+      data-testid={`project-card-${project.id}`}
+      onClick={() => {
+        if (!isDragging) navigate(`/project/${project.id}`);
+      }}
+      onMouseEnter={e => {
+        if (!isDragging) {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+          (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6';
+        }
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0';
+      }}
+    >
+      <div style={styles.cardContent}>
+        <h3 style={styles.cardTitle}>{project.name}</h3>
+        {project.owner_name && (
+          <p style={styles.cardOwner}>{project.owner_name}</p>
+        )}
+        <p style={styles.cardDate}>更新於 {relativeTime(project.updated_at)}</p>
+      </div>
+      {!own && (
+        <button
+          type="button"
+          style={styles.forkBtn}
+          onClick={e => handleFork(e, project.id)}
+          title="Fork 專案"
+          data-testid={`fork-project-${project.id}`}
+        >
+          Fork
+        </button>
+      )}
+      {canDelete && (
+        <button
+          type="button"
+          style={styles.deleteBtn}
+          onClick={e => handleDelete(e, project.id)}
+          title="刪除專案"
+          data-testid={`delete-project-${project.id}`}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M12.67 4v9.33a1.33 1.33 0 01-1.34 1.34H4.67a1.33 1.33 0 01-1.34-1.34V4" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -473,7 +701,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     cursor: 'pointer',
     boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-    transition: 'box-shadow 0.15s, border-color 0.15s',
+    transition: 'box-shadow 0.15s, border-color 0.15s, transform 0.15s, opacity 0.15s',
+  },
+  cardDragOverlay: {
+    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+    transform: 'scale(1.03)',
+    cursor: 'grabbing',
+    opacity: 1,
   },
   cardContent: {
     flex: 1,
