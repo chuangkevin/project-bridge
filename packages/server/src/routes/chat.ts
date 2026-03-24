@@ -215,8 +215,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       ? (hasShell ? 'in-shell' : 'full-page')
       : await classifyIntent(message.trim(), apiKey, hasShell);
 
+    // Detect requests for missing/new pages — these should NOT be downgraded to micro-adjust
+    const isPageRequest = /沒有.*頁|缺少.*頁|加入.*頁|新增.*頁|多.*頁面|少了.*頁|missing.*page|add.*page|need.*page/i.test(message);
+
     // Override: when prototype exists and not forceRegenerate, downgrade full-page/in-shell to micro-adjust
-    if (currentPrototype && !effectiveForceRegenerate && (intent === 'full-page' || intent === 'in-shell')) {
+    // EXCEPT when user is requesting missing/new pages — those need full regeneration
+    if (currentPrototype && !effectiveForceRegenerate && !isPageRequest && (intent === 'full-page' || intent === 'in-shell')) {
       intent = 'micro-adjust';
     }
 
