@@ -940,8 +940,13 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     let finalPages: string[];
     let isMultiPage: boolean;
 
-    if (archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0) {
-      // Use architecture data — skip AI page detection
+    // When user explicitly requests pages or force regenerate, ALWAYS re-analyze
+    if (isPageRequest || effectiveForceRegenerate) {
+      const pageStructure = await analyzePageStructure(userContent.slice(0, 8000), apiKey);
+      finalPages = pageStructure.pages.length > 0 ? pageStructure.pages : existingPages;
+      isMultiPage = finalPages.length > 1;
+    } else if (archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0) {
+      // Use architecture data
       finalPages = archData.nodes.map((n: any) => n.name);
       isMultiPage = finalPages.length > 1;
     } else {
@@ -965,8 +970,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           }
         }
 
-        if (analysisPages.length > 1) {
-          // Use pages from structured analysis — skip AI page detection
+        if (analysisPages.length > 1 && !isPageRequest && !effectiveForceRegenerate) {
+          // Use pages from structured analysis — skip AI page detection (unless user requesting new pages)
           finalPages = analysisPages;
           isMultiPage = true;
         } else {
@@ -1209,10 +1214,10 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     // Determine message_type label based on intent
     const generateMessageType = intent === 'component' ? 'component' : intent === 'in-shell' ? 'in-shell' : 'generate';
 
-    // Save assistant response
+    // Save assistant response (metadata will be updated after summary is generated)
     const assistantMsgId = uuidv4();
     db.prepare(
-      'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO conversations (id, project_id, role, content, message_type, metadata) VALUES (?, ?, ?, ?, ?, NULL)'
     ).run(assistantMsgId, projectId, 'assistant', fullResponse, generateMessageType);
 
     // Extract raw AI output — strip markdown fences and trailing commentary
@@ -1330,6 +1335,14 @@ ${html.slice(0, 2000)}`;
         const summaryResult = await summaryModel.generateContent(summaryPrompt);
         generationSummary = summaryResult.response.text();
       } catch { /* ignore summary failure */ }
+
+      // Save summary + pages to conversation metadata for persistence
+      if (generationSummary || finalPages.length > 0) {
+        try {
+          db.prepare('UPDATE conversations SET metadata = ? WHERE id = ?')
+            .run(JSON.stringify({ summary: generationSummary, pages: finalPages }), assistantMsgId);
+        } catch { /* ignore */ }
+      }
 
       res.write(`data: ${JSON.stringify({ done: true, html, messageType: generateMessageType, intent, isMultiPage, pages: finalPages, summary: generationSummary, pageCount: finalPages.length })}\n\n`);
     } else {

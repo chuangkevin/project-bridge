@@ -116,9 +116,14 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Scroll to bottom only when new messages are added (not during streaming)
+  const prevMsgCount = useRef(messages.length);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    if (messages.length > prevMsgCount.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMsgCount.current = messages.length;
+  }, [messages]);
 
   // Auto-scroll thinking panel
   useEffect(() => {
@@ -810,7 +815,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           <div style={styles.assistantMsgRow}>
             <div style={{ ...styles.assistantBubble, background: 'var(--accent-light, #f8f5ff)', borderLeft: '3px solid var(--accent, #8E6FA7)' }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent, #8E6FA7)', marginBottom: 4 }}>🧠 AI 思考中...</div>
-              <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary, #64748b)', whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: 200, overflowY: 'auto' }}>
+              <div className="hide-scrollbar" style={{ fontSize: 13, color: 'var(--text-secondary, #64748b)', whiteSpace: 'pre-wrap', lineHeight: 1.6, maxHeight: 300, overflowY: 'auto' }}>
                 {thinkingContent}
                 <div ref={thinkingEndRef} />
               </div>
@@ -1583,8 +1588,9 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 16px',
     borderTop: '1px solid var(--border-primary)',
     backgroundColor: 'var(--bg-secondary)',
-    alignItems: 'flex-end',
-    flexShrink: 0,
+    alignItems: 'stretch',
+    flex: 1,
+    minHeight: 0,
   },
   attachBtn: {
     width: '36px',
