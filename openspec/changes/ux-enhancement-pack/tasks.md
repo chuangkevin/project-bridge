@@ -16,25 +16,25 @@
 
 ## 2. 專案建立模式選擇
 
-- [ ] 2.1 修改 NewProjectDialog — 加入模式選擇 UI（架構設計 / 設計）
-- [ ] 2.2 POST /api/projects 支援 mode 參數
-- [ ] 2.3 WorkspacePage 根據 project mode 決定初始 tab（架構圖 or 聊天面板）
+- [x] 2.1 修改 NewProjectDialog — 加入模式選擇 UI（架構設計 / 設計）
+- [x] 2.2 POST /api/projects 支援 mode 參數
+- [x] 2.3 WorkspacePage 根據 project mode 決定初始 tab（架構圖 or 聊天面板）
 
 ## 3. 頁面層級 API Binding
 
-- [ ] 3.1 新增 DB migration：api_bindings 表加入 page_name 欄位（nullable）
-- [ ] 3.2 修改 apiBindings route — 支援 page_name 建立/查詢/刪除
-- [ ] 3.3 修改 ApiBindingPanel — 加入「頁面層級 API」區塊，不需點選元素即可新增
-- [ ] 3.4 修改匯出邏輯 — page-level bindings 正確包含在匯出結果
+- [x] 3.1 新增 DB migration：api_bindings 表加入 page_name 欄位（nullable）
+- [x] 3.2 修改 apiBindings route — 支援 page_name 建立/查詢/刪除
+- [x] 3.3 修改 ApiBindingPanel — 加入「頁面層級 API」區塊，不需點選元素即可新增
+- [x] 3.4 修改匯出邏輯 — page-level bindings 正確包含在匯出結果
 
 ## 4. 拖曳排序專案
 
-- [ ] 4.1 安裝 @dnd-kit/core + @dnd-kit/sortable
-- [ ] 4.2 新增 DB migration：user_preferences 表（user_id, key, value JSON）
-- [ ] 4.3 新增 API：GET/PUT /api/users/preferences（讀寫偏好）
-- [ ] 4.4 修改 HomePage — 專案卡片用 SortableContext 包裹，支援拖曳
-- [ ] 4.5 拖曳結束時呼叫 API 持久化排序結果
-- [ ] 4.6 新專案建立時自動插入排序列表最上方
+- [x] 4.1 安裝 @dnd-kit/core + @dnd-kit/sortable
+- [x] 4.2 新增 DB migration：user_preferences 表（user_id, key, value JSON）
+- [x] 4.3 新增 API：GET/PUT /api/users/preferences（讀寫偏好）
+- [x] 4.4 修改 HomePage — 專案卡片用 SortableContext 包裹，支援拖曳
+- [x] 4.5 拖曳結束時呼叫 API 持久化排序結果
+- [x] 4.6 新專案建立時自動插入排序列表最上方
 
 ## 5. 深色模式
 
