@@ -56,9 +56,26 @@ jobs:
           git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
           git push http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git HEAD:main
 
+      - name: Resolve ArgoCD host
+        run: |
+          ARGOCD_IP=$(getent hosts srvhpgit1 | awk '{print $1}' || echo "")
+          if [ -z "$ARGOCD_IP" ]; then
+            ARGOCD_IP=$(dig +short srvhpgit1 @10.43.0.10 || echo "")
+          fi
+          if [ -z "$ARGOCD_IP" ]; then
+            echo "WARNING: Cannot resolve srvhpgit1, trying nslookup..."
+            ARGOCD_IP=$(nslookup srvhpgit1 10.43.0.10 2>/dev/null | grep -A1 'Name:' | grep 'Address:' | awk '{print $2}' || echo "")
+          fi
+          echo "Resolved srvhpgit1 to: $ARGOCD_IP"
+          echo "ARGOCD_IP=$ARGOCD_IP" >> $GITHUB_ENV
+
       - name: ArgoCD Sync
         run: |
-          docker run --rm -i --dns 10.43.0.10 --dns 8.8.8.8 \
+          EXTRA_HOSTS=""
+          if [ -n "$ARGOCD_IP" ]; then
+            EXTRA_HOSTS="--add-host srvhpgit1:$ARGOCD_IP"
+          fi
+          docker run --rm -i $EXTRA_HOSTS \
             -e ARGOCD_USERNAME="${ARGOCD_USERNAME}" \
             -e ARGOCD_PASSWORD="${ARGOCD_PASSWORD}" \
             argoproj/argocd:v2.6.15 /bin/sh -c '

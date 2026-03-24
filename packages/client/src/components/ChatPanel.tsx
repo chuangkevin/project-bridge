@@ -714,8 +714,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             >
               <div
                 style={styles.msgBubbleWrapper}
-                onMouseEnter={() => setHoveredMessageId(msg.id)}
-                onMouseLeave={() => setHoveredMessageId(null)}
+                onMouseEnter={() => { clearTimeout((window as any).__msgHoverTimer); setHoveredMessageId(msg.id); }}
+                onMouseLeave={() => { (window as any).__msgHoverTimer = setTimeout(() => setHoveredMessageId(null), 300); }}
               >
                 {isHovered && (
                   <div style={styles.messageActions}>
@@ -1665,12 +1665,9 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '100%',
   },
   messageActions: {
-    position: 'absolute' as const,
-    top: '-28px',
-    right: 0,
     display: 'flex',
     gap: '4px',
-    zIndex: 10,
+    marginTop: '4px',
   },
   messageActionBtn: {
     fontSize: '11px',
