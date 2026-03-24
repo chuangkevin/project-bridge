@@ -889,8 +889,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       effectiveSystemPrompt += `\n\n=== PROJECT SUPPLEMENT ===\n${supplement}\nPROJECT SUPPLEMENT takes priority for any conflicting attributes.\n===========================`;
     }
 
-    // Inject agent skills
-    const activeSkills = getActiveSkills(projectId as string);
+    // Inject agent skills — only project-scoped skills, not global ones
+    // Global skills (e.g. HPSkills) are for developer tools, not AI generation
+    const activeSkills = getActiveSkills(projectId as string)
+      .filter(s => s.scope === 'project');
     if (activeSkills.length > 0) {
       const skillsBlock = activeSkills
         .slice(0, 5) // limit to 5 skills max

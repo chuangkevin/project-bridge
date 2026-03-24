@@ -850,7 +850,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       >
         <div style={{ width: 40, height: 3, borderRadius: 2, background: 'var(--text-muted, #94a3b8)' }} />
       </div>
-      <div style={{ height: inputAreaHeight, minHeight: 120, maxHeight: 500, flexShrink: 0, display: 'flex', flexDirection: 'column' as const, overflow: 'auto' }}>
+      <div style={{ height: inputAreaHeight, minHeight: 120, maxHeight: 500, flex: 'none', display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
       <ConstraintsBar projectId={projectId} onChange={handleConstraintsChange} />
 
       {/* Generation Settings */}
@@ -1206,6 +1206,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
+    overflow: 'hidden',
     backgroundColor: 'var(--bg-primary)',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     position: 'relative' as const,
