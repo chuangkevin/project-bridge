@@ -84,6 +84,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [tokenCount, setTokenCount] = useState(0);
   const thinkingEndRef = useRef<HTMLDivElement>(null);
+  const [activeSkillNames, setActiveSkillNames] = useState<string[]>([]);
+  const [lastThinkingSummary, setLastThinkingSummary] = useState('');
+  const [lastSkillNames, setLastSkillNames] = useState<string[]>([]);
   const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -450,6 +453,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             if (data.type === 'thinking' && data.content) {
               setThinkingContent(prev => prev + data.content);
             }
+            if (data.type === 'skills' && Array.isArray(data.skills)) {
+              setActiveSkillNames(data.skills);
+            }
             if (data.type === 'phase') {
               if (data.phase === 'analyzing' || data.phase === 'planning' || data.phase === 'generating' || data.phase === 'done') {
                 setGenerationPhase(data.phase);
@@ -506,6 +512,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         content: fullContent,
         messageType: receivedMessageType,
       };
+
+      // Save thinking summary and skills for display in the generated message
+      setLastThinkingSummary(thinkingContent);
+      setLastSkillNames([...activeSkillNames]);
 
       setLocalUserMsg(null);
       setStreamingContent('');
@@ -761,6 +771,18 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 ) : (msg.messageType === 'generate' || isHtmlContent(msg.content)) ? (
                   <div style={styles.generateBubble}>
                     <span style={styles.generateTag}>✅ 已生成原型</span>
+                    {/* Show thinking summary and skills for the most recent generation */}
+                    {idx === messages.length - 1 && lastThinkingSummary && (
+                      <details style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary, #64748b)' }}>
+                        <summary style={{ cursor: 'pointer', userSelect: 'none' }}>🧠 思考過程</summary>
+                        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 11, margin: '4px 0', maxHeight: 150, overflow: 'auto', background: 'var(--bg-hover, #f1f5f9)', padding: 8, borderRadius: 6 }}>{lastThinkingSummary}</pre>
+                      </details>
+                    )}
+                    {idx === messages.length - 1 && lastSkillNames.length > 0 && (
+                      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>
+                        🔧 Skills: {lastSkillNames.join(', ')}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={styles.assistantBubble}>
@@ -1514,7 +1536,9 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-primary)',
     borderRadius: '10px',
     fontSize: '14px',
-    resize: 'none' as const,
+    resize: 'vertical' as const,
+    minHeight: '40px',
+    maxHeight: '200px',
     outline: 'none',
     fontFamily: 'inherit',
     lineHeight: '1.4',

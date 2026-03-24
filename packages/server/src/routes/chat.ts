@@ -1106,6 +1106,11 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       console.warn('[chat] Analysis call failed:', e.message?.slice(0, 80));
     }
 
+    // Send active skills info to frontend
+    if (activeSkills.length > 0) {
+      res.write(`data: ${JSON.stringify({ type: 'skills', skills: activeSkills.map(s => s.name) })}\n\n`);
+    }
+
     // ── Phase 2: Actual generation ──
     res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'generating', message: '生成程式碼...' })}\n\n`);
 
