@@ -39,13 +39,22 @@ function getBridgeToken(): string | null {
   return localStorage.getItem('bridge_token') ?? localStorage.getItem('pb-auth-token');
 }
 
-/** Return auth headers — admin password token takes priority (settings page = admin) */
+/** Return auth headers — send BOTH admin token and bridge token */
 function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
   const adminToken = getToken();
-  if (adminToken) return { Authorization: `Bearer ${adminToken}` };
   const bridge = getBridgeToken();
-  if (bridge) return { Authorization: `Bearer ${bridge}` };
-  return {};
+  // Send admin token as primary Authorization (settings page = admin)
+  if (adminToken) {
+    headers['Authorization'] = `Bearer ${adminToken}`;
+    // Also send bridge token as fallback via X-Bridge-Token
+    if (bridge) headers['X-Bridge-Token'] = bridge;
+  } else if (bridge) {
+    headers['Authorization'] = `Bearer ${bridge}`;
+  }
+  // Always include admin token in X-Admin-Token header as backup
+  if (adminToken) headers['X-Admin-Token'] = adminToken;
+  return headers;
 }
 
 // Alias for backward compat within this file

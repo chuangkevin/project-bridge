@@ -10,10 +10,11 @@ const router = Router();
 
 // ─── Auth middleware for settings routes ────────────
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  // 1. Admin password token — if valid, ALWAYS admin, regardless of user session
   const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  // 1. Check admin password token
+  if (token) {
     const stored = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_token'").get() as { value: string } | undefined;
     const expiry = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_expiry'").get() as { value: string } | undefined;
     if (stored?.value === token && expiry?.value && new Date(expiry.value) > new Date()) {
@@ -22,14 +23,25 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     }
   }
 
-  // 2. Session-based auth: admin role
+  // 2. Check X-Admin-Token header (client sends admin token separately)
+  const adminToken = req.headers['x-admin-token'] as string | undefined;
+  if (adminToken) {
+    const stored = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_token'").get() as { value: string } | undefined;
+    const expiry = db.prepare("SELECT value FROM settings WHERE key = 'admin_session_expiry'").get() as { value: string } | undefined;
+    if (stored?.value === adminToken && expiry?.value && new Date(expiry.value) > new Date()) {
+      next();
+      return;
+    }
+  }
+
+  // 3. Session-based auth: admin role (from authMiddleware)
   const user = (req as any).user;
   if (user?.role === 'admin') {
     next();
     return;
   }
 
-  // 3. Fallback: fresh install (no users), allow access
+  // 4. Fallback: fresh install (no users), allow access
   const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number } | undefined)?.count ?? 0;
   if (userCount === 0) {
     next();
