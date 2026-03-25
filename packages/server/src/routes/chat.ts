@@ -1484,7 +1484,21 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
         console.log('[chat] Single-call HTML missing showPage — wrapping with assembler');
         try {
           const localPlan = buildLocalPlan(finalPages, userContent, designConvention);
-          const bodyContent = html.replace(/<!DOCTYPE[^>]*>|<\/?html[^>]*>|<head>[\s\S]*?<\/head>|<\/?body[^>]*>/gi, '').trim();
+          // Extract original styles from the generated HTML
+          const styleMatches = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
+          const originalStyles = styleMatches.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n');
+          // Merge original styles into localPlan's sharedCss
+          if (originalStyles) {
+            localPlan.sharedCss = localPlan.sharedCss + '\n\n/* Original generated styles */\n' + originalStyles;
+          }
+          // Extract body content (remove doctype, html, head, body tags but keep style-less content)
+          let bodyContent = html
+            .replace(/<!DOCTYPE[^>]*>/gi, '')
+            .replace(/<html[^>]*>/gi, '').replace(/<\/html>/gi, '')
+            .replace(/<head>[\s\S]*?<\/head>/gi, '')
+            .replace(/<\/?body[^>]*>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // styles already extracted
+            .trim();
           const fragments = finalPages.map((pageName, idx) => ({
             name: pageName,
             html: idx === 0 ? bodyContent
