@@ -1,4 +1,4 @@
-import { GenerationPlan, planGeneration, PageAssignment } from './masterAgent';
+import { GenerationPlan, planGeneration, buildLocalPlan, PageAssignment } from './masterAgent';
 import { generatePageFragment } from './subAgent';
 import { assemblePrototype } from './htmlAssembler';
 import { compileDesignTokens, DesignTokens } from './designTokenCompiler';
@@ -44,15 +44,25 @@ export async function generateParallel(
     console.warn('[parallel] Token compilation failed, using defaults:', err);
   }
 
-  // Step 2: Master agent plans
+  // Step 2: Master agent plans (with local fallback on failure)
   onProgress?.({ phase: 'planning', message: '規劃頁面架構...' });
-  const plan = await planGeneration(
-    analysisData,
-    designTokens,
-    architectureBlock,
-    designConvention,
-    userMessage,
-  );
+  let plan: GenerationPlan;
+  try {
+    plan = await planGeneration(
+      analysisData,
+      designTokens,
+      architectureBlock,
+      designConvention,
+      userMessage,
+    );
+  } catch (masterErr: any) {
+    console.warn('[parallel] Master agent failed, using local plan:', masterErr.message);
+    onProgress?.({ phase: 'planning', message: '使用本地規劃...' });
+    // Extract page names from analysisData
+    const pageNames: string[] = analysisData?.pages?.map((p: any) => p.name || p) || [];
+    if (pageNames.length < 2) throw new Error('No pages to generate');
+    plan = buildLocalPlan(pageNames, userMessage, designConvention);
+  }
 
   const totalPages = plan.pages.length;
   const pageNames = plan.pages.map(p => p.name);

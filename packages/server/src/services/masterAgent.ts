@@ -157,3 +157,193 @@ RULES:
 
   return plan;
 }
+
+/**
+ * Build a local plan WITHOUT calling the AI — used as fallback when master agent fails (429).
+ * Creates reasonable specs from page names and user message context.
+ */
+export function buildLocalPlan(
+  pageNames: string[],
+  userMessage: string,
+  designConvention: string,
+): GenerationPlan {
+  const cssVariables = `:root {
+  --primary: #8E6FA7;
+  --primary-hover: #8557A8;
+  --accent-cta: #F97D03;
+  --accent-cta-hover: #E06C00;
+  --bg: #FAF4EB;
+  --surface: #F8F7F5;
+  --text: #333333;
+  --text-secondary: #666666;
+  --text-muted: #8C8C8C;
+  --placeholder: #B0B0B0;
+  --border: #D5D5D5;
+  --divider: #EAEAEA;
+  --nav-bg: #F1F1F1;
+  --nav-text: #434343;
+  --nav-active-bg: #434343;
+  --nav-active-text: #FFFFFF;
+  --header-bg: #8E6FA7;
+  --header-text: #FFFFFF;
+  --error: #EC3C1F;
+  --success: #85BB0E;
+  --tag-bg: #EBE3F2;
+}`;
+
+  const sharedCss = `/* CSS Reset */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+a { color: var(--primary); text-decoration: none; }
+img { max-width: 100%; display: block; }
+
+/* Layout */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+.grid { display: grid; gap: 20px; }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.flex { display: flex; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+/* Navigation */
+.site-header { background: var(--header-bg); color: var(--header-text); padding: 12px 0; }
+.site-header .container { display: flex; justify-content: space-between; align-items: center; }
+.site-header .logo { font-size: 20px; font-weight: 700; color: white; }
+.site-nav { background: var(--nav-bg); border-bottom: 1px solid var(--divider); }
+.site-nav ul { list-style: none; display: flex; gap: 0; }
+.site-nav li a { display: block; padding: 14px 20px; color: var(--nav-text); font-weight: 700; font-size: 14px; transition: background 0.2s; cursor: pointer; }
+.site-nav li a:hover, .site-nav li a.active { background: var(--nav-active-bg); color: var(--nav-active-text); }
+
+/* Cards */
+.card { background: var(--surface); border-radius: 4px; overflow: hidden; transition: transform 0.2s; }
+.card:hover { transform: translateY(-2px); }
+.card-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: var(--divider); }
+.card-body { padding: 16px 20px; }
+.card-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.card-desc { font-size: 14px; color: var(--text-secondary); }
+.card-price { font-size: 18px; font-weight: 700; color: var(--primary); margin-top: 8px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px; border: none; border-radius: 4px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s, opacity 0.2s; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-cta { background: linear-gradient(180deg, #EAAB57, #F97D03); color: white; }
+.btn-cta:hover { opacity: 0.9; }
+.btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-secondary:hover { background: var(--surface); }
+
+/* Forms */
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.form-input, .form-select { width: 100%; height: 48px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 4px; font-size: 16px; background: white; color: var(--text); transition: border-color 0.2s; }
+.form-input:focus, .form-select:focus { outline: none; border-color: var(--primary); }
+.form-input::placeholder { color: var(--placeholder); }
+
+/* Badges & Tags */
+.badge { display: inline-block; padding: 2px 8px; font-size: 12px; border-radius: 4px; }
+.badge-primary { background: var(--tag-bg); color: var(--primary); }
+.badge-error { background: #FEE; color: var(--error); }
+.badge-success { background: #EFE; color: var(--success); }
+.tag { display: inline-block; padding: 4px 12px; font-size: 13px; border-radius: 4px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
+.tag.active, .tag:hover { background: var(--primary); color: white; }
+
+/* Table */
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--divider); }
+.table th { background: var(--surface); font-weight: 600; font-size: 13px; color: var(--text-secondary); }
+
+/* Footer */
+.site-footer { background: var(--nav-bg); padding: 32px 0; margin-top: 48px; color: var(--text-secondary); font-size: 13px; text-align: center; }
+
+/* Responsive */
+@media (max-width: 992px) { .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } .site-nav ul { flex-wrap: wrap; } }
+
+/* Section */
+.section { padding: 32px 0; }
+.section-title { font-size: 24px; font-weight: 700; margin-bottom: 20px; }
+
+/* Search */
+.search-bar { display: flex; gap: 8px; }
+.search-bar input { flex: 1; }
+
+/* Pagination */
+.pagination { display: flex; justify-content: center; gap: 4px; margin-top: 24px; }
+.pagination a, .pagination span { padding: 8px 14px; border-radius: 4px; font-size: 14px; }
+.pagination .active { background: var(--primary); color: white; }
+.pagination a:hover { background: var(--surface); }`;
+
+  const pages: PageAssignment[] = pageNames.map((name, i) => {
+    const otherPages = pageNames.filter(p => p !== name);
+    let spec = `頁面「${name}」使用 HousePrice 設計規範。
+
+佈局：使用 .container 包裹，max-width: 1200px。頂部有 .site-header（紫色 #8E6FA7）和 .site-nav（灰色 #F1F1F1 導覽列）。
+
+導覽列項目：${pageNames.join('、')}，點擊切換頁面。當前頁面的 nav item 加上 .active class。
+
+頁面背景：#FAF4EB（暖米色），卡片背景 #F8F7F5，絕不使用純白。
+
+`;
+    // Add page-specific content based on common patterns
+    if (/首頁|home|index/i.test(name)) {
+      spec += `首頁包含：
+- Hero 區塊：小型文字 banner（絕不用大面積純色/漸層），搜尋框
+- 商品分類：使用 .tag 按鈕（全部、電子產品、服飾、家居...），可切換
+- 熱門商品 grid：.grid-4，每個 .card 含商品圖（.card-img）、名稱、價格（NT$ 格式）、分類 badge
+- 促銷區塊：2-3 個橫幅 .card，文字+小 CTA 按鈕
+- 頁尾 .site-footer`;
+    } else if (/商品列表|products?.*list|catalog/i.test(name)) {
+      spec += `商品列表頁：
+- 左側篩選欄（寬 240px）：分類 checkbox、價格範圍 slider、品牌篩選
+- 右側商品 grid：.grid-3
+- 排序下拉選單（最新、價格低到高、熱門）
+- 分頁 .pagination
+- 每張商品卡：圖片、名稱、價格 NT$、評分星星、加入購物車 .btn-primary`;
+    } else if (/商品詳情|product.*detail|item/i.test(name)) {
+      spec += `商品詳情頁：
+- 左：大圖展示（主圖 + 縮圖列表）
+- 右：商品名稱（24px bold）、價格（.card-price）、描述、規格表 .table
+- 數量選擇器（-/+按鈕）、加入購物車 .btn-primary、立即購買 .btn-cta
+- 分頁 tabs：商品描述、規格、評價
+- 相關商品推薦 .grid-4`;
+    } else if (/購物車|cart/i.test(name)) {
+      spec += `購物車頁：
+- 商品清單 .table：圖片、名稱、單價、數量（可調整）、小計、刪除按鈕
+- 右側訂單摘要卡片：商品總計、運費、折扣碼輸入、總金額
+- 底部：繼續購物 .btn-secondary、前往結帳 .btn-cta
+- 空購物車狀態：icon + "購物車是空的" + 去逛逛按鈕`;
+    } else if (/結帳|checkout/i.test(name)) {
+      spec += `結帳頁：
+- 步驟指示器（1.配送資訊 2.付款方式 3.訂單確認）
+- 配送表單：姓名、電話、地址（縣市/區/路）、備註 — 全部用 .form-group
+- 付款方式：信用卡/ATM/超商取貨 radio
+- 訂單摘要（右側）：商品列表簡要、金額
+- 確認下單 .btn-cta`;
+    } else {
+      spec += `此頁面包含標題區、主要內容區（使用 .grid 佈局）、互動元件。
+使用 .card 組件展示資訊，.btn-primary 和 .btn-secondary 按鈕。
+包含表單元素 .form-group 或資料表格 .table。`;
+    }
+
+    return {
+      name,
+      viewport: 'desktop' as const,
+      spec,
+      constraints: `必須包含 .site-header + .site-nav 導覽列，頁面背景 #FAF4EB`,
+      navigationOut: otherPages,
+    };
+  });
+
+  return {
+    shell: {
+      hasNav: true,
+      navType: 'top-bar',
+      navItems: pageNames,
+      hasFooter: true,
+    },
+    sharedCss,
+    cssVariables,
+    pages,
+  };
+}
