@@ -216,16 +216,14 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     const shellHtml = shellRow?.shell_html || null;
     const hasShell = !!shellHtml;
 
-    // Fast-path: short imperative messages always mean "generate" — skip expensive classifier
+    // isObviousGenerate: detect if user wants to CREATE something new (not just ask a question)
+    // We rely on AI classifyIntent for the main classification, but this flag determines
+    // whether to DOWNGRADE full-page→micro-adjust when prototype exists.
+    // If user is clearly requesting a new thing, DON'T downgrade.
     const trimmed = message.trim().toLowerCase();
-    const isObviousGenerate = (
-      (trimmed.length <= 20 && !trimmed.includes('?') &&
-        /產生|生成|做出|幫我做|開始|go|generate|ui|prototype|原型|設計|做個|頁面|介面/.test(trimmed))
-      ||
-      // Fix/correction requests: describe a problem and implicitly ask to fix it
-      // Also catch "嗎" ending complaints about missing UI elements
-      (/空白太|空白超|太大|太小|不對|沒有依照|沒依照|缺少|重新生成|請重新|重做|修改|修正|調整|改掉|有問題|不正確|看起來不|樣式不|版面|排版|沒有正確|沒有運作|不能點|點擊沒|連結沒|沒有做出|做出來|沒有生成|為什麼沒有做|為何沒有|沒有子頁面|沒有頁面|子頁面|顏色不對|色調不對|色調錯誤|顏色錯誤|不像設計稿|沒有照設計稿|沒有按照設計稿/.test(trimmed))
-    );
+    const hasGenerateKeywords = /我要|我想要|請做|幫我做|生成|建立|做一個|設計|create|make|build|generate|給我|產生|做出/i.test(trimmed);
+    const hasTypeKeywords = /網站|網頁|頁面|系統|平台|app|應用|介面|dashboard|後台|前台|landing/i.test(trimmed);
+    const isObviousGenerate = hasGenerateKeywords && hasTypeKeywords;
 
     // Check if prototype already exists
     const currentPrototype = db.prepare(
