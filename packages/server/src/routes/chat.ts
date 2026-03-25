@@ -1138,8 +1138,30 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           res.end();
           return;
         } catch (err: any) {
-          console.error('[parallel] Pipeline failed, falling back to single-call:', err.message);
-          // Fall through to single-call generation
+          console.error('[parallel] Pipeline failed, retrying once:', err.message);
+          // Retry once with a different key
+          try {
+            const retryResult = await generateParallel(
+              projectId as string, analysisData, architectureBlock || '',
+              designConvention, userContent,
+              (event) => { res.write(`data: ${JSON.stringify(event)}\n\n`); },
+            );
+            // Success on retry — save and return (same logic as above)
+            db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(uuidv4(), projectId, 'user', userContent, 'user');
+            const retryMsgId = uuidv4();
+            db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type, metadata) VALUES (?, ?, ?, ?, ?, NULL)').run(retryMsgId, projectId, 'assistant', retryResult.html, 'generate');
+            db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+            const retryVersionId = uuidv4();
+            const retryVersion = ((db.prepare('SELECT MAX(version) as v FROM prototype_versions WHERE project_id = ?').get(projectId) as any)?.v || 0) + 1;
+            db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(retryVersionId, projectId, retryMsgId, retryResult.html, retryVersion, 1, JSON.stringify(retryResult.pages));
+            db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+            triggerQualityScoring(retryVersionId, retryResult.html, apiKey);
+            res.write(`data: ${JSON.stringify({ done: true, html: retryResult.html, messageType: 'generate', intent, isMultiPage: true, pages: retryResult.pages })}\n\n`);
+            res.end();
+            return;
+          } catch (retryErr: any) {
+            console.error('[parallel] Retry also failed, falling back to single-call:', retryErr.message);
+          }
         }
       }
     }
