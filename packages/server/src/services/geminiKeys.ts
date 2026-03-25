@@ -67,18 +67,42 @@ export function invalidateKeyCache(): void {
   cachedKeys = [];
 }
 
-/** Get the next API key using round-robin rotation */
-export function getGeminiApiKey(): string | null {
+// Temporary bad key tracking — keys that 429'd or errored recently
+const badKeys = new Map<string, number>(); // key → timestamp when marked bad
+const BAD_KEY_COOLDOWN = 120_000; // 2 minutes cooldown
+
+/** Mark a key as temporarily bad (429, quota, auth error) */
+export function markKeyBad(key: string): void {
+  badKeys.set(key, Date.now());
+  console.warn('[keys] Marked bad:', '...' + key.slice(-4), '(cooldown 2min)');
+}
+
+/** Get available keys excluding temporarily bad ones */
+function getAvailableKeys(): string[] {
+  const now = Date.now();
   const keys = loadKeys();
+  // Clean up expired cooldowns
+  for (const [k, ts] of badKeys) {
+    if (now - ts > BAD_KEY_COOLDOWN) badKeys.delete(k);
+  }
+  const available = keys.filter(k => !badKeys.has(k));
+  // If ALL keys are bad, return all (better than nothing)
+  return available.length > 0 ? available : keys;
+}
+
+/** Get the next API key using round-robin rotation, skipping bad keys */
+export function getGeminiApiKey(): string | null {
+  const keys = getAvailableKeys();
   if (keys.length === 0) return null;
   const key = keys[keyIndex % keys.length];
   keyIndex = (keyIndex + 1) % keys.length;
   return key;
 }
 
-/** Mark a key as failed (429) — skip it for this rotation cycle */
+/** Get a key excluding a specific failed key */
 export function getGeminiApiKeyExcluding(failedKey: string): string | null {
-  const keys = loadKeys().filter(k => k !== failedKey);
+  markKeyBad(failedKey);
+  const keys = getAvailableKeys().filter(k => k !== failedKey);
   if (keys.length === 0) return null;
   return keys[Math.floor(Math.random() * keys.length)];
 }

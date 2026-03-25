@@ -1246,6 +1246,10 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
       }
     } catch (e: any) {
       console.warn('[chat] Analysis call failed:', e.message?.slice(0, 80));
+      if (e.message?.includes('429') || e.message?.includes('quota') || e.message?.includes('rate')) {
+        const { markKeyBad } = require('../services/geminiKeys');
+        markKeyBad(apiKey);
+      }
     }
 
     // Step 1.5: Extract pages from reasoning if page detection failed
