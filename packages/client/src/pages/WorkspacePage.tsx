@@ -1413,6 +1413,7 @@ export default function WorkspacePage() {
                   pages={pages}
                   activePage={activePage || null}
                   onSelect={handleNavigatePage}
+                  html={html || ''}
                 />
                 <CodePanel
                   html={html}
