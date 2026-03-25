@@ -1178,22 +1178,33 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       const analyzeGenai = new GoogleGenerativeAI(apiKey);
       const analyzeModel = analyzeGenai.getGenerativeModel({
         model: getGeminiModel(),
-        generationConfig: { maxOutputTokens: 800, temperature: 0.5 },
+        generationConfig: { maxOutputTokens: 1500, temperature: 0.5 },
       });
       const pageContext = isMultiPage && finalPages.length > 0
         ? `\n偵測到的頁面：${finalPages.join('、')}`
         : '';
-      const analyzePrompt = `你是 UI 設計分析師。用戶要求：「${userContent.slice(0, 500)}」${pageContext}
+      const analyzePrompt = `你是資深 UI 設計師。用戶要求：「${userContent.slice(0, 500)}」${pageContext}
 
-請用繁體中文詳細分析這個需求（8-15行）：
+請用繁體中文，以第一人稱思考過程的方式分析這個需求（20-30行）。像是在自言自語規劃怎麼實作：
 
-1. 需求理解：用戶想要什麼？目標用戶是誰？
-2. 頁面規劃：需要哪些頁面？每頁的核心功能？
-3. UI 元件：每個頁面需要哪些關鍵元件？（表格、卡片、表單等）
-4. 互動流程：頁面之間如何導航？用戶操作流程？
-5. 設計重點：色彩、排版、RWD 等注意事項
+讓我分析這個請求：
 
-直接回答，使用數字列表，不要加 markdown 標題。`;
+1. 這是什麼類型的應用？需要哪些頁面？（列出每個頁面名稱和用途）
+2. 技術選型：需要什麼樣的導航方式？資料如何管理？
+3. 每個頁面需要哪些核心元件？
+4. 資料結構：需要什麼樣的資料模型？
+
+關於設計：
+- 配色和風格考量
+- 響應式設計策略
+- 用戶操作流程
+
+讓我開始實現：
+1. 首先需要設定什麼...
+2. 然後建立什麼元件...
+3. 設置導航和路由...
+
+直接回答，用自然的思考語氣，不要加 markdown 標題或 ## 。使用數字列表和 bullet points。`;
       const analyzeResult = await analyzeModel.generateContentStream(analyzePrompt);
       for await (const chunk of analyzeResult.stream) {
         const text = chunk.text();
@@ -1410,14 +1421,18 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
         const summaryGenai = new GoogleGenerativeAI(currentKey);
         const summaryModel = summaryGenai.getGenerativeModel({
           model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: 500, temperature: 0.3 },
+          generationConfig: { maxOutputTokens: 800, temperature: 0.3 },
         });
-        const summaryPrompt = `你是 UI 設計助手。以下是剛生成的 HTML prototype。請用繁體中文簡短描述（3-5 行）：
-1. 這個網站/應用的概述（1行）
-2. 主要功能（用 • 列點，每個頁面一點）
+        const summaryPrompt = `你是 UI 設計助手。以下是剛生成的 HTML prototype。請用繁體中文描述（8-15 行）。
 
-直接回答，不要加標題。HTML 如下（前2000字）：
-${html.slice(0, 2000)}`;
+格式要求：
+第一行：一句概述（例如「我已經為您建立了一個功能完整的購物網站。」）
+第二行：補充說明使用了什麼技術/架構。
+空一行，然後寫「主要功能包括：」
+接著每個頁面/功能用 • 開頭列點，每點包含頁面名稱和 2-3 個具體功能。
+
+直接回答，不要加 markdown 標題。HTML 如下（前3000字）：
+${html.slice(0, 3000)}`;
         const summaryResult = await summaryModel.generateContent(summaryPrompt);
         generationSummary = summaryResult.response.text();
       } catch { /* ignore summary failure */ }
