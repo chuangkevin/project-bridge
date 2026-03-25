@@ -775,50 +775,40 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                     const summary = isLatest && lastGenerationSummary ? lastGenerationSummary : msg.metadata?.summary || '';
                     const genPages = isLatest && lastGeneratedPages.length > 0 ? lastGeneratedPages : msg.metadata?.pages || [];
                     const thinking = (isLatest && lastThinkingSummary) ? lastThinkingSummary : msg.metadata?.thinking || '';
-                    // Build virtual file list from pages
-                    const fileList = genPages.length > 0
-                      ? [...genPages.map((p: string) => `Wrote ${p}.html`), 'Wrote styles.css', 'Wrote app.js']
-                      : ['Wrote index.html'];
+                    const versionNum = messages.filter(m => m.messageType === 'generate').indexOf(msg) + 1;
                     return (
                       <div style={{ maxWidth: '100%', padding: 0 }}>
-                        {/* Reasoning — Figma style collapsible */}
+                        {/* Thinking/Reasoning — collapsible */}
                         {thinking && (
-                          <details style={{ marginBottom: 12 }}>
+                          <details style={{ marginBottom: 10 }}>
                             <summary style={{
-                              cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                              color: 'var(--text-primary, #1e293b)',
-                              userSelect: 'none' as const, display: 'flex', alignItems: 'center', gap: 4,
-                            }}>
-                              <span style={{ color: 'var(--accent, #8E6FA7)', fontWeight: 600 }}>Reasoning</span>
-                              <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>›</span>
-                            </summary>
+                              cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                              color: 'var(--accent, #8E6FA7)',
+                              userSelect: 'none' as const,
+                            }}>Reasoning ›</summary>
                             <div style={{
-                              marginTop: 8, fontSize: 13, lineHeight: 1.7,
+                              marginTop: 6, fontSize: 13, lineHeight: 1.7,
                               color: 'var(--text-secondary, #64748b)',
                               whiteSpace: 'pre-wrap',
                             }}>{thinking}</div>
                           </details>
                         )}
 
-                        {/* Worked with files — Figma style collapsible */}
-                        {fileList.length > 0 && (
-                          <details style={{ marginBottom: 12 }}>
+                        {/* Pages generated — collapsible */}
+                        {genPages.length > 0 && (
+                          <details style={{ marginBottom: 10 }}>
                             <summary style={{
-                              cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                              cursor: 'pointer', fontSize: 13, fontWeight: 600,
                               color: 'var(--text-primary, #1e293b)',
-                              userSelect: 'none' as const, display: 'flex', alignItems: 'center', gap: 4,
-                            }}>
-                              <span>Worked with {fileList.length} files</span>
-                              <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>›</span>
-                            </summary>
+                              userSelect: 'none' as const,
+                            }}>生成了 {genPages.length} 個頁面 ›</summary>
                             <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.8, color: 'var(--text-secondary, #64748b)' }}>
-                              {genPages.length > 0 && <div>Read {genPages.length > 1 ? `${genPages.length} pages` : '1 page'}</div>}
-                              {fileList.map((f: string, i: number) => <div key={i}>{f}</div>)}
+                              {genPages.map((p: string) => <div key={p}>• {p}</div>)}
                             </div>
                           </details>
                         )}
 
-                        {/* Summary text */}
+                        {/* Summary */}
                         {summary ? (
                           <div style={{
                             fontSize: 13, lineHeight: 1.7,
@@ -826,26 +816,23 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                             whiteSpace: 'pre-wrap',
                           }}>{summary}</div>
                         ) : (
-                          <span style={styles.generateTag}>✅ 已生成原型</span>
+                          <span style={styles.generateTag}>已生成原型</span>
                         )}
 
-                        {/* Version card — like Figma's "Shopping Website / Version 1" */}
+                        {/* Version badge — compact */}
                         <div style={{
-                          marginTop: 12, padding: '10px 14px',
+                          marginTop: 10, padding: '8px 12px',
                           border: '1px solid var(--border-primary, #e2e8f0)',
-                          borderRadius: 10, display: 'flex',
-                          alignItems: 'center', justifyContent: 'space-between',
+                          borderRadius: 8, display: 'inline-flex',
+                          alignItems: 'center', gap: 8,
                           background: 'var(--bg-secondary, #f8fafc)',
+                          fontSize: 12,
                         }}>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent, #8E6FA7)' }}>
-                              {genPages.length > 1 ? `${genPages.length} 頁面原型` : '原型'}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', marginTop: 1 }}>
-                              Version {messages.filter(m => m.messageType === 'generate').indexOf(msg) + 1}
-                            </div>
-                          </div>
-                          <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                          <span style={{ fontWeight: 600, color: 'var(--accent, #8E6FA7)' }}>
+                            {genPages.length > 1 ? `${genPages.length} 頁面` : '單頁'}原型
+                          </span>
+                          <span style={{ color: 'var(--text-muted, #94a3b8)' }}>v{versionNum}</span>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
                         </div>
                       </div>
                     );
