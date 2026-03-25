@@ -39,12 +39,12 @@ function getBridgeToken(): string | null {
   return localStorage.getItem('bridge_token') ?? localStorage.getItem('pb-auth-token');
 }
 
-/** Return auth headers — prefer new session token, fallback to legacy admin token */
+/** Return auth headers — admin password token takes priority (settings page = admin) */
 function authHeaders(): Record<string, string> {
+  const adminToken = getToken();
+  if (adminToken) return { Authorization: `Bearer ${adminToken}` };
   const bridge = getBridgeToken();
   if (bridge) return { Authorization: `Bearer ${bridge}` };
-  const legacy = getToken();
-  if (legacy) return { Authorization: `Bearer ${legacy}` };
   return {};
 }
 
