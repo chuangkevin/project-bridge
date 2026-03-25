@@ -33,8 +33,27 @@ interface AgentSkill {
   project_id: string | null;
   created_by: string | null;
   order_index: number;
+  source_path: string | null;
+  depends_on: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Recalculate depends_on for ALL skills by scanning each skill's content
+ * for mentions of other skill names (case-insensitive, excluding self).
+ */
+function recalculateReferences(): void {
+  const allSkills = db.prepare('SELECT id, name, content FROM agent_skills').all() as { id: string; name: string; content: string }[];
+  const allNames = allSkills.map(s => s.name);
+
+  for (const skill of allSkills) {
+    const refs = allNames.filter(name =>
+      name !== skill.name && skill.content.toLowerCase().includes(name.toLowerCase())
+    );
+    db.prepare('UPDATE agent_skills SET depends_on = ? WHERE id = ?')
+      .run(JSON.stringify(refs), skill.id);
+  }
 }
 
 // GET /api/skills — list all global skills + optionally project-scoped
@@ -58,6 +77,29 @@ router.get('/', (req: Request, res: Response) => {
   }
 });
 
+// GET /api/skills/graph — return full reference graph (adjacency list)
+router.get('/graph', (req: Request, res: Response) => {
+  try {
+    const allSkills = db.prepare('SELECT id, name, depends_on FROM agent_skills').all() as { id: string; name: string; depends_on: string | null }[];
+    const nodes = allSkills.map(s => ({ id: s.id, name: s.name }));
+    const nameToId = new Map(allSkills.map(s => [s.name, s.id]));
+    const edges: { from: string; to: string }[] = [];
+    for (const skill of allSkills) {
+      const deps: string[] = skill.depends_on ? JSON.parse(skill.depends_on) : [];
+      for (const dep of deps) {
+        const targetId = nameToId.get(dep);
+        if (targetId) {
+          edges.push({ from: skill.id, to: targetId });
+        }
+      }
+    }
+    return res.json({ nodes, edges });
+  } catch (err: any) {
+    console.error('Error building skill graph:', err);
+    return res.status(500).json({ error: 'Failed to build skill graph' });
+  }
+});
+
 // GET /api/skills/:id — get single skill
 router.get('/:id', (req: Request, res: Response) => {
   try {
@@ -66,6 +108,31 @@ router.get('/:id', (req: Request, res: Response) => {
     return res.json(skill);
   } catch (err: any) {
     return res.status(500).json({ error: 'Failed to get skill' });
+  }
+});
+
+// GET /api/skills/:id/references — return outgoing and incoming references
+router.get('/:id/references', (req: Request, res: Response) => {
+  try {
+    const skill = db.prepare('SELECT id, name, depends_on FROM agent_skills WHERE id = ?').get(req.params.id) as { id: string; name: string; depends_on: string | null } | undefined;
+    if (!skill) return res.status(404).json({ error: 'Skill not found' });
+
+    const outgoing: string[] = skill.depends_on ? JSON.parse(skill.depends_on) : [];
+
+    // Find all skills whose depends_on contains this skill's name
+    const allSkills = db.prepare('SELECT name, depends_on FROM agent_skills WHERE id != ?').all(skill.id) as { name: string; depends_on: string | null }[];
+    const incoming: string[] = [];
+    for (const other of allSkills) {
+      const deps: string[] = other.depends_on ? JSON.parse(other.depends_on) : [];
+      if (deps.includes(skill.name)) {
+        incoming.push(other.name);
+      }
+    }
+
+    return res.json({ outgoing, incoming });
+  } catch (err: any) {
+    console.error('Error getting skill references:', err);
+    return res.status(500).json({ error: 'Failed to get skill references' });
   }
 });
 
@@ -103,7 +170,7 @@ router.post('/', requireSkillAdmin, (req: Request, res: Response) => {
 // POST /api/skills/batch — batch import skills from parsed SKILL.md files
 router.post('/batch', requireSkillAdmin, (req: Request, res: Response) => {
   try {
-    const { skills: skillsArr } = req.body as { skills: { name: string; description: string; content: string }[] };
+    const { skills: skillsArr } = req.body as { skills: { name: string; description: string; content: string; source_path?: string; depends?: string[] }[] };
     if (!Array.isArray(skillsArr) || skillsArr.length === 0) {
       return res.status(400).json({ error: 'skills array is required' });
     }
@@ -114,24 +181,57 @@ router.post('/batch', requireSkillAdmin, (req: Request, res: Response) => {
     let updated = 0;
     for (const s of skillsArr) {
       if (!s.name || !s.content) continue;
+      const sourcePath = s.source_path || null;
       // Upsert: if skill with same name exists, update it
       const existing = db.prepare('SELECT id FROM agent_skills WHERE name = ?').get(s.name) as { id: string } | undefined;
       if (existing) {
-        db.prepare('UPDATE agent_skills SET description = ?, content = ?, updated_at = ? WHERE id = ?')
-          .run((s.description || '').trim(), s.content.trim(), now, existing.id);
+        db.prepare('UPDATE agent_skills SET description = ?, content = ?, source_path = ?, updated_at = ? WHERE id = ?')
+          .run((s.description || '').trim(), s.content.trim(), sourcePath, now, existing.id);
         updated++;
       } else {
         const id = uuidv4();
         db.prepare(
-          'INSERT INTO agent_skills (id, name, description, content, scope, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, s.name.trim(), (s.description || '').trim(), s.content.trim(), 'global', orderIdx++, now, now);
+          'INSERT INTO agent_skills (id, name, description, content, scope, source_path, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, s.name.trim(), (s.description || '').trim(), s.content.trim(), 'global', sourcePath, orderIdx++, now, now);
         imported++;
       }
     }
+    // Recalculate references for ALL skills after batch import
+    recalculateReferences();
     const allSkills = db.prepare('SELECT * FROM agent_skills ORDER BY order_index ASC').all();
     return res.json({ skills: allSkills, imported, updated });
   } catch (err: any) {
     return res.status(500).json({ error: 'Failed to batch import skills' });
+  }
+});
+
+// POST /api/skills/batch-action — batch enable/disable/delete (admin only)
+router.post('/batch-action', requireSkillAdmin, (req: Request, res: Response) => {
+  try {
+    const { ids, action } = req.body as { ids: string[]; action: 'enable' | 'disable' | 'delete' };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array is required' });
+    }
+    if (!['enable', 'disable', 'delete'].includes(action)) {
+      return res.status(400).json({ error: 'action must be enable, disable, or delete' });
+    }
+
+    const placeholders = ids.map(() => '?').join(',');
+    const now = new Date().toISOString();
+
+    if (action === 'enable') {
+      db.prepare(`UPDATE agent_skills SET enabled = 1, updated_at = ? WHERE id IN (${placeholders})`).run(now, ...ids);
+    } else if (action === 'disable') {
+      db.prepare(`UPDATE agent_skills SET enabled = 0, updated_at = ? WHERE id IN (${placeholders})`).run(now, ...ids);
+    } else if (action === 'delete') {
+      db.prepare(`DELETE FROM agent_skills WHERE id IN (${placeholders})`).run(...ids);
+    }
+
+    const allSkills = db.prepare('SELECT * FROM agent_skills ORDER BY order_index ASC, created_at ASC').all();
+    return res.json({ skills: allSkills });
+  } catch (err: any) {
+    console.error('Error performing batch action:', err);
+    return res.status(500).json({ error: 'Failed to perform batch action' });
   }
 });
 
