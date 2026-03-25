@@ -239,7 +239,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       : await classifyIntent(message.trim(), apiKey, hasShell);
 
     // Detect requests for missing/new pages — force full-page generation
-    const isPageRequest = /沒有.*頁|缺少.*頁|加入.*頁|新增.*頁|多.*頁面|少了.*頁|missing.*page|add.*page|need.*page|請生成.*多|生成.*頁面/i.test(message);
+    const isPageRequest = /沒有.*頁|缺少.*頁|加入.*頁|新增.*頁|多.*頁面|少了.*頁|要有.*頁|要.*頁面|需要.*頁|增加.*頁|missing.*page|add.*page|need.*page|請生成.*多|生成.*頁面/i.test(message);
 
     // When user requests pages, force full-page intent regardless of existing prototype
     if (isPageRequest) {
@@ -1038,18 +1038,25 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     // === PARALLEL GENERATION PATH ===
-    // If 3+ pages and we have analysis data, use parallel pipeline
+    // If 2+ pages, use parallel pipeline for speed
     const hasAnalysisData = specRowsEarly.some((r: any) => r.analysis_result);
-    if (isMultiPage && finalPages.length >= 3 && hasAnalysisData) {
-      // Find the best analysis_result
+    if (isMultiPage && finalPages.length >= 2) {
+      // Find the best analysis_result, or build minimal one from pages
       let analysisData: any = null;
       for (const row of specRowsEarly) {
         if (row.analysis_result) {
           try { analysisData = JSON.parse(row.analysis_result); break; } catch { /* skip */ }
         }
       }
+      // If no analysis data, build minimal structure from finalPages
+      if (!analysisData) {
+        analysisData = {
+          pages: finalPages.map(p => ({ name: p, description: p, components: [] })),
+          shared: { components: [], styles: {} },
+        };
+      }
 
-      if (analysisData) {
+      {
         res.write(`data: ${JSON.stringify({ phase: 'planning', message: '規劃頁面架構...' })}\n\n`);
 
         try {
