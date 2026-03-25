@@ -1185,26 +1185,30 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
         : '';
       const analyzePrompt = `你是資深 UI 設計師。用戶要求：「${userContent.slice(0, 500)}」${pageContext}
 
-請用繁體中文，以第一人稱思考過程的方式分析這個需求（20-30行）。像是在自言自語規劃怎麼實作：
+請用繁體中文，以第一人稱思考過程的方式分析這個需求（20-30行）。
 
 讓我分析這個請求：
 
-1. 這是什麼類型的應用？需要哪些頁面？（列出每個頁面名稱和用途）
-2. 技術選型：需要什麼樣的導航方式？資料如何管理？
-3. 每個頁面需要哪些核心元件？
-4. 資料結構：需要什麼樣的資料模型？
+1. 這是什麼類型的應用？目標用戶是誰？
+2. 需要哪些頁面？（列出每個頁面名稱和用途，包含使用者沒明確說但必要的頁面，如首頁、列表頁）
+3. 每個頁面需要哪些核心元件？（列出具體的 UI 元件）
+4. 頁面之間的導航流程？
+5. 資料模型和狀態管理？
 
 關於設計：
-- 配色和風格考量
+- 需要使用 HousePrice 設計系統（暖米色背景 #FAF4EB、紫色主色 #8E6FA7）
 - 響應式設計策略
 - 用戶操作流程
 
 讓我開始實現：
-1. 首先需要設定什麼...
-2. 然後建立什麼元件...
-3. 設置導航和路由...
+1. 首先建立頁面結構...
+2. 設定導航系統...
+3. 實作每個頁面的元件...
 
-直接回答，用自然的思考語氣，不要加 markdown 標題或 ## 。使用數字列表和 bullet points。`;
+最後，在回答的最後一行，請輸出頁面列表，格式為：
+PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
+
+直接回答，用自然的思考語氣，不要加 markdown 標題。使用數字列表和 bullet points。`;
       const analyzeResult = await analyzeModel.generateContentStream(analyzePrompt);
       for await (const chunk of analyzeResult.stream) {
         const text = chunk.text();
@@ -1215,6 +1219,21 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       }
     } catch (e: any) {
       console.warn('[chat] Analysis call failed:', e.message?.slice(0, 80));
+    }
+
+    // Step 1.5: Extract pages from reasoning if page detection failed
+    if (accumulatedThinking && finalPages.length <= 1) {
+      const pagesMatch = accumulatedThinking.match(/PAGES:\s*(.+)/i);
+      if (pagesMatch) {
+        const extracted = pagesMatch[1].split(/[,、，]/).map(p => p.trim()).filter(p => p && p.length < 20);
+        if (extracted.length >= 2) {
+          console.log('[chat] Extracted pages from reasoning:', extracted);
+          finalPages = extracted;
+          isMultiPage = true;
+        }
+      }
+      // Remove the PAGES: line from thinking display (it's metadata, not for user)
+      accumulatedThinking = accumulatedThinking.replace(/\n?PAGES:\s*.+$/i, '').trim();
     }
 
     // Step 2: Emit processing steps
