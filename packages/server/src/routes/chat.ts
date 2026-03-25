@@ -12,6 +12,8 @@ import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlS
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
 import { generateParallel } from '../services/parallelGenerator';
+import { assemblePrototype } from '../services/htmlAssembler';
+import { buildLocalPlan } from '../services/masterAgent';
 import { getActiveSkills } from './skills';
 import { scorePrototype } from '../services/qualityScorer';
 import { generationQueue } from '../services/generationQueue';
@@ -1476,6 +1478,29 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
       db.prepare(
         "UPDATE projects SET updated_at = datetime('now') WHERE id = ?"
       ).run(projectId);
+
+      // POST-PROCESS: If multi-page but HTML lacks page navigation, wrap with assembler
+      if (isMultiPage && finalPages.length >= 2 && !html.includes('showPage')) {
+        console.log('[chat] Single-call HTML missing showPage — wrapping with assembler');
+        try {
+          const localPlan = buildLocalPlan(finalPages, userContent, designConvention);
+          const bodyContent = html.replace(/<!DOCTYPE[^>]*>|<\/?html[^>]*>|<head>[\s\S]*?<\/head>|<\/?body[^>]*>/gi, '').trim();
+          const fragments = finalPages.map((pageName, idx) => ({
+            name: pageName,
+            html: idx === 0 ? bodyContent
+              : `<div class="container section"><h1>${pageName}</h1><p>此頁面內容正在生成中，請使用對話微調此頁面。</p></div>`,
+            success: true,
+          }));
+          html = assemblePrototype(localPlan, fragments);
+          // Update DB with assembled HTML
+          db.prepare('UPDATE prototype_versions SET html = ? WHERE id = ?').run(html, versionId);
+          db.prepare('UPDATE conversations SET content = ? WHERE id = ?').run(html, assistantMsgId);
+          console.log('[chat] Assembled multi-page HTML with showPage, length:', html.length);
+        } catch (assembleErr: any) {
+          console.warn('[chat] Assembly fallback failed:', assembleErr.message);
+        }
+      }
+
       triggerQualityScoring(versionId, html, currentKey);
 
       // Send page list as separate event before done
