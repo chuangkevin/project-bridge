@@ -1169,19 +1169,45 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     if (isMultiPage) {
-      const pageList = finalPages.map(p => `- "${p}"`).join('\n');
-      effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE ===
-Pages to generate (ALL must have complete, content-rich HTML — zero placeholders):
-${pageList}
+      // Generate the EXACT HTML skeleton the AI must follow
+      const pageTemplate = finalPages.map((p, i) =>
+        `<div class="page" id="page-${p}" data-page="${p}" style="display:${i === 0 ? 'block' : 'none'};">
+  <!-- ${p} 的完整內容放這裡 — 必須包含真實 UI 元件、文字、資料 -->
+</div>`
+      ).join('\n');
 
-Navigation rules:
-1. Define a global JS function: function showPage(name) { document.querySelectorAll('.page').forEach(p=>p.style.display='none'); document.getElementById('page-'+name)?.style.setProperty('display','block'); document.querySelectorAll('[data-nav]').forEach(l=>l.classList.toggle('active',l.dataset.nav===name)); }
-2. Each page div: <div class="page" id="page-[name]" data-page="[name]"> — first page has style="display:block", rest style="display:none"
-3. Each nav link: <a href="#" data-nav="[name]" onclick="showPage('[name]');return false;">[name]</a>
-4. REQUIRED: Follow the architecture navigation requirements above EXACTLY — each page's clickable elements must call showPage() to navigate to the target page defined in the architecture edges. Do NOT invent navigation paths not specified in the architecture.
-5. Call showPage on init: document.addEventListener('DOMContentLoaded', function(){ showPage('${finalPages[0]}'); });
+      const navTemplate = finalPages.map(p =>
+        `<a href="#" class="nav-link" data-nav="${p}" onclick="showPage('${p}');return false;">${p}</a>`
+      ).join('\n  ');
 
-CRITICAL: Every page must have FULL content — no placeholder text, no empty divs, no "此處將顯示..." comments.
+      effectiveSystemPrompt += `\n\n=== MULTI-PAGE STRUCTURE (MANDATORY) ===
+
+你必須生成一個包含 ${finalPages.length} 個頁面的 HTML 文件。
+
+每個頁面是一個 <div class="page"> 容器。第一個頁面顯示，其他隱藏。
+導覽列的每個連結用 onclick="showPage('頁面名')" 切換。
+
+你的 HTML 必須包含以下結構（請填入每個頁面的完整內容）：
+
+<nav>
+  ${navTemplate}
+</nav>
+
+${pageTemplate}
+
+<script>
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+  var el = document.getElementById('page-' + name);
+  if (el) el.style.display = 'block';
+  document.querySelectorAll('[data-nav]').forEach(l => l.classList.toggle('active', l.dataset.nav === name));
+}
+document.addEventListener('DOMContentLoaded', function() { showPage('${finalPages[0]}'); });
+</script>
+
+⚠️ 每個 page div 裡面必須有完整的 UI 內容（至少 30 行 HTML）。
+⚠️ 絕不可以只寫 placeholder 或 "即將推出" — 每個頁面都要有真正的 UI 元件。
+⚠️ 所有按鈕、連結都要用 showPage() 做頁面導航。
 ============================`;
     }
 
@@ -1272,18 +1298,24 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
     {
       const msg = userContent.toLowerCase();
       let keywordPages: string[] = [];
-      if (/購物|商城|電商|shop|store|ecommerce/i.test(msg)) {
+      if (/購物|商城|電商|shop|store|ecommerce|網店/i.test(msg)) {
         keywordPages = ['首頁', '商品列表', '商品詳情', '購物車', '結帳'];
-      } else if (/部落格|blog|文章/i.test(msg)) {
+      } else if (/旅遊|旅行|travel|tour|訂房|住宿|hotel|booking/i.test(msg)) {
+        keywordPages = ['首頁', '行程列表', '行程詳情', '訂購確認', '我的訂單'];
+      } else if (/部落格|blog|文章|新聞|news/i.test(msg)) {
         keywordPages = ['首頁', '文章列表', '文章內容', '關於我們'];
-      } else if (/後台|admin|dashboard|管理/i.test(msg)) {
+      } else if (/後台|admin|dashboard|管理|CMS/i.test(msg)) {
         keywordPages = ['儀表板', '列表管理', '詳情編輯', '設定'];
-      } else if (/社群|social|論壇|forum/i.test(msg)) {
+      } else if (/社群|social|論壇|forum|討論/i.test(msg)) {
         keywordPages = ['首頁', '貼文列表', '貼文詳情', '個人檔案'];
-      } else if (/訂餐|餐廳|restaurant|food|外送/i.test(msg)) {
+      } else if (/訂餐|餐廳|restaurant|food|外送|美食/i.test(msg)) {
         keywordPages = ['首頁', '菜單', '購物車', '訂單確認'];
-      } else if (/房|不動產|real.?estate|租屋|買屋/i.test(msg)) {
+      } else if (/房|不動產|real.?estate|租屋|買屋|房屋/i.test(msg)) {
         keywordPages = ['首頁', '物件列表', '物件詳情', '聯絡我們'];
+      } else if (/教育|課程|course|learn|學習|線上課/i.test(msg)) {
+        keywordPages = ['首頁', '課程列表', '課程詳情', '我的學習', '個人設定'];
+      } else if (/醫療|診所|clinic|hospital|預約|掛號/i.test(msg)) {
+        keywordPages = ['首頁', '醫師列表', '預約掛號', '看診紀錄'];
       }
       // Keyword match ALWAYS overrides AI pages (unless user explicitly provided page names)
       if (keywordPages.length >= 2) {
@@ -1609,20 +1641,11 @@ ${html.slice(0, 3000)}`;
       } catch { /* API summary failed — build local summary */ }
       // Fallback: build local summary if API call failed
       if (!generationSummary && finalPages.length > 0) {
-        const pageDescriptions: Record<string, string> = {
-          '首頁': '展示精選商品、分類導覽、搜尋功能與促銷活動',
-          '商品列表': '依分類瀏覽商品，支持篩選、排序與分頁功能',
-          '商品詳情': '查看商品完整資訊、規格、評價，可調整數量並加入購物車',
-          '購物車': '管理已選商品、調整數量、查看價格明細，前往結帳',
-          '結帳': '填寫配送資訊、選擇付款方式、確認訂單並完成購買',
-        };
-        const intro = `我已經為您建立了一個功能完整的購物網站原型，包含 ${finalPages.length} 個頁面，採用 HousePrice 設計規範。`;
-        const tech = `此原型採用純 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換，並整合了 HousePrice 品牌色彩與元件設計。`;
-        const features = finalPages.map(p => {
-          const desc = pageDescriptions[p] || `${p}頁面的完整互動介面`;
-          return `• ${p}：${desc}`;
-        }).join('\n');
-        generationSummary = `${intro}\n${tech}\n\n主要功能包括：\n${features}`;
+        const userReq = userContent.slice(0, 50);
+        const intro = `我已經為您建立了「${userReq}」的原型，包含 ${finalPages.length} 個頁面。`;
+        const tech = `此原型採用 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換，並整合了 HousePrice 設計規範。`;
+        const features = finalPages.map(p => `• ${p}`).join('\n');
+        generationSummary = `${intro}\n${tech}\n\n包含頁面：\n${features}`;
       }
 
       // Save summary + pages to conversation metadata for persistence
