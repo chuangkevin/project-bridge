@@ -256,8 +256,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           type: 'confirm',
           message: '已有原型，請選擇操作方式：',
           options: [
-            { id: 'micro-adjust', label: '✏️ 微調現有原型', description: '在目前的設計上修改' },
-            { id: 'regenerate', label: '🔄 重新生成', description: '從頭重新設計所有頁面' },
+            { id: 'micro-adjust', label: '微調現有原型', description: '在目前的設計上修改' },
+            { id: 'regenerate', label: '重新生成', description: '從頭重新設計所有頁面' },
           ]
         })}\n\n`);
         res.end();
