@@ -118,6 +118,16 @@ export default function SettingsPage() {
   const [newUserError, setNewUserError] = useState('');
   const [userActionError, setUserActionError] = useState('');
 
+  // Import preview (Task 3)
+  const [importPreview, setImportPreview] = useState<{ name: string; description: string; content: string; depends?: string[]; isNew: boolean }[] | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+
+  // Reference tags (Task 4)
+  const [skillRefs, setSkillRefs] = useState<Record<string, { outgoing: string[]; incoming: string[] }>>({});
+
+  // Batch operations (Task 5)
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
+
   // ─── Auth flow ─────────────────────────────────────
   // Settings page ALWAYS requires admin password — user selection alone is not enough
   useEffect(() => {
@@ -524,10 +534,25 @@ export default function SettingsPage() {
     setSkillsLoading(false);
   }, []);
 
+  const fetchSkillRefs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/skills/graph', { headers: authHeaders() });
+      if (res.ok) {
+        const graph: Record<string, { outgoing: string[]; incoming: string[] }> = await res.json();
+        setSkillRefs(graph);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     if (authState !== 'authenticated') return;
     fetchSkills();
   }, [authState, fetchSkills]);
+
+  // Fetch references after skills load
+  useEffect(() => {
+    if (skills.length > 0) fetchSkillRefs();
+  }, [skills, fetchSkillRefs]);
 
   const handleSaveSkill = async () => {
     if (!skillForm.name.trim() || !skillForm.content.trim()) return;
@@ -551,14 +576,6 @@ export default function SettingsPage() {
     } catch { alert('網路錯誤'); }
   };
 
-  const handleDeleteSkill = async (id: string) => {
-    if (!window.confirm('確定刪除此技能？')) return;
-    try {
-      await fetch(`/api/skills/${id}`, { method: 'DELETE', headers: authHeaders() });
-      await fetchSkills();
-    } catch { /* ignore */ }
-  };
-
   const handleToggleSkill = async (id: string) => {
     try {
       await fetch(`/api/skills/${id}/toggle`, { method: 'PATCH', headers: authHeaders() });
@@ -576,6 +593,139 @@ export default function SettingsPage() {
     setEditingSkill(null);
     setSkillForm({ name: '', description: '', content: '', scope: 'global' });
     setShowSkillForm(true);
+  };
+
+  // ─── Directory import helpers ─────────────────────
+  const parseFrontmatter = (text: string): { name: string; description: string; content: string; depends?: string[] } | null => {
+    const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+    if (!match) return null;
+    const fm = match[1];
+    const body = match[2].trim();
+    const skillName = (fm.match(/^name:\s*(.+)$/m) || [])[1]?.trim();
+    if (!skillName || !body) return null;
+    const desc = (fm.match(/^description:\s*(.+)$/m) || [])[1]?.trim() || '';
+    // Parse depends as YAML array: depends: [a, b] or depends:\n  - a\n  - b
+    let depends: string[] | undefined;
+    const depInline = fm.match(/^depends:\s*\[([^\]]*)\]/m);
+    if (depInline) {
+      depends = depInline[1].split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+    } else {
+      const depBlock = fm.match(/^depends:\s*\n((?:\s+-\s+.+\n?)+)/m);
+      if (depBlock) {
+        depends = depBlock[1].match(/-\s+(.+)/g)?.map(s => s.replace(/^-\s+/, '').trim().replace(/^["']|["']$/g, '')) || [];
+      }
+    }
+    return { name: skillName, description: desc, content: body, depends: depends?.length ? depends : undefined };
+  };
+
+  const buildPreview = (parsed: { name: string; description: string; content: string; depends?: string[] }[]) => {
+    const existingNames = new Set(skills.map(s => s.name));
+    return parsed.map(p => ({ ...p, isNew: !existingNames.has(p.name) }));
+  };
+
+  const handleDirectoryImport = async () => {
+    try {
+      const dirHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
+      const parsed: { name: string; description: string; content: string; depends?: string[] }[] = [];
+
+      async function scanDir(handle: any) {
+        for await (const [name, entry] of handle.entries()) {
+          if (entry.kind === 'directory') await scanDir(entry);
+          else if (name === 'SKILL.md') {
+            const file = await entry.getFile();
+            const text = await file.text();
+            const result = parseFrontmatter(text);
+            if (result) parsed.push(result);
+          }
+        }
+      }
+      await scanDir(dirHandle);
+
+      if (parsed.length === 0) {
+        alert('未找到 SKILL.md 檔案');
+        return;
+      }
+      setImportPreview(buildPreview(parsed));
+    } catch (e: any) {
+      if (e.name !== 'AbortError') alert('匯入失敗：' + (e.message || ''));
+    }
+  };
+
+  const handleFallbackImport = async (fileList: FileList | null) => {
+    if (!fileList) return;
+    const parsed: { name: string; description: string; content: string; depends?: string[] }[] = [];
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      if (file.name === 'SKILL.md') {
+        const text = await file.text();
+        const result = parseFrontmatter(text);
+        if (result) parsed.push(result);
+      }
+    }
+    if (parsed.length === 0) {
+      alert('未找到 SKILL.md 檔案');
+      return;
+    }
+    setImportPreview(buildPreview(parsed));
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importPreview) return;
+    setImportLoading(true);
+    try {
+      const res = await fetch('/api/skills/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({ skills: importPreview.map(({ name, description, content, depends }) => ({ name, description, content, depends })) }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSkills(data.skills || []);
+        alert(`匯入完成：新增 ${data.imported}，更新 ${data.updated}`);
+      } else {
+        alert(data.error || '匯入失敗');
+      }
+    } catch { alert('匯入失敗'); }
+    setImportLoading(false);
+    setImportPreview(null);
+  };
+
+  // ─── Delete with reference warning ────────────────
+  const handleDeleteSkillWithRefCheck = async (id: string) => {
+    const skill = skills.find(s => s.id === id);
+    if (!skill) return;
+    const refs = skillRefs[skill.name];
+    if (refs && refs.incoming.length > 0) {
+      if (!window.confirm(`此技能被以下技能引用：${refs.incoming.join('、')}，確定刪除？`)) return;
+    } else {
+      if (!window.confirm('確定刪除此技能？')) return;
+    }
+    try {
+      await fetch(`/api/skills/${id}`, { method: 'DELETE', headers: authHeaders() });
+      await fetchSkills();
+    } catch { /* ignore */ }
+  };
+
+  // ─── Batch operations ─────────────────────────────
+  const handleBatchAction = async (action: 'enable' | 'disable' | 'delete') => {
+    if (selectedSkills.size === 0) return;
+    if (action === 'delete') {
+      if (!window.confirm(`確定刪除 ${selectedSkills.size} 個技能？此操作無法復原。`)) return;
+    }
+    try {
+      const res = await fetch('/api/skills/batch-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({ ids: [...selectedSkills], action }),
+      });
+      if (res.ok) {
+        await fetchSkills();
+        setSelectedSkills(new Set());
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || '操作失敗');
+      }
+    } catch { alert('網路錯誤'); }
   };
 
   // ─── Auth screens ──────────────────────────────────
@@ -1216,54 +1366,76 @@ export default function SettingsPage() {
               <button type="button" style={styles.primaryBtn} onClick={openNewSkill}>
                 + 新增技能
               </button>
-              <button type="button" style={{ ...styles.primaryBtn, background: 'var(--accent, #8E6FA7)' }} onClick={async () => {
-                try {
-                  // Use File System Access API to pick a directory
-                  const dirHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
-                  const parsed: { name: string; description: string; content: string }[] = [];
+              {typeof (window as any).showDirectoryPicker === 'function' ? (
+                <button type="button" style={{ ...styles.primaryBtn, background: 'var(--accent, #8E6FA7)' }} onClick={handleDirectoryImport}>
+                  從目錄匯入
+                </button>
+              ) : (
+                <label style={{ ...styles.primaryBtn, background: 'var(--accent, #8E6FA7)', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+                  從目錄匯入
+                  <input
+                    type="file"
+                    {...{ webkitdirectory: '', directory: '' } as any}
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={e => handleFallbackImport(e.target.files)}
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
-                  // Recursively find SKILL.md files
-                  async function scanDir(handle: any) {
-                    for await (const [name, entry] of handle.entries()) {
-                      if (entry.kind === 'directory') await scanDir(entry);
-                      else if (name === 'SKILL.md') {
-                        const file = await entry.getFile();
-                        const text = await file.text();
-                        const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-                        if (match) {
-                          const fm = match[1];
-                          const body = match[2].trim();
-                          const skillName = (fm.match(/^name:\s*(.+)$/m) || [])[1]?.trim();
-                          const desc = (fm.match(/^description:\s*(.+)$/m) || [])[1]?.trim() || '';
-                          if (skillName && body) parsed.push({ name: skillName, description: desc, content: body });
-                        }
-                      }
-                    }
-                  }
-                  await scanDir(dirHandle);
-
-                  if (parsed.length === 0) {
-                    alert('未找到 SKILL.md 檔案');
-                    return;
-                  }
-                  const res = await fetch('/api/skills/batch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
-                    body: JSON.stringify({ skills: parsed }),
-                  });
-                  const data = await res.json();
-                  if (res.ok) {
-                    setSkills(data.skills || []);
-                    alert(`匯入完成：新增 ${data.imported}，更新 ${data.updated}`);
-                  } else {
-                    alert(data.error || '匯入失敗');
-                  }
-                } catch (e: any) {
-                  if (e.name !== 'AbortError') alert('匯入失敗：' + (e.message || ''));
-                }
-              }}>
-                📁 從目錄匯入
-              </button>
+          {/* Import Preview Dialog (Task 3.3) */}
+          {importPreview && (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+              <div style={{ background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 24, maxWidth: 680, width: '90vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 600 }}>匯入預覽 — 找到 {importPreview.length} 個技能</h3>
+                <div style={{ overflowY: 'auto', flex: 1, marginBottom: 16 }}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>名稱</th>
+                        <th style={styles.th}>說明</th>
+                        <th style={styles.th}>狀態</th>
+                        <th style={styles.th}>依賴</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.map(p => (
+                        <tr key={p.name}>
+                          <td style={{ ...styles.td, fontWeight: 600 }}>{p.name}</td>
+                          <td style={{ ...styles.td, color: '#64748b', fontSize: 13 }}>{p.description || '—'}</td>
+                          <td style={styles.td}>
+                            <span style={{
+                              fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                              ...(p.isNew
+                                ? { backgroundColor: '#f0fdf4', color: '#15803d' }
+                                : { backgroundColor: '#eff6ff', color: '#1d4ed8' }),
+                            }}>
+                              {p.isNew ? '新增' : '更新'}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {p.depends?.map(d => (
+                                <span key={d} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 8, backgroundColor: '#f3e8ff', color: '#7c3aed' }}>{d}</span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button type="button" style={{ ...styles.primaryBtn, backgroundColor: '#94a3b8' }} onClick={() => setImportPreview(null)} disabled={importLoading}>
+                    取消
+                  </button>
+                  <button type="button" style={{ ...styles.primaryBtn, backgroundColor: '#8E6FA7', ...(importLoading ? styles.btnDisabled : {}) }} onClick={handleConfirmImport} disabled={importLoading}>
+                    {importLoading ? '匯入中...' : `確認匯入 (${importPreview.length})`}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1272,10 +1444,15 @@ export default function SettingsPage() {
           ) : skills.length === 0 ? (
             <p style={{ color: '#94a3b8', fontSize: 13 }}>尚未建立任何技能。</p>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', position: 'relative' }}>
               <table style={styles.table}>
                 <thead>
                   <tr>
+                    <th style={{ ...styles.th, width: 32 }}>
+                      <input type="checkbox" checked={selectedSkills.size === skills.length && skills.length > 0}
+                        ref={el => { if (el) el.indeterminate = selectedSkills.size > 0 && selectedSkills.size < skills.length; }}
+                        onChange={e => setSelectedSkills(e.target.checked ? new Set(skills.map(s => s.id)) : new Set())} />
+                    </th>
                     <th style={styles.th}>狀態</th>
                     <th style={styles.th}>名稱</th>
                     <th style={styles.th}>說明</th>
@@ -1284,8 +1461,14 @@ export default function SettingsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {skills.map(s => (
-                    <tr key={s.id} style={{ opacity: s.enabled ? 1 : 0.5 }}>
+                  {skills.map(s => {
+                    const refs = skillRefs[s.name];
+                    return (
+                    <tr key={s.id} id={'skill-' + s.name} style={{ opacity: s.enabled ? 1 : 0.5 }}>
+                      <td style={styles.td}>
+                        <input type="checkbox" checked={selectedSkills.has(s.id)}
+                          onChange={e => { const next = new Set(selectedSkills); e.target.checked ? next.add(s.id) : next.delete(s.id); setSelectedSkills(next); }} />
+                      </td>
                       <td style={styles.td}>
                         <button
                           type="button"
@@ -1297,7 +1480,28 @@ export default function SettingsPage() {
                         </button>
                       </td>
                       <td style={{ ...styles.td, fontWeight: 600 }}>{s.name}</td>
-                      <td style={{ ...styles.td, color: '#64748b', fontSize: 13 }}>{s.description || '—'}</td>
+                      <td style={{ ...styles.td, color: '#64748b', fontSize: 13 }}>
+                        <div>{s.description || '—'}</div>
+                        {/* Reference tags (Task 4.2) */}
+                        {refs && refs.outgoing.length > 0 && (
+                          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>引用:</span>
+                            {refs.outgoing.map(r => (
+                              <span key={r} onClick={() => document.getElementById('skill-' + r)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                style={{ fontSize: 11, padding: '1px 6px', borderRadius: 8, backgroundColor: '#f3e8ff', color: '#7c3aed', cursor: 'pointer' }}>{r}</span>
+                            ))}
+                          </div>
+                        )}
+                        {refs && refs.incoming.length > 0 && (
+                          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 11, color: '#2563eb', fontWeight: 600 }}>被引用:</span>
+                            {refs.incoming.map(r => (
+                              <span key={r} onClick={() => document.getElementById('skill-' + r)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                style={{ fontSize: 11, padding: '1px 6px', borderRadius: 8, backgroundColor: '#dbeafe', color: '#2563eb', cursor: 'pointer' }}>{r}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td style={styles.td}>
                         <span style={{
                           fontSize: 11, padding: '2px 6px', borderRadius: 4,
@@ -1312,7 +1516,7 @@ export default function SettingsPage() {
                           <button type="button" style={styles.actionBtnNeutral} onClick={() => openEditSkill(s)}>
                             編輯
                           </button>
-                          <button type="button" style={styles.deleteBtn} onClick={() => handleDeleteSkill(s.id)} title="刪除">
+                          <button type="button" style={styles.deleteBtn} onClick={() => handleDeleteSkillWithRefCheck(s.id)} title="刪除">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                             </svg>
@@ -1320,9 +1524,26 @@ export default function SettingsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
+
+              {/* Batch action bar (Task 5.4) */}
+              {selectedSkills.size > 0 && (
+                <div style={{ position: 'sticky', bottom: 0, background: 'var(--bg-secondary, #f8fafc)', borderTop: '1px solid var(--border-primary, #e2e8f0)', padding: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{selectedSkills.size} 已選</span>
+                  <button type="button" style={{ ...styles.actionBtnGreen, padding: '6px 14px' }} onClick={() => handleBatchAction('enable')}>
+                    啟用 ({selectedSkills.size})
+                  </button>
+                  <button type="button" style={{ ...styles.actionBtnWarn, padding: '6px 14px' }} onClick={() => handleBatchAction('disable')}>
+                    停用 ({selectedSkills.size})
+                  </button>
+                  <button type="button" style={{ padding: '6px 14px', border: '1px solid #fecaca', borderRadius: 6, backgroundColor: '#fef2f2', color: '#dc2626', fontSize: 12, fontWeight: 500, cursor: 'pointer' }} onClick={() => handleBatchAction('delete')}>
+                    刪除 ({selectedSkills.size})
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </section>
