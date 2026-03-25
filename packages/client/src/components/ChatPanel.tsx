@@ -603,22 +603,22 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       {generationPhase !== 'idle' && (
         <div style={styles.generationProgress} data-testid="generation-progress">
           {generationPhase === 'parallel' ? (
-            <div style={{ padding: '8px 0' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#3b82f6' }}>
-                {parallelMessage || '並行生成中...'}
+            <div style={{ padding: '4px 0' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#8E6FA7' }}>
+                {parallelMessage || `並行生成 ${Object.keys(pageProgress).length} 個頁面...`}
               </div>
               {Object.keys(pageProgress).length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {Object.entries(pageProgress).map(([page, status]) => (
-                    <div key={page} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                      <span style={{ width: 16, textAlign: 'center' }}>
-                        {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'started' ? '◌' : '·'}
+                    <div key={page} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                      <span style={{ width: 14, textAlign: 'center', color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'started' ? '#3b82f6' : '#94a3b8' }}>
+                        {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'started' ? '●' : '○'}
                       </span>
-                      <span style={{ color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'started' ? '#3b82f6' : '#94a3b8', fontWeight: status === 'started' ? 600 : 400 }}>
+                      <span style={{ color: status === 'started' ? '#3b82f6' : status === 'done' ? '#22c55e' : '#64748b', fontWeight: status === 'started' ? 600 : 400 }}>
                         {page}
                       </span>
-                      <span style={{ color: '#94a3b8', fontSize: 11 }}>
-                        {status === 'done' ? '完成' : status === 'error' ? '失敗' : status === 'started' ? '生成中...' : '等待中'}
+                      <span style={{ color: '#94a3b8', fontSize: 10 }}>
+                        {status === 'done' ? '完成' : status === 'error' ? '失敗' : status === 'started' ? '生成中...' : '等待'}
                       </span>
                     </div>
                   ))}
@@ -627,8 +627,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             </div>
           ) : (
             <>
-              {/* Stepper only — thinking moved to chat flow */}
-              {/* 4-step stepper */}
+              {/* Single-call stepper */}
               <div style={styles.generationSteps}>
                 {(['analyzing', 'planning', 'generating', 'done'] as const).map((phase, idx) => {
                   const labels: Record<string, string> = { analyzing: '分析需求', planning: '規劃結構', generating: '生成程式碼', done: '完成' };
