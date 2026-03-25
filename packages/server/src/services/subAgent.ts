@@ -16,49 +16,39 @@ export async function generatePageFragment(
 ): Promise<{ name: string; html: string; success: boolean; error?: string }> {
   const pageName = page.name;
 
-  const systemPrompt = `You are a UI prototype engineer generating a SINGLE PAGE FRAGMENT for a multi-page prototype.
-
-CRITICAL RULES:
-- Use placeholder/dummy data only (e.g. "商品名稱", "NT$ 0", "使用者名稱"). Never generate fake real addresses, fake property listings, or fake real estate data.
-- Only generate the content that was requested for this specific page. Do not add listing pages or browse pages unless explicitly requested.
+  const systemPrompt = `You are a senior frontend engineer. Generate a SINGLE PAGE for a multi-page prototype.
 
 OUTPUT FORMAT:
 Return ONLY an HTML fragment — a single <div> element:
 <div class="page" id="page-${pageName}" data-page="${pageName}" style="display:none">
-  <!-- All page content here -->
+  <!-- Page content here, using shared CSS classes -->
 </div>
 
-DO NOT return <!DOCTYPE>, <html>, <head>, or <body> tags.
-DO NOT include <style> or <script> tags — the assembler handles shared styles.
+DO NOT return <!DOCTYPE>, <html>, <head>, <body>, <style>, or <script> tags.
 
-DESIGN TOKENS (use these CSS variables — they are pre-defined in :root):
-${cssVariables || '/* default tokens */'}
+DESIGN TOKENS (pre-defined in :root — use these variables):
+${cssVariables || '/* use defaults: var(--primary), var(--text), var(--bg), var(--border) */'}
 
-SHARED CSS CLASSES (use these for consistency):
-${sharedCss || '/* no shared CSS */'}
+SHARED CSS (use these classes for consistent look):
+${sharedCss || '/* use .container, .card, .btn-primary, .btn-secondary */'}
 
 ${designConvention ? `DESIGN CONVENTION:\n${designConvention}\n` : ''}
 
-VISUAL QUALITY:
-- Fill the page with realistic, domain-appropriate content — NO placeholders
+QUALITY STANDARDS:
+- 繁體中文 UI — all text in Traditional Chinese
+- Fill with realistic domain-appropriate content (real product names, prices, descriptions)
 - Use data-bridge-id="[unique-kebab-id]" on ALL significant elements
 - All interactive elements need working onclick handlers
-- Buttons use class="btn-primary" or "btn-secondary" (defined in shared CSS)
-- Cards use class="card" (defined in shared CSS)
-- Use var(--primary), var(--text), var(--bg), etc. for all colors
-- Typography: var(--font-family), sizes from design tokens
-- Minimum content: at least 400px of meaningful content
+- Use shared CSS classes: .btn-primary, .btn-secondary, .card, .container
+- Use CSS variables: var(--primary), var(--text), var(--bg), var(--border)
+- Minimum 400px of meaningful, realistic content
+- Include proper empty states, hover effects, active states
 
-NAVIGATION:
-- To navigate to another page, use: onclick="showPage('targetPageName');return false;"
-- This page links to: ${page.navigationOut.length > 0 ? page.navigationOut.join(', ') : '(no outgoing links)'}
+NAVIGATION between pages:
+onclick="showPage('targetPageName');return false;"
+This page links to: ${page.navigationOut.length > 0 ? page.navigationOut.join(', ') : '(none)'}
 
-${page.viewport === 'mobile' ? `MOBILE LAYOUT:
-- Single column, max-width: 480px, margin: 0 auto
-- Touch targets min 48px tall
-- Body text 15-16px, headings 22-28px
-- Cards full-width, stacked vertically
-- Form inputs full-width, min-height 48px` : ''}`;
+${page.viewport === 'mobile' ? `MOBILE: single column, max-width 480px, touch targets 48px+, text 15-16px` : 'DESKTOP: responsive layout, grid/flexbox, max-width 1200px'}`;
 
   const userPrompt = `Generate the "${pageName}" page [${page.viewport.toUpperCase()}]:
 

@@ -38,12 +38,14 @@ export async function planGeneration(
 
   const cssVariables = designTokens ? tokensToCssVariables(designTokens) : '';
 
-  const prompt = `You are a UI architecture planner. Given the analysis of a specification document, produce a JSON generation plan.
+  const prompt = `You are a senior UI architect. Given a project spec, produce a detailed JSON generation plan that sub-agents will use to build each page independently.
 
 CRITICAL RULES:
-- Only generate pages that are explicitly requested. Do NOT add listing pages, property listing pages, or browse/search pages unless the user specifically asked for them.
-- Use placeholder/dummy data only (e.g. "商品名稱", "NT$ 0", "使用者名稱"). Never generate fake real addresses, fake property listings, or fake real estate data.
-- Generate ONLY what is needed for the requested feature.
+- Include ALL pages from the analysis — missing pages means broken navigation
+- Each page spec MUST be comprehensive: layout, components, interactions, data, edge states
+- Sub-agents cannot see other pages — they rely ENTIRELY on your spec and sharedCss
+- Use realistic placeholder data appropriate to the domain (product names, prices, dates)
+- sharedCss must define ALL shared components (nav, footer, cards, buttons, forms, modals)
 
 INPUT:
 ${architectureBlock ? `Architecture:\n${architectureBlock}\n` : ''}
@@ -77,11 +79,20 @@ OUTPUT: Return ONLY valid JSON matching this schema:
 }
 
 RULES:
-1. Every page from the analysis MUST appear in pages array
-2. spec field must include ALL components, interactions, business rules, and data fields for that page
-3. navigationOut must match the analysis navigation flow exactly
-4. sharedCss should define nav/header styles using CSS variables (var(--primary), var(--text), etc.)
-5. sharedCss should include utility classes sub-agents can reference (.container, .card, .btn-primary, etc.)
+1. Every page from the analysis MUST appear in pages array — missing pages = broken app
+2. spec field must be 200+ words with: layout description, component list with details,
+   interaction flows (click X → happens Y), data fields with sample values, edge states
+3. navigationOut must list exact page names this page links to
+4. sharedCss MUST be comprehensive (200+ lines):
+   - Reset, typography, color variables usage
+   - .container (max-width, padding), .card (shadow, radius, padding)
+   - .btn-primary (bg primary, hover), .btn-secondary (outline)
+   - .form-group, .form-label, .form-input, .form-select
+   - nav/header/footer complete styles
+   - .badge, .tag, .alert, .modal-overlay
+   - Grid/flexbox utility classes
+   - Responsive breakpoints (@media)
+5. Sub-agents CANNOT see each other's output — your spec is their ONLY reference
 6. If pages have mobile viewport, navType should be "bottom-tab"
 7. Return ONLY JSON — no markdown, no explanation`;
 
