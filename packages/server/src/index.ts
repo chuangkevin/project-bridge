@@ -37,7 +37,7 @@ import { HOUSEPRICE_DESIGN_SYSTEM_V2 } from './services/designSystemV2';
 import db from './db/connection';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3003;
 
 // Middleware
 app.use(cors());
