@@ -1148,6 +1148,7 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
     res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
 
     // Step 1: AI analysis — detailed reasoning
+    let accumulatedThinking = '';
     try {
       const analyzeGenai = new GoogleGenerativeAI(apiKey);
       const analyzeModel = analyzeGenai.getGenerativeModel({
@@ -1172,6 +1173,7 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
       for await (const chunk of analyzeResult.stream) {
         const text = chunk.text();
         if (text) {
+          accumulatedThinking += text;
           res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
         }
       }
@@ -1388,7 +1390,7 @@ ${html.slice(0, 2000)}`;
       if (generationSummary || finalPages.length > 0) {
         try {
           db.prepare('UPDATE conversations SET metadata = ? WHERE id = ?')
-            .run(JSON.stringify({ summary: generationSummary, pages: finalPages }), assistantMsgId);
+            .run(JSON.stringify({ summary: generationSummary, pages: finalPages, thinking: typeof accumulatedThinking === 'string' ? accumulatedThinking : '' }), assistantMsgId);
         } catch { /* ignore */ }
       }
 

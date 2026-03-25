@@ -14,7 +14,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   messageType?: 'user' | 'generate' | 'in-shell' | 'component' | 'answer';
-  metadata?: { summary?: string; pages?: string[] };
+  metadata?: { summary?: string; pages?: string[]; thinking?: string };
 }
 
 type FileIntent = 'design-spec' | 'data-spec' | 'brand-guide' | 'reference' | null;
@@ -771,30 +771,82 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   </div>
                 ) : (msg.messageType === 'generate' || isHtmlContent(msg.content)) ? (
                   (() => {
-                    // Use live state for latest msg, metadata from DB for older msgs
                     const isLatest = idx === messages.length - 1;
                     const summary = isLatest && lastGenerationSummary ? lastGenerationSummary : msg.metadata?.summary || '';
                     const genPages = isLatest && lastGeneratedPages.length > 0 ? lastGeneratedPages : msg.metadata?.pages || [];
-                    const thinking = isLatest ? lastThinkingSummary : '';
+                    const thinking = isLatest ? lastThinkingSummary : msg.metadata?.thinking || '';
+                    // Build virtual file list from pages
+                    const fileList = genPages.length > 0
+                      ? [...genPages.map((p: string) => `Wrote ${p}.html`), 'Wrote styles.css', 'Wrote app.js']
+                      : ['Wrote index.html'];
                     return (
-                      <div style={{ ...styles.assistantBubble, padding: '12px 16px' }}>
+                      <div style={{ maxWidth: '100%', padding: 0 }}>
+                        {/* Reasoning — Figma style collapsible */}
                         {thinking && (
-                          <details style={{ marginBottom: 8 }}>
-                            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--accent, #8E6FA7)', userSelect: 'none' as const }}>🧠 Reasoning</summary>
-                            <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 12, color: 'var(--text-secondary)', margin: '6px 0 0', lineHeight: 1.5 }}>{thinking}</pre>
+                          <details style={{ marginBottom: 12 }}>
+                            <summary style={{
+                              cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                              color: 'var(--text-primary, #1e293b)',
+                              userSelect: 'none' as const, display: 'flex', alignItems: 'center', gap: 4,
+                            }}>
+                              <span style={{ color: 'var(--accent, #8E6FA7)', fontWeight: 600 }}>Reasoning</span>
+                              <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>›</span>
+                            </summary>
+                            <div style={{
+                              marginTop: 8, fontSize: 13, lineHeight: 1.7,
+                              color: 'var(--text-secondary, #64748b)',
+                              whiteSpace: 'pre-wrap',
+                            }}>{thinking}</div>
                           </details>
                         )}
-                        {genPages.length > 0 && (
-                          <details style={{ marginBottom: 8 }}>
-                            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', userSelect: 'none' as const }}>📄 生成了 {genPages.length} 個頁面</summary>
-                            <div style={{ margin: '6px 0 0', fontSize: 12 }}>{genPages.map((p: string) => <div key={p} style={{ padding: '2px 0', color: 'var(--text-secondary)' }}>✓ {p}</div>)}</div>
+
+                        {/* Worked with files — Figma style collapsible */}
+                        {fileList.length > 0 && (
+                          <details style={{ marginBottom: 12 }}>
+                            <summary style={{
+                              cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                              color: 'var(--text-primary, #1e293b)',
+                              userSelect: 'none' as const, display: 'flex', alignItems: 'center', gap: 4,
+                            }}>
+                              <span>Worked with {fileList.length} files</span>
+                              <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>›</span>
+                            </summary>
+                            <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.8, color: 'var(--text-secondary, #64748b)' }}>
+                              {genPages.length > 0 && <div>Read {genPages.length > 1 ? `${genPages.length} pages` : '1 page'}</div>}
+                              {fileList.map((f: string, i: number) => <div key={i}>{f}</div>)}
+                            </div>
                           </details>
                         )}
+
+                        {/* Summary text */}
                         {summary ? (
-                          <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{summary}</div>
+                          <div style={{
+                            fontSize: 13, lineHeight: 1.7,
+                            color: 'var(--text-primary, #1e293b)',
+                            whiteSpace: 'pre-wrap',
+                          }}>{summary}</div>
                         ) : (
                           <span style={styles.generateTag}>✅ 已生成原型</span>
                         )}
+
+                        {/* Version card — like Figma's "Shopping Website / Version 1" */}
+                        <div style={{
+                          marginTop: 12, padding: '10px 14px',
+                          border: '1px solid var(--border-primary, #e2e8f0)',
+                          borderRadius: 10, display: 'flex',
+                          alignItems: 'center', justifyContent: 'space-between',
+                          background: 'var(--bg-secondary, #f8fafc)',
+                        }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent, #8E6FA7)' }}>
+                              {genPages.length > 1 ? `${genPages.length} 頁面原型` : '原型'}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', marginTop: 1 }}>
+                              Version {messages.filter(m => m.messageType === 'generate').indexOf(msg) + 1}
+                            </div>
+                          </div>
+                          <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                        </div>
                       </div>
                     );
                   })()
