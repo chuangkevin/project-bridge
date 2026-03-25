@@ -37,7 +37,7 @@
 
 ## 6. Testing
 
-- [ ] 6.1 TypeScript check (server + client)
-- [ ] 6.2 Manual test: import from D:\Projects\HPSkills, verify references detected
-- [ ] 6.3 Manual test: batch enable/disable/delete
+- [x] 6.1 TypeScript check (server + client)
+- [x] 6.2 E2E test: skill CRUD, batch import, reference detection, batch actions, UI
+- [ ] 6.3 Manual test: import from D:\Projects\HPSkills, verify references detected
 - [ ] 6.4 Manual test: fallback input for non-Chrome
