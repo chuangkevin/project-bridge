@@ -396,29 +396,60 @@ export default function SettingsPage() {
 
   const handleAddKey = async () => {
     const trimmed = newKey.trim();
-    if (!trimmed || !trimmed.startsWith('AIza')) {
-      setAddError('API Key 必須以 AIza 開頭');
+    if (!trimmed) {
+      setAddError('請輸入 API Key');
       setAddState('error');
       return;
     }
+    // Check if multi-line (batch mode)
+    const lines = trimmed.split(/\r?\n/).filter(l => l.trim());
+    const hasMultipleKeys = lines.filter(l => l.trim().startsWith('AIza')).length > 1;
+
     setAddState('adding');
     setAddError('');
     try {
-      const res = await fetch('/api/settings/api-keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
-        body: JSON.stringify({ apiKey: trimmed }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAddError(data.error || '新增失敗');
-        setAddState('error');
-        return;
+      if (hasMultipleKeys) {
+        // Batch import
+        const res = await fetch('/api/settings/api-keys/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+          body: JSON.stringify({ text: trimmed }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setAddError(data.error || '批量匯入失敗');
+          setAddState('error');
+          return;
+        }
+        setKeys(data.keys || []);
+        setNewKey('');
+        setAddState('idle');
+        setAddError(`成功匯入 ${data.totalAdded} 把 Key` + (data.skipped?.length ? `，跳過 ${data.skipped.length} 把` : ''));
+        fetchUsage();
+      } else {
+        // Single key
+        const singleKey = lines.find(l => l.trim().startsWith('AIza'))?.trim() || trimmed;
+        if (!singleKey.startsWith('AIza')) {
+          setAddError('API Key 必須以 AIza 開頭');
+          setAddState('error');
+          return;
+        }
+        const res = await fetch('/api/settings/api-keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+          body: JSON.stringify({ apiKey: singleKey }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setAddError(data.error || '新增失敗');
+          setAddState('error');
+          return;
+        }
+        setKeys(data.keys || []);
+        setNewKey('');
+        setAddState('idle');
+        fetchUsage();
       }
-      setKeys(data.keys || []);
-      setNewKey('');
-      setAddState('idle');
-      fetchUsage();
     } catch {
       setAddError('網路錯誤');
       setAddState('error');
@@ -754,27 +785,32 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Add new key */}
-              <div style={{ ...styles.inputRow, marginTop: '12px' }}>
-                <input
-                  type="text"
-                  style={styles.input}
+              {/* Add new key — supports multi-line batch import */}
+              <div style={{ marginTop: '12px' }}>
+                <textarea
+                  style={{ ...styles.input, minHeight: 80, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre' }}
                   value={newKey}
                   onChange={e => { setNewKey(e.target.value); setAddState('idle'); setAddError(''); }}
-                  placeholder="貼上新的 API Key (AIza...)"
+                  placeholder={"貼上 API Key（支援批量匯入）\n\n-label（標籤行會被忽略）\nAIzaSy...\nAIzaSy...\n\n-another-label\nAIzaSy..."}
                   disabled={addState === 'adding'}
-                  onKeyDown={e => e.key === 'Enter' && handleAddKey()}
                 />
-                <button
-                  style={{
-                    ...styles.primaryBtn,
-                    ...(addState === 'adding' ? styles.btnDisabled : {}),
-                  }}
-                  onClick={handleAddKey}
-                  disabled={addState === 'adding'}
-                >
-                  {addState === 'adding' ? '驗證中...' : '+ 新增'}
-                </button>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                  <button
+                    style={{
+                      ...styles.primaryBtn,
+                      ...(addState === 'adding' ? styles.btnDisabled : {}),
+                    }}
+                    onClick={handleAddKey}
+                    disabled={addState === 'adding'}
+                  >
+                    {addState === 'adding' ? '匯入中...' : '匯入 Key'}
+                  </button>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>
+                    {newKey.split(/\r?\n/).filter(l => l.trim().startsWith('AIza')).length > 0
+                      ? `偵測到 ${newKey.split(/\r?\n/).filter(l => l.trim().startsWith('AIza')).length} 把 Key`
+                      : '支援多行貼上，標籤行（-開頭）會被忽略'}
+                  </span>
+                </div>
               </div>
               {addError && <p style={styles.errorText}>{addError}</p>}
             </>
@@ -1176,9 +1212,59 @@ export default function SettingsPage() {
           )}
 
           {!showSkillForm && (
-            <button type="button" style={{ ...styles.primaryBtn, marginBottom: 12 }} onClick={openNewSkill}>
-              + 新增技能
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button type="button" style={styles.primaryBtn} onClick={openNewSkill}>
+                + 新增技能
+              </button>
+              <button type="button" style={{ ...styles.primaryBtn, background: 'var(--accent, #8E6FA7)' }} onClick={async () => {
+                try {
+                  // Use File System Access API to pick a directory
+                  const dirHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
+                  const parsed: { name: string; description: string; content: string }[] = [];
+
+                  // Recursively find SKILL.md files
+                  async function scanDir(handle: any) {
+                    for await (const [name, entry] of handle.entries()) {
+                      if (entry.kind === 'directory') await scanDir(entry);
+                      else if (name === 'SKILL.md') {
+                        const file = await entry.getFile();
+                        const text = await file.text();
+                        const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+                        if (match) {
+                          const fm = match[1];
+                          const body = match[2].trim();
+                          const skillName = (fm.match(/^name:\s*(.+)$/m) || [])[1]?.trim();
+                          const desc = (fm.match(/^description:\s*(.+)$/m) || [])[1]?.trim() || '';
+                          if (skillName && body) parsed.push({ name: skillName, description: desc, content: body });
+                        }
+                      }
+                    }
+                  }
+                  await scanDir(dirHandle);
+
+                  if (parsed.length === 0) {
+                    alert('未找到 SKILL.md 檔案');
+                    return;
+                  }
+                  const res = await fetch('/api/skills/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+                    body: JSON.stringify({ skills: parsed }),
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setSkills(data.skills || []);
+                    alert(`匯入完成：新增 ${data.imported}，更新 ${data.updated}`);
+                  } else {
+                    alert(data.error || '匯入失敗');
+                  }
+                } catch (e: any) {
+                  if (e.name !== 'AbortError') alert('匯入失敗：' + (e.message || ''));
+                }
+              }}>
+                📁 從目錄匯入
+              </button>
+            </div>
           )}
 
           {skillsLoading ? (

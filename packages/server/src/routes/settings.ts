@@ -10,14 +10,7 @@ const router = Router();
 
 // ─── Auth middleware for settings routes ────────────
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  // 1. New session-based auth: global authMiddleware populates req.user
-  const user = (req as any).user;
-  if (user?.role === 'admin') {
-    next();
-    return;
-  }
-
-  // 2. Legacy admin password auth: admin_session_token in settings table
+  // 1. Admin password token — if valid, ALWAYS admin, regardless of user session
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
@@ -29,7 +22,14 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     }
   }
 
-  // 3. Fallback: if no users exist yet (fresh install), allow access
+  // 2. Session-based auth: admin role
+  const user = (req as any).user;
+  if (user?.role === 'admin') {
+    next();
+    return;
+  }
+
+  // 3. Fallback: fresh install (no users), allow access
   const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number } | undefined)?.count ?? 0;
   if (userCount === 0) {
     next();
@@ -149,6 +149,36 @@ router.post('/api-keys', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Error adding API key:', err);
     return res.status(500).json({ error: 'Failed to add API key' });
+  }
+});
+
+// POST /api/settings/api-keys/batch — bulk import keys from multi-line text
+router.post('/api-keys/batch', (req: Request, res: Response) => {
+  try {
+    const { text } = req.body;
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing text field' });
+    }
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const added: string[] = [];
+    const skipped: string[] = [];
+    for (const line of lines) {
+      // Skip label lines (start with -)
+      if (line.startsWith('-')) continue;
+      // Only accept lines that look like Gemini keys
+      if (line.startsWith('AIza') && line.length >= 30) {
+        try {
+          addApiKey(line);
+          added.push('...' + line.slice(-4));
+        } catch {
+          skipped.push('...' + line.slice(-4));
+        }
+      }
+    }
+    const keys = getKeyList();
+    return res.json({ keys, added, skipped, totalAdded: added.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to batch import keys' });
   }
 });
 

@@ -100,6 +100,41 @@ router.post('/', requireSkillAdmin, (req: Request, res: Response) => {
   }
 });
 
+// POST /api/skills/batch — batch import skills from parsed SKILL.md files
+router.post('/batch', requireSkillAdmin, (req: Request, res: Response) => {
+  try {
+    const { skills: skillsArr } = req.body as { skills: { name: string; description: string; content: string }[] };
+    if (!Array.isArray(skillsArr) || skillsArr.length === 0) {
+      return res.status(400).json({ error: 'skills array is required' });
+    }
+    const now = new Date().toISOString();
+    const maxOrder = db.prepare('SELECT MAX(order_index) as m FROM agent_skills').get() as { m: number | null };
+    let orderIdx = (maxOrder.m ?? -1) + 1;
+    let imported = 0;
+    let updated = 0;
+    for (const s of skillsArr) {
+      if (!s.name || !s.content) continue;
+      // Upsert: if skill with same name exists, update it
+      const existing = db.prepare('SELECT id FROM agent_skills WHERE name = ?').get(s.name) as { id: string } | undefined;
+      if (existing) {
+        db.prepare('UPDATE agent_skills SET description = ?, content = ?, updated_at = ? WHERE id = ?')
+          .run((s.description || '').trim(), s.content.trim(), now, existing.id);
+        updated++;
+      } else {
+        const id = uuidv4();
+        db.prepare(
+          'INSERT INTO agent_skills (id, name, description, content, scope, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, s.name.trim(), (s.description || '').trim(), s.content.trim(), 'global', orderIdx++, now, now);
+        imported++;
+      }
+    }
+    const allSkills = db.prepare('SELECT * FROM agent_skills ORDER BY order_index ASC').all();
+    return res.json({ skills: allSkills, imported, updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to batch import skills' });
+  }
+});
+
 // PUT /api/skills/:id — update skill (admin only)
 router.put('/:id', requireSkillAdmin, (req: Request, res: Response) => {
   try {
