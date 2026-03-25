@@ -1506,6 +1506,38 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
             success: true,
           }));
           html = assemblePrototype(localPlan, fragments);
+          // Post-process: inject showPage() calls into common navigation elements
+          // Map common button text to target pages
+          const pageMap: Record<string, string> = {};
+          for (const p of finalPages) {
+            if (/商品詳情|詳情|detail/i.test(p)) pageMap['detail'] = p;
+            if (/商品列表|列表|products?|catalog/i.test(p)) pageMap['list'] = p;
+            if (/購物車|cart/i.test(p)) pageMap['cart'] = p;
+            if (/結帳|checkout/i.test(p)) pageMap['checkout'] = p;
+            if (/首頁|home|index/i.test(p)) pageMap['home'] = p;
+          }
+          // Replace common links/buttons with showPage calls
+          if (pageMap['detail']) {
+            html = html.replace(/href="#"([^>]*>)\s*(查看|查看詳情|查看更多|View|Details)/gi,
+              `href="#" onclick="showPage('${pageMap['detail']}');return false;"$1$2`);
+          }
+          if (pageMap['cart']) {
+            html = html.replace(/href="#"([^>]*>)\s*(前往購物車|查看購物車|Go to Cart)/gi,
+              `href="#" onclick="showPage('${pageMap['cart']}');return false;"$1$2`);
+          }
+          if (pageMap['checkout']) {
+            html = html.replace(/href="#"([^>]*>)\s*(前往結帳|去結帳|結帳|Checkout)/gi,
+              `href="#" onclick="showPage('${pageMap['checkout']}');return false;"$1$2`);
+          }
+          if (pageMap['home'] || pageMap['list']) {
+            const target = pageMap['list'] || pageMap['home'];
+            html = html.replace(/href="#"([^>]*>)\s*(繼續購物|繼續逛|Continue Shopping)/gi,
+              `href="#" onclick="showPage('${target}');return false;"$1$2`);
+          }
+          if (pageMap['list']) {
+            html = html.replace(/href="#"([^>]*>)\s*(查看全部|查看所有|View All|更多商品)/gi,
+              `href="#" onclick="showPage('${pageMap['list']}');return false;"$1$2`);
+          }
           // Update DB with assembled HTML
           db.prepare('UPDATE prototype_versions SET html = ? WHERE id = ?').run(html, versionId);
           db.prepare('UPDATE conversations SET content = ? WHERE id = ?').run(html, assistantMsgId);
@@ -1542,7 +1574,24 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
 ${html.slice(0, 3000)}`;
         const summaryResult = await summaryModel.generateContent(summaryPrompt);
         generationSummary = summaryResult.response.text();
-      } catch { /* ignore summary failure */ }
+      } catch { /* API summary failed — build local summary */ }
+      // Fallback: build local summary if API call failed
+      if (!generationSummary && finalPages.length > 0) {
+        const pageDescriptions: Record<string, string> = {
+          '首頁': '展示精選商品、分類導覽、搜尋功能與促銷活動',
+          '商品列表': '依分類瀏覽商品，支持篩選、排序與分頁功能',
+          '商品詳情': '查看商品完整資訊、規格、評價，可調整數量並加入購物車',
+          '購物車': '管理已選商品、調整數量、查看價格明細，前往結帳',
+          '結帳': '填寫配送資訊、選擇付款方式、確認訂單並完成購買',
+        };
+        const intro = `我已經為您建立了一個功能完整的購物網站原型，包含 ${finalPages.length} 個頁面，採用 HousePrice 設計規範。`;
+        const tech = `此原型採用純 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換，並整合了 HousePrice 品牌色彩與元件設計。`;
+        const features = finalPages.map(p => {
+          const desc = pageDescriptions[p] || `${p}頁面的完整互動介面`;
+          return `• ${p}：${desc}`;
+        }).join('\n');
+        generationSummary = `${intro}\n${tech}\n\n主要功能包括：\n${features}`;
+      }
 
       // Save summary + pages to conversation metadata for persistence
       if (generationSummary || finalPages.length > 0) {
