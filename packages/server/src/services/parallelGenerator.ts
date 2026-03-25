@@ -4,6 +4,7 @@ import { assemblePrototype } from './htmlAssembler';
 import { compileDesignTokens, DesignTokens } from './designTokenCompiler';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getKeyCount } from './geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from './htmlSanitizer';
+import { autoFixDesignViolations } from './designSystemValidator';
 import db from '../db/connection';
 
 export interface GenerationProgress {
@@ -120,6 +121,11 @@ export async function generateParallel(
 
   // Step 5: Post-process
   html = sanitizeGeneratedHtml(html, true);
+  {
+    const { html: autoFixedHtml, fixes } = autoFixDesignViolations(html);
+    html = autoFixedHtml;
+    if (fixes.length > 0) console.log('[design-validator] Auto-fixes applied:', fixes);
+  }
   if (designConvention) {
     html = injectConventionColors(html, designConvention);
   }

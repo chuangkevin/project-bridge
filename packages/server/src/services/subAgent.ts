@@ -32,10 +32,30 @@ ${cssVariables || '/* use defaults: var(--primary), var(--text), var(--bg), var(
 SHARED CSS (use these classes for consistent look):
 ${sharedCss || '/* use .container, .card, .btn-primary, .btn-secondary */'}
 
-${designConvention ? `DESIGN CONVENTION:\n${designConvention}\n` : ''}
+${designConvention ? `HOUSEPRICE DESIGN SYSTEM (MANDATORY — follow exactly):\n${designConvention.slice(0, 5000)}\n` : ''}
+
+❌ VIOLATIONS THAT WILL BE REJECTED:
+1. Using #FFFFFF or white as page/section background → use #FAF4EB or #F8F7F5
+2. Large solid color blocks (>150px height) in orange/yellow/purple as section bg
+3. Drop shadows with blur > 4px → max is "0px 1px 4px rgba(0,0,0,0.15)"
+4. Any font other than system sans-serif
+5. border-radius > 8px on buttons (no rounded-full/pill)
+6. Empty placeholder cards with just "商品名稱" repeated → use varied realistic content
+7. Hero sections with full-width gradients → hero should use image or subtle bg
+
+COLOR USAGE (CRITICAL):
+- ALL brand colors MUST use CSS variables: var(--primary), var(--bg), var(--surface), var(--text), var(--text-secondary), var(--border)
+- These are defined in :root via sharedCss
+- NEVER hardcode #8E6FA7, #FAF4EB etc. — always use var()
+
+CONTENT QUALITY:
+- 繁體中文 UI — all visible text in Traditional Chinese
+- Product cards: use VARIED names (e.g. "北歐風格沙發", "手沖咖啡壺", "無線降噪耳機"), not "商品 1", "商品 2"
+- Prices: use realistic NT$ values (NT$ 1,280, NT$ 3,990, etc.)
+- Forms: proper labels, input types, placeholder text, validation hints
+- Tables: realistic column data, not "XXX" or "---"
 
 QUALITY STANDARDS:
-- 繁體中文 UI — all text in Traditional Chinese
 - Fill with realistic domain-appropriate content (real product names, prices, descriptions)
 - Use data-bridge-id="[unique-kebab-id]" on ALL significant elements
 - All interactive elements need working onclick handlers

@@ -10,6 +10,7 @@ import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from '../services/geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
+import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
 import { generateParallel } from '../services/parallelGenerator';
 import { getActiveSkills } from './skills';
 import { scorePrototype } from '../services/qualityScorer';
@@ -423,6 +424,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
               // Replace component
               let newHtml = replaceElementByBridgeId(currentPrototype.html, targetId, visionResult.componentHtml);
               newHtml = sanitizeGeneratedHtml(newHtml, newHtml.includes('data-page='));
+              { const { html: autoFixedHtml, fixes } = autoFixDesignViolations(newHtml); newHtml = autoFixedHtml; if (fixes.length > 0) console.log('[design-validator] Auto-fixes applied:', fixes); }
               if (designConvention) newHtml = injectConventionColors(newHtml, designConvention);
 
               // Save version
@@ -514,6 +516,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       if (endIdx !== -1) html = html.slice(0, endIdx + '</html>'.length);
 
       html = sanitizeGeneratedHtml(html, html.includes('data-page='));
+      {
+        const { html: autoFixedHtml, fixes } = autoFixDesignViolations(html);
+        html = autoFixedHtml;
+        if (fixes.length > 0) console.log('[design-validator] Auto-fixes applied:', fixes);
+        const designValidation = validateDesignSystem(html);
+        if (designValidation.violations.length > 0) {
+          res.write(`data: ${JSON.stringify({ type: 'design-validation', score: designValidation.score, violations: designValidation.violations.length, fixes: fixes.length })}\n\n`);
+        }
+      }
       if (designConvention) html = injectConventionColors(html, designConvention);
 
       // Save as new version
@@ -862,7 +873,14 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // designConvention already loaded earlier (before micro-adjust path)
     if (designConvention) {
-      effectiveSystemPrompt += `\n\n=== PROJECT DESIGN SYSTEM (HousePrice Color Convention) ===\n${designConvention.slice(0, 4000)}\n====================================`;
+      effectiveSystemPrompt += `\n\n=== HOUSEPRICE DESIGN SYSTEM ===\n${designConvention.slice(0, 5000)}\n
+❌ VIOLATIONS:
+- NEVER use #FFFFFF as background (use #FAF4EB)
+- NEVER use large solid color blocks
+- NEVER use heavy shadows (max 4px blur)
+- NEVER use non-system fonts
+- ALWAYS use CSS variables for brand colors
+===`;
     }
 
     // Fetch global design
@@ -1323,6 +1341,17 @@ CRITICAL: Every page must have FULL content — no placeholder text, no empty di
 
     // Sanitize AI output — fix duplicate styles, truncation, missing showPage
     html = sanitizeGeneratedHtml(html, isMultiPage);
+
+    // Auto-fix design system violations
+    {
+      const { html: autoFixedHtml, fixes } = autoFixDesignViolations(html);
+      html = autoFixedHtml;
+      if (fixes.length > 0) console.log('[design-validator] Auto-fixes applied:', fixes);
+      const designValidation = validateDesignSystem(html);
+      if (designValidation.violations.length > 0) {
+        res.write(`data: ${JSON.stringify({ type: 'design-validation', score: designValidation.score, violations: designValidation.violations.length, fixes: fixes.length })}\n\n`);
+      }
+    }
 
     // Inject convention color overrides if active
     if (designConvention) {

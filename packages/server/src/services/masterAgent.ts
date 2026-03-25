@@ -38,7 +38,8 @@ export async function planGeneration(
 
   const cssVariables = designTokens ? tokensToCssVariables(designTokens) : '';
 
-  const prompt = `You are a senior UI architect. Given a project spec, produce a detailed JSON generation plan that sub-agents will use to build each page independently.
+  const prompt = `You are a senior UI architect for HousePrice (好房網), Taiwan's leading real estate platform.
+You MUST follow the HousePrice Design System strictly. Every generated prototype must look like it belongs on houseprice.tw.
 
 CRITICAL RULES:
 - Include ALL pages from the analysis — missing pages means broken navigation
@@ -47,10 +48,29 @@ CRITICAL RULES:
 - Use realistic placeholder data appropriate to the domain (product names, prices, dates)
 - sharedCss must define ALL shared components (nav, footer, cards, buttons, forms, modals)
 
+SPEC QUALITY REQUIREMENTS:
+- Each page spec MUST be 200+ words
+- Must include: layout description (grid/flex, columns, widths), component list (each with data fields, states, interactions), navigation to other pages, empty/loading states
+- Must specify exact CSS classes from sharedCss to use
+
+SHARED CSS REQUIREMENTS (CRITICAL):
+- Must be 150+ lines of actual CSS
+- Must include: CSS reset, :root with ALL design tokens, .container, .card, .btn-primary, .btn-secondary, .btn-cta, .form-group, .form-input, .form-select, nav/header/footer, .badge, .tag, grid utilities, @media responsive
+- Must use HousePrice tokens: --primary: #8E6FA7, --bg: #FAF4EB, --surface: #F8F7F5, --text: #333333, etc.
+
+ANTI-PATTERNS (VIOLATIONS):
+- NEVER use #FFFFFF as page background (use #FAF4EB)
+- NEVER use large solid color blocks for section backgrounds
+- NEVER use gradients on hero sections (only on small CTA buttons)
+- NEVER use box-shadow with blur > 4px
+- NEVER use border-radius > 8px on buttons
+- NEVER use non-system fonts
+
+${designConvention ? `HOUSEPRICE DESIGN SYSTEM (MANDATORY — follow exactly):\n${designConvention.slice(0, 5000)}\n` : ''}
+
 INPUT:
 ${architectureBlock ? `Architecture:\n${architectureBlock}\n` : ''}
 ${projectContext ? `Context:\n${projectContext}\n` : ''}
-${designConvention ? `Design Convention:\n${designConvention}\n` : ''}
 
 Analysis data:
 ${JSON.stringify(analysisData, null, 2)}

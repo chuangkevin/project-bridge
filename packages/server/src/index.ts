@@ -33,6 +33,8 @@ import promptTemplatesRouter from './routes/promptTemplates';
 import queueRouter from './routes/queue';
 import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
+import { HOUSEPRICE_DESIGN_SYSTEM_V2 } from './services/designSystemV2';
+import db from './db/connection';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -87,6 +89,18 @@ if (process.env.NODE_ENV === 'production') {
 
 // Run migrations on startup
 runMigrations();
+
+// Seed design convention if empty
+try {
+  const conv = db.prepare("SELECT design_convention FROM global_design_profile WHERE id = 'global'").get() as any;
+  if (!conv?.design_convention || conv.design_convention.length < 2000) {
+    db.prepare("INSERT INTO global_design_profile (id, design_convention) VALUES ('global', ?) ON CONFLICT(id) DO UPDATE SET design_convention = excluded.design_convention")
+      .run(HOUSEPRICE_DESIGN_SYSTEM_V2);
+    console.log('[seed] Design system v2 seeded');
+  }
+} catch (e) {
+  console.warn('[seed] Could not seed design system v2:', e);
+}
 
 // Sync skills from external directory (SKILLS_DIR env var)
 if (process.env.SKILLS_DIR) {
