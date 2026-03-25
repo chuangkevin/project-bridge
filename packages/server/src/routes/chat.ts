@@ -1462,6 +1462,27 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
         'UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?'
       ).run(projectId);
 
+      // Extract actual page names from HTML (AI may use different names than finalPages)
+      const htmlPageMatches = html.match(/data-page="([^"]+)"/g);
+      if (htmlPageMatches && htmlPageMatches.length >= 2) {
+        const extractedPages = htmlPageMatches.map(m => m.match(/data-page="([^"]+)"/)?.[1] || '').filter(Boolean);
+        if (extractedPages.length >= 2) {
+          // Also check for display text in nav items
+          const navTextMatches = html.match(/data-nav="([^"]+)"[^>]*>([^<]+)</g);
+          const navTextMap: Record<string, string> = {};
+          if (navTextMatches) {
+            for (const m of navTextMatches) {
+              const parts = m.match(/data-nav="([^"]+)"[^>]*>([^<]+)/);
+              if (parts) navTextMap[parts[1]] = parts[2].trim();
+            }
+          }
+          // Use nav display text if available, otherwise use data-page value
+          finalPages = extractedPages.map(p => navTextMap[p] || p);
+          isMultiPage = true;
+          console.log('[chat] Extracted actual pages from HTML:', finalPages);
+        }
+      }
+
       const versionId = uuidv4();
       db.prepare(
         'INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'

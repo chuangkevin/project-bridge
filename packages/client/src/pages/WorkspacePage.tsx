@@ -345,7 +345,30 @@ export default function WorkspacePage() {
 
   const handleNavigatePage = useCallback((page: string) => {
     setActivePage(page);
-    window.postMessage({ type: 'show-page', name: page }, '*');
+    // Call showPage() inside the iframe directly
+    try {
+      const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+      if (iframe?.contentWindow) {
+        const win = iframe.contentWindow as any;
+        // Try exact match first
+        if (win.showPage) {
+          win.showPage(page);
+          // If that didn't work (page name mismatch), try matching by nav text
+          const doc = iframe.contentDocument;
+          if (doc) {
+            const navEls = doc.querySelectorAll('[data-nav]');
+            for (const el of navEls) {
+              const dataNav = el.getAttribute('data-nav') || '';
+              const text = el.textContent?.trim() || '';
+              if (text === page && dataNav !== page) {
+                win.showPage(dataNav);
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch { /* cross-origin */ }
   }, []);
 
   const injectStyles = useCallback((css: string) => {
