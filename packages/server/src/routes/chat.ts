@@ -7,7 +7,7 @@ import db from '../db/connection';
 import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
-import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from '../services/geminiKeys';
+import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage } from '../services/geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
@@ -20,6 +20,9 @@ const router = Router();
 
 /** Fire-and-forget quality scoring for a prototype version */
 function triggerQualityScoring(versionId: string, html: string, apiKey: string) {
+  // Skip quality scoring when keys are scarce
+  const keyCount = getKeyCount();
+  if (keyCount < 10) return;
   setImmediate(async () => {
     try {
       const score = await scorePrototype(html, apiKey);
@@ -1234,6 +1237,30 @@ PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
       }
       // Remove the PAGES: line from thinking display (it's metadata, not for user)
       accumulatedThinking = accumulatedThinking.replace(/\n?PAGES:\s*.+$/i, '').trim();
+    }
+
+    // Step 1.6: Keyword-based fallback pages — if still single page, infer from user message
+    if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
+      const msg = userContent.toLowerCase();
+      let defaultPages: string[] = [];
+      if (/購物|商城|電商|shop|store|ecommerce/i.test(msg)) {
+        defaultPages = ['首頁', '商品列表', '商品詳情', '購物車', '結帳'];
+      } else if (/部落格|blog|文章/i.test(msg)) {
+        defaultPages = ['首頁', '文章列表', '文章內容', '關於我們'];
+      } else if (/後台|admin|dashboard|管理/i.test(msg)) {
+        defaultPages = ['儀表板', '列表管理', '詳情編輯', '設定'];
+      } else if (/社群|social|論壇|forum/i.test(msg)) {
+        defaultPages = ['首頁', '貼文列表', '貼文詳情', '個人檔案'];
+      } else if (/訂餐|餐廳|restaurant|food|外送/i.test(msg)) {
+        defaultPages = ['首頁', '菜單', '購物車', '訂單確認'];
+      } else if (/房|不動產|real.?estate|租屋|買屋/i.test(msg)) {
+        defaultPages = ['首頁', '物件列表', '物件詳情', '聯絡我們'];
+      }
+      if (defaultPages.length >= 2) {
+        console.log('[chat] Using keyword-based default pages:', defaultPages);
+        finalPages = defaultPages;
+        isMultiPage = true;
+      }
     }
 
     // Step 2: Emit processing steps
