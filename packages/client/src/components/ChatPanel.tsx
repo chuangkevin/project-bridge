@@ -774,7 +774,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                     const isLatest = idx === messages.length - 1;
                     const summary = isLatest && lastGenerationSummary ? lastGenerationSummary : msg.metadata?.summary || '';
                     const genPages = isLatest && lastGeneratedPages.length > 0 ? lastGeneratedPages : msg.metadata?.pages || [];
-                    const thinking = isLatest ? lastThinkingSummary : msg.metadata?.thinking || '';
+                    const thinking = (isLatest && lastThinkingSummary) ? lastThinkingSummary : msg.metadata?.thinking || '';
                     // Build virtual file list from pages
                     const fileList = genPages.length > 0
                       ? [...genPages.map((p: string) => `Wrote ${p}.html`), 'Wrote styles.css', 'Wrote app.js']
