@@ -237,10 +237,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Gate isObviousGenerate: only when no prototype exists OR forceRegenerate
     const gatedObviousGenerate = isObviousGenerate && (!currentPrototype || effectiveForceRegenerate);
 
-    // Classify intent (five-way)
-    let intent = gatedObviousGenerate
-      ? (hasShell ? 'in-shell' : 'full-page')
-      : await classifyIntent(message.trim(), apiKey, hasShell);
+    // Classify intent — skip AI call if obvious generate (saves 1 API call)
+    let intent: string;
+    if (isObviousGenerate) {
+      intent = hasShell ? 'in-shell' : 'full-page';
+    } else if (gatedObviousGenerate) {
+      intent = hasShell ? 'in-shell' : 'full-page';
+    } else {
+      intent = await classifyIntent(message.trim(), apiKey, hasShell);
+    }
 
     // Detect requests for missing/new pages — force full-page generation
     const isPageRequest = /沒有.*頁|缺少.*頁|加入.*頁|新增.*頁|多.*頁面|少了.*頁|要有.*頁|要.*頁面|需要.*頁|增加.*頁|missing.*page|add.*page|need.*page|請生成.*多|生成.*頁面/i.test(message);
@@ -993,58 +998,21 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     let finalPages: string[];
     let isMultiPage: boolean;
 
-    // When user explicitly requests pages or force regenerate, ALWAYS re-analyze
-    if (isPageRequest || effectiveForceRegenerate) {
-      console.log('[chat] isPageRequest=true, forcing analyzePageStructure...');
-      const pageStructure = await analyzePageStructure(userContent.slice(0, 8000), apiKey);
-      console.log('[chat] analyzer returned:', pageStructure.pages);
-      // Do NOT fallback to existingPages — if analyzer fails, generate as single page
-      finalPages = pageStructure.pages;
-      isMultiPage = finalPages.length > 1;
-    } else if (archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0) {
-      // Use architecture data
+    // Page detection — NO API calls. Use architecture data or existing pages.
+    // AI analysis (later) will override if it detects better pages.
+    if (archData && archData.type === 'page' && !archData.aiDecidePages && archData.nodes.length > 0) {
       finalPages = archData.nodes.map((n: any) => n.name);
       isMultiPage = finalPages.length > 1;
+    } else if (intent === 'component') {
+      finalPages = [];
+      isMultiPage = false;
+    } else if (existingPages.length > 1 && !isPageRequest && !effectiveForceRegenerate) {
+      finalPages = existingPages;
+      isMultiPage = true;
     } else {
-      // When intent is 'component', skip all spec-based and AI page detection entirely
-      if (intent === 'component') {
-        finalPages = [];
-        isMultiPage = false;
-      } else {
-        // Check if analysis_result has page names — use those directly to avoid extra AI call
-        const analysisPages: string[] = [];
-        if (specRowsEarly.length > 0) {
-          for (const row of specRowsEarly) {
-            if (row.analysis_result) {
-              try {
-                const analysis = JSON.parse(row.analysis_result);
-                if (analysis.pages?.length > 1) {
-                  analysisPages.push(...analysis.pages.map((p: any) => p.name));
-                }
-              } catch { /* ignore */ }
-            }
-          }
-        }
-
-        if (analysisPages.length > 1 && !isPageRequest && !effectiveForceRegenerate) {
-          // Use pages from structured analysis — skip AI page detection (unless user requesting new pages)
-          finalPages = analysisPages;
-          isMultiPage = true;
-        } else {
-          // Fallback: run AI page structure analysis (also run when forceRegenerate implied)
-          const pageStructure = (intent === 'full-page' || intent === 'in-shell' || impliedForceRegenerate)
-            ? await analyzePageStructure(userContent.slice(0, 8000), apiKey)
-            : { multiPage: false, pages: [] as string[] };
-
-          // When user requests new pages or force regenerate, prefer analyzer result over existing
-          if ((isPageRequest || effectiveForceRegenerate) && pageStructure.pages.length > 0) {
-            finalPages = pageStructure.pages;
-          } else {
-            finalPages = existingPages.length > 1 ? existingPages : pageStructure.pages;
-          }
-          isMultiPage = finalPages.length > 1;
-        }
-      }
+      // Will be set by keyword override or AI analysis below
+      finalPages = [];
+      isMultiPage = false;
     }
 
     // === KEYWORD PAGE OVERRIDE (must run BEFORE parallel check) ===
