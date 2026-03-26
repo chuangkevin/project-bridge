@@ -1,4 +1,5 @@
 import { GenerationPlan, buildLocalPlan, PageAssignment } from './masterAgent';
+import { AGENTS } from './plannerAgent';
 import { generatePageFragment } from './subAgent';
 import { assemblePrototype, fixNavigation } from './htmlAssembler';
 import { compileDesignTokens, DesignTokens } from './designTokenCompiler';
@@ -60,11 +61,13 @@ export async function generateParallel(
       const pageIdx = i + idx;
       const key = batchKeys[pageIdx] || batchKeys[0];
 
+      const devName = AGENTS.devs[pageIdx % AGENTS.devs.length];
       onProgress?.({
         phase: 'generating',
         page: page.name,
         status: 'started',
         progress: `${pageIdx + 1}/${totalPages}`,
+        message: `${devName} 正在製作「${page.name}」...`,
       });
 
       return generatePageFragment(
@@ -75,7 +78,7 @@ export async function generateParallel(
         designConvention,
       ).then(async (result) => {
         if (result.success) {
-          onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}` });
+          onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}`, message: `${devName} 完成了「${page.name}」✓` });
           return result;
         }
         // Retry up to 2 times with different keys
