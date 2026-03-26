@@ -1047,6 +1047,42 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     }
 
+    // === KEYWORD PAGE OVERRIDE (must run BEFORE parallel check) ===
+    {
+      const msg = userContent.toLowerCase();
+      let keywordPages: string[] = [];
+      if (/購物|商城|電商|shop|store|ecommerce|網店/i.test(msg)) {
+        keywordPages = ['首頁', '商品列表', '商品詳情', '購物車', '結帳'];
+      } else if (/旅遊|旅行|travel|tour|訂房|住宿|hotel|booking/i.test(msg)) {
+        keywordPages = ['首頁', '行程列表', '行程詳情', '訂購確認', '我的訂單'];
+      } else if (/部落格|blog|文章|新聞|news/i.test(msg)) {
+        keywordPages = ['首頁', '文章列表', '文章內容', '關於我們'];
+      } else if (/後台|admin|dashboard|管理|CMS/i.test(msg)) {
+        keywordPages = ['儀表板', '列表管理', '詳情編輯', '設定'];
+      } else if (/社群|social|論壇|forum|討論/i.test(msg)) {
+        keywordPages = ['首頁', '貼文列表', '貼文詳情', '個人檔案'];
+      } else if (/訂餐|餐廳|restaurant|food|外送|美食/i.test(msg)) {
+        keywordPages = ['首頁', '菜單', '購物車', '訂單確認'];
+      } else if (/房|不動產|real.?estate|租屋|買屋|房屋/i.test(msg)) {
+        keywordPages = ['首頁', '物件列表', '物件詳情', '聯絡我們'];
+      } else if (/教育|課程|course|learn|學習|線上課/i.test(msg)) {
+        keywordPages = ['首頁', '課程列表', '課程詳情', '我的學習', '個人設定'];
+      } else if (/醫療|診所|clinic|hospital|預約|掛號/i.test(msg)) {
+        keywordPages = ['首頁', '醫師列表', '預約掛號', '看診紀錄'];
+      } else if (/圖書|library|借閱|租借|書籍/i.test(msg)) {
+        keywordPages = ['首頁', '書籍列表', '書籍詳情', '我的借閱', '個人設定'];
+      }
+      if (keywordPages.length >= 2) {
+        console.log('[chat] Keyword pages override:', keywordPages);
+        finalPages = keywordPages;
+        isMultiPage = true;
+      } else if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
+        finalPages = ['首頁', '功能頁', '詳情頁', '設定'];
+        isMultiPage = true;
+        console.log('[chat] Generic multi-page fallback:', finalPages);
+      }
+    }
+
     // === PARALLEL GENERATION PATH ===
     // If 2+ pages, use parallel pipeline for speed
     const hasAnalysisData = specRowsEarly.some((r: any) => r.analysis_result);
@@ -1226,42 +1262,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
     accumulatedThinking += '\n\n開始生成...';
     res.write(`data: ${JSON.stringify({ type: 'thinking', content: accumulatedThinking })}\n\n`);
 
-    // Step 1.6: Keyword-based page override — explicit keywords ALWAYS win over AI analysis
-    // (AI often gets confused by brand name "HousePrice" and generates real estate instead of what user asked)
-    {
-      const msg = userContent.toLowerCase();
-      let keywordPages: string[] = [];
-      if (/購物|商城|電商|shop|store|ecommerce|網店/i.test(msg)) {
-        keywordPages = ['首頁', '商品列表', '商品詳情', '購物車', '結帳'];
-      } else if (/旅遊|旅行|travel|tour|訂房|住宿|hotel|booking/i.test(msg)) {
-        keywordPages = ['首頁', '行程列表', '行程詳情', '訂購確認', '我的訂單'];
-      } else if (/部落格|blog|文章|新聞|news/i.test(msg)) {
-        keywordPages = ['首頁', '文章列表', '文章內容', '關於我們'];
-      } else if (/後台|admin|dashboard|管理|CMS/i.test(msg)) {
-        keywordPages = ['儀表板', '列表管理', '詳情編輯', '設定'];
-      } else if (/社群|social|論壇|forum|討論/i.test(msg)) {
-        keywordPages = ['首頁', '貼文列表', '貼文詳情', '個人檔案'];
-      } else if (/訂餐|餐廳|restaurant|food|外送|美食/i.test(msg)) {
-        keywordPages = ['首頁', '菜單', '購物車', '訂單確認'];
-      } else if (/房|不動產|real.?estate|租屋|買屋|房屋/i.test(msg)) {
-        keywordPages = ['首頁', '物件列表', '物件詳情', '聯絡我們'];
-      } else if (/教育|課程|course|learn|學習|線上課/i.test(msg)) {
-        keywordPages = ['首頁', '課程列表', '課程詳情', '我的學習', '個人設定'];
-      } else if (/醫療|診所|clinic|hospital|預約|掛號/i.test(msg)) {
-        keywordPages = ['首頁', '醫師列表', '預約掛號', '看診紀錄'];
-      }
-      // Keyword match ALWAYS overrides AI pages (unless user explicitly provided page names)
-      if (keywordPages.length >= 2) {
-        console.log('[chat] Keyword pages override:', keywordPages, '(was:', finalPages, ')');
-        finalPages = keywordPages;
-        isMultiPage = true;
-      } else if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
-        // Generic: at least generate a multi-page site
-        finalPages = ['首頁', '功能頁', '詳情頁', '設定'];
-        isMultiPage = true;
-        console.log('[chat] Generic multi-page fallback:', finalPages);
-      }
-    }
+    // (keyword page override already ran before parallel check)
 
     // Step 2: Emit processing steps
     res.write(`data: ${JSON.stringify({ type: 'thinking', content: '\n\n' })}\n\n`);
