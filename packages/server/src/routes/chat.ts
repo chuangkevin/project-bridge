@@ -1030,10 +1030,14 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }, 10000);
 
       try {
+        // Pass active skills to planning agents
+        const planSkills = getActiveSkills(projectId as string).map(s => ({
+          name: s.name, description: s.description || '', content: s.content,
+        }));
         const plan = await planAndReview(userContent, (text) => {
           res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
           aiThinkingText += text;
-        });
+        }, planSkills);
         clearInterval(planHeartbeat);
 
         finalPages = plan.pages.map(p => p.name);

@@ -31,6 +31,7 @@ export { AGENTS };
 export async function planAndReview(
   userMessage: string,
   onThinking: (text: string) => void,
+  skills: { name: string; description: string; content: string }[] = [],
 ): Promise<GenerationPlan> {
   const keys = assignBatchKeys(6);
   let keyIdx = 0;
@@ -84,6 +85,11 @@ export async function planAndReview(
   }
 
   let fullDiscussion = '';
+
+  // Build skills context for all agents
+  const skillsContext = skills.length > 0
+    ? `\n\n=== 專案知識庫（所有 Agent 都可以參考）===\n${skills.slice(0, 8).map(s => `【${s.name}】${s.description}\n${s.content.slice(0, 500)}`).join('\n\n')}\n===\n`
+    : '';
   const { pm, ux, tech } = AGENTS;
 
   // ── Echo (PM): 分析需求 ──
@@ -91,7 +97,7 @@ export async function planAndReview(
   let pmText = '';
   try {
     pmText = await callAIStream(`你是 ${pm.name}，一位資深產品經理。你正在團隊會議上分析客戶需求。
-
+${skillsContext}
 客戶說：「${userMessage.slice(0, 800)}」
 
 請用繁體中文，以 ${pm.name} 的口吻直接發言（不要說「作為產品經理」，直接講）：
@@ -114,7 +120,7 @@ export async function planAndReview(
   let uxText = '';
   try {
     uxText = await callAIStream(`你是 ${ux.name}，UX 設計師。你在團隊會議上，剛聽完 ${pm.name}（產品經理）的分析。
-
+${skillsContext}
 客戶需求：「${userMessage.slice(0, 500)}」
 
 ${pm.name} 的分析：
@@ -144,7 +150,7 @@ PAGES: 頁面1, 頁面2, 頁面3, ...
   let qaText = '';
   try {
     qaText = await callAIStream(`你是 ${qa.name}，QA 審查員。你剛聽完 ${pm.name} 和 ${ux.name} 的討論。
-
+${skillsContext}
 客戶需求：「${userMessage.slice(0, 300)}」
 
 ${pm.name} 說：${pmText.slice(0, 800)}
@@ -168,7 +174,7 @@ ${ux.name} 說：${uxText.slice(0, 800)}
   let techText = '';
   try {
     techText = await callAIStream(`你是 ${tech.name}，技術主管。團隊討論完了，你要做最後總結。
-
+${skillsContext}
 客戶需求：「${userMessage.slice(0, 300)}」
 
 ${pm.name}（產品經理）：${pmText.slice(0, 1000)}
