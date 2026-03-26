@@ -359,6 +359,13 @@ img { max-width: 100%; display: block; }
         '詳情編輯': '- 頂部 breadcrumb（列表 > 編輯 #123）\n- Tabs（基本資料/進階設定/操作記錄）\n- .form-group 欄位：名稱/描述/分類/狀態/標籤\n- 儲存 .btn-primary + 取消 .btn-secondary\n- 操作記錄 .timeline',
         '設定': '- 一般設定：網站名稱/Logo/語言 .form-group\n- 通知設定：Email/.toggle 開關\n- 安全設定：密碼變更/兩步驟驗證 .toggle\n- API 設定：API Key 顯示+重新生成',
       },
+      library: {
+        '首頁': '- Hero：搜尋框「輸入書名、作者或關鍵字」+ .btn-cta 搜尋\n- 熱門推薦 .grid-4：每個 .card 含書封圖(.card-img)+書名+作者+狀態 .badge（可借閱=綠/已借出=紅）\n- ⚠️ 每張卡片必須有 <a onclick="showPage(\'書籍詳情\');return false;" class="btn btn-primary">查看詳情</a>\n- 分類瀏覽 .tag（文學/科學/歷史/藝術/兒童/商業）\n- ⚠️ 這是圖書館，絕不顯示價格 NT$\n- 頁尾 .site-footer',
+        '書籍列表': '- .layout-sidebar（左篩選：分類 checkbox + 狀態「可借閱/已借出」+ 出版年份）\n- 右側 .grid-3 書籍卡：書封+書名+作者+狀態 .badge + <a onclick="showPage(\'書籍詳情\');return false;" class="btn btn-primary">查看詳情</a>\n- 排序下拉（最新上架/熱門/作者）\n- .pagination 分頁\n- ⚠️ 圖書館不顯示價格',
+        '書籍詳情': '- 左：書封大圖\n- 右：書名(24px bold)、作者、出版社、出版日期、ISBN\n- 狀態 .badge（可借閱=綠色/已借出=紅色+預計歸還日）\n- 借閱 .btn-cta onclick="showPage(\'我的借閱\')" / 預約 .btn-secondary\n- 書籍簡介段落（3-4行真實內容）\n- 借閱規則（借閱期限30天、可續借1次）\n- 相關推薦書籍 .grid-4 + 每本有 onclick="showPage(\'書籍詳情\')"',
+        '我的借閱': '- 目前借閱 .table：書封小圖+書名+借出日+到期日+狀態 .badge（借閱中/已逾期/已歸還）+續借 .btn-secondary+歸還 .btn-primary\n- 借閱歷史 .table\n- 空狀態："您還沒有借閱書籍，去探索圖書館吧！" + .btn-cta onclick="showPage(\'書籍列表\')"',
+        '個人設定': '- .form-group：姓名/借書證號/Email/電話\n- 通知偏好 .toggle（到期提醒/新書通知/預約到貨）\n- 借閱偏好：最愛分類 .tag 選擇\n- 變更密碼 .form-group',
+      },
       news: {
         '首頁': '- 頭條新聞 Hero .card（大圖+標題+摘要+時間）\n- 分類 .tag（政治/財經/科技/娛樂/生活/國際）\n- 最新文章 .grid-3：.card 圖+標題+摘要+日期+作者\n- 點卡 onclick="showPage(\'文章內容\')"',
         '文章列表': '- 分類 .tag 切換\n- 文章列表（圖左+文右）：標題+摘要(2行)+日期+作者+分類 .badge\n- 側邊欄：熱門文章排行+標籤雲\n- .pagination\n- 點文章 onclick="showPage(\'文章內容\')"',
