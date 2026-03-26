@@ -55,6 +55,17 @@ CONTENT QUALITY:
 - Forms: proper labels, input types, placeholder text, validation hints
 - Tables: realistic column data, not "XXX" or "---"
 
+LAYOUT RULES (CRITICAL — prevents broken layouts):
+- ALWAYS wrap page content in <div class="container"> (max-width 1200px, centered)
+- ONLY use shared CSS classes for layout: .grid, .grid-2, .grid-3, .grid-4, .flex, .flex-between, .layout-sidebar
+- NEVER write inline style for width, display, grid, flex — use the shared classes
+- NEVER use position:absolute/fixed for layout (only for small overlays like tooltips)
+- Image placeholders: use <div style="background:#E5E5E5;aspect-ratio:16/9;border-radius:4px;"></div> — NOT purple/colored backgrounds
+- Card images: <div class="card-img" style="background:#E5E5E5;height:180px;"></div>
+- Tables: ALWAYS use .table class, columns use text-align:left, no word-break
+- Long text: use white-space:normal; overflow-wrap:break-word; on text containers
+- Tags/badges: use .tag or .badge classes with flex-wrap:wrap on parent
+
 QUALITY STANDARDS:
 - Fill with realistic domain-appropriate content (real product names, prices, descriptions)
 - Use data-bridge-id="[unique-kebab-id]" on ALL significant elements
@@ -63,6 +74,7 @@ QUALITY STANDARDS:
 - Use CSS variables: var(--primary), var(--text), var(--bg), var(--border)
 - Minimum 400px of meaningful, realistic content
 - Include proper empty states, hover effects, active states
+- NEVER use <style> tags — all styling via shared CSS classes or CSS variables
 
 NAVIGATION between pages:
 onclick="showPage('targetPageName');return false;"
