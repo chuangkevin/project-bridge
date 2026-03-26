@@ -31,7 +31,7 @@ export async function planAndReview(
       const genai = new GoogleGenerativeAI(key);
       const model = genai.getGenerativeModel({
         model: getGeminiModel(),
-        generationConfig: { maxOutputTokens: 2000, temperature: 0.3, responseMimeType: 'application/json' },
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.3, responseMimeType: 'application/json' },
       });
 
       const plannerPrompt = `你是資深 UI 設計師。分析以下需求，決定需要哪些頁面和功能。
