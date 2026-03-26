@@ -25,8 +25,17 @@ Return ONLY an HTML fragment — a single <div> element:
 </div>
 
 DO NOT return <!DOCTYPE>, <html>, <head>, <body>, <style>, or <script> tags.
-DO NOT include navigation bars, headers, or footers — these are handled by the assembler.
-Your page div should ONLY contain the page-specific content, NOT site-wide elements.
+
+⚠️⚠️⚠️ CRITICAL — DO NOT INCLUDE ANY OF THESE (they are added by the assembler):
+- NO <nav> elements
+- NO <header> with class "site-header"
+- NO <footer> with class "site-footer"
+- NO navigation bars or menus
+- NO site logo or brand name header
+Your div should contain ONLY the page's unique content (forms, lists, cards, tables, etc.)
+
+MINIMUM CONTENT: Your page div must contain at least 500 characters of actual HTML content.
+An empty or near-empty page is a FAILURE.
 
 DESIGN TOKENS (pre-defined in :root — use these variables):
 ${cssVariables || '/* use defaults: var(--primary), var(--text), var(--bg), var(--border) */'}
