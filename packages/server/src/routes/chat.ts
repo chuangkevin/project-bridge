@@ -1068,8 +1068,10 @@ PAGES: 首頁, 頁面2, 頁面3, ...
 
 規則：
 - 根據需求推理出合適的頁面（不是固定模板）
-- 頁面名稱用繁體中文
-- 至少 3 個頁面
+- 頁面名稱用繁體中文，2-6 個字，不含標點符號和特殊字元
+- 頁面名稱範例：首頁、商品列表、商品詳情、購物車、結帳、個人設定
+- 錯誤範例：「線上點餐，對手是ub列表」← 太長且含標點
+- 至少 3 個頁面，最多 6 個
 - 思考這個應用的核心流程`;
           const result = await analyzeModel.generateContentStream(analyzePrompt);
           let thinking = '';
@@ -1082,7 +1084,9 @@ PAGES: 首頁, 頁面2, 頁面3, ...
           }
           const pagesMatch = thinking.match(/PAGES:\s*(.+)/i);
           if (pagesMatch) {
-            const extracted = pagesMatch[1].split(/[,、，]/).map((p: string) => p.trim()).filter((p: string) => p && p.length < 20);
+            const extracted = pagesMatch[1].split(/[,、，]/)
+              .map((p: string) => p.trim().replace(/[^\u4e00-\u9fff\u3400-\u4dbfa-zA-Z0-9]/g, '').slice(0, 12))
+              .filter((p: string) => p && p.length >= 2 && p.length <= 12);
             if (extracted.length >= 2) {
               console.log('[chat] AI analysis pages:', extracted);
               finalPages = extracted;
