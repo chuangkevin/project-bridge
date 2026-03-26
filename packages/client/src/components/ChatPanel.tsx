@@ -93,6 +93,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     return saved ? parseInt(saved, 10) : 180;
   });
   const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
+  const [pageDevNames, setPageDevNames] = useState<Record<string, string>>({});
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; options: { id: string; label: string; description: string }[]; originalText: string } | null>(null);
@@ -391,6 +392,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setActiveSkillNames([]);
     setTokenCount(0);
     setPageProgress({});
+    setPageDevNames({});
     setError(null);
     setLastGenerationSummary('');
     setLastGeneratedPages([]);
@@ -437,6 +439,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
 
       const decoder = new TextDecoder();
       let fullContent = '';
+      let accThinking = ''; // local accumulator (React state is stale in async closure)
       let receivedHtml: string | null = null;
       let receivedMessageType: 'user' | 'generate' | 'answer' | undefined;
       let receivedIsMultiPage = false;
@@ -471,6 +474,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             }
             // Handle thinking transparency events
             if (data.type === 'thinking' && data.content) {
+              accThinking += data.content;
               setThinkingContent(prev => prev + data.content);
             }
             if (data.type === 'skills' && Array.isArray(data.skills)) {
@@ -497,6 +501,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               }
               if (data.phase === 'generating' && data.page) {
                 setPageProgress(prev => ({ ...prev, [data.page]: data.status || 'started' }));
+                if (data.message) setPageDevNames(prev => ({ ...prev, [data.page]: data.message }));
               }
             }
             if (data.content && data.type !== 'thinking') {
@@ -545,8 +550,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         messageType: receivedMessageType,
       };
 
-      // Save thinking summary and skills for display in the generated message
-      setLastThinkingSummary(thinkingContent);
+      // Save thinking summary — use accumulated local var since React state is stale in closure
+      setLastThinkingSummary(accThinking);
 
       setLocalUserMsg(null);
       setStreamingContent('');
@@ -565,6 +570,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       setStreaming(false);
       setGenerationPhase('idle');
       setPageProgress({});
+    setPageDevNames({});
       setParallelMessage('');
       setTokenCount(0);
     }
@@ -625,7 +631,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                         {page}
                       </span>
                       <span style={{ color: '#94a3b8', fontSize: 10 }}>
-                        {status === 'done' ? '完成' : status === 'error' ? '失敗' : status === 'started' ? '生成中...' : '等待'}
+                        {pageDevNames[page] || (status === 'done' ? '完成' : status === 'error' ? '失敗' : status === 'started' ? '生成中...' : '等待')}
                       </span>
                     </div>
                   ))}
