@@ -36,7 +36,7 @@ export async function planAndReview(
   let keyIdx = 0;
   const getKey = () => keys[keyIdx++ % keys.length];
 
-  async function callAIStream(prompt: string, agentName: string, maxTokens: number = 2500): Promise<string> {
+  async function callAIStream(prompt: string, agentName: string, maxTokens: number = 4000): Promise<string> {
     for (let attempt = 0; attempt < 3; attempt++) {
       const key = getKey();
       try {
@@ -102,7 +102,7 @@ export async function planAndReview(
 4. 提出 2-3 個客戶可能沒想到的坑
 5. 建議需要哪些頁面（列出頁面名稱，2-6 個字）
 
-語氣自然，像在開會，可以用「我覺得」「這邊要注意」這種口語。`, pm.name, 2000);
+語氣自然，像在開會，可以用「我覺得」「這邊要注意」這種口語。`, pm.name, 4000);
 
     fullDiscussion += `${pm.name}（${pm.role}）：\n${pmText}\n\n`;
   } catch {
@@ -131,7 +131,7 @@ ${pmText.slice(0, 2000)}
 最後一行寫：
 PAGES: 頁面1, 頁面2, 頁面3, ...
 
-語氣自然，像在跟同事討論，可以說「${pm.name} 說得沒錯，但我覺得...」`, ux.name, 2500);
+語氣自然，像在跟同事討論，可以說「${pm.name} 說得沒錯，但我覺得...」`, ux.name, 4000);
 
     fullDiscussion += `${ux.name}（${ux.role}）：\n${uxText}\n\n`;
   } catch {
@@ -156,7 +156,7 @@ ${ux.name} 說：${uxText.slice(0, 800)}
 3. 導航流程有沒有死角？（某個操作後使用者會卡住？）
 4. 如果你是使用者，第一次打開這個 app，你會困惑什麼？
 
-語氣直接，像在 code review：「這邊有個問題...」「${ux.name} 說的 XX 頁面缺少...」`, qa.name, 1500);
+語氣直接，像在 code review：「這邊有個問題...」「${ux.name} 說的 XX 頁面缺少...」`, qa.name, 3000);
 
     fullDiscussion += `${qa.name}（${qa.role}）：\n${qaText}\n\n`;
   } catch {
@@ -182,7 +182,7 @@ ${qa.name}（QA 審查員）：${qaText.slice(0, 1000)}
 3. 確認最終頁面清單：每個頁面一行，格式「• 頁面名：核心功能」
 4. 「接下來我們開始製作，預計 X 個頁面...」
 
-語氣果斷，像在做決定。`, tech.name, 1500);
+語氣果斷，像在做決定。`, tech.name, 3000);
 
     fullDiscussion += `${tech.name}（${tech.role}）：\n${techText}\n\n`;
   } catch {
