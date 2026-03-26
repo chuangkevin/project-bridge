@@ -12,6 +12,7 @@ export interface GenerationPlan {
 const AGENTS = {
   pm: { name: 'Echo', role: '產品經理', emoji: '👩‍💼' },
   ux: { name: 'Lisa', role: 'UX 設計師', emoji: '🎨' },
+  qa: { name: 'David', role: 'QA 審查員', emoji: '🔍' },
   tech: { name: 'Bob', role: '技術主管', emoji: '👨‍💻' },
   // Sub-agents for page generation
   devs: ['James', 'Kevin', 'Mia', 'Alex', 'Sophie', 'Leo'],
@@ -137,27 +138,51 @@ PAGES: 頁面1, 頁面2, 頁面3, ...
     onThinking('（設計中斷，繼續...）\n');
   }
 
-  // ── Bob (Tech Lead): 整合，產出 JSON ──
-  onThinking(`\n\n---\n\n${tech.emoji} **${tech.name}**（${tech.role}）：\n\n`);
-  let techText = '';
+  // ── David (QA): 審查方案，找盲點 ──
+  const { qa } = AGENTS;
+  onThinking(`\n\n---\n\n${qa.emoji} **${qa.name}**（${qa.role}）：\n\n`);
+  let qaText = '';
   try {
-    techText = await callAIStream(`你是 ${tech.name}，技術主管。團隊已經討論完了，你要做最後總結。
+    qaText = await callAIStream(`你是 ${qa.name}，QA 審查員。你剛聽完 ${pm.name} 和 ${ux.name} 的討論。
 
 客戶需求：「${userMessage.slice(0, 300)}」
 
-${pm.name}（產品經理）說：
-${pmText.slice(0, 1500)}
+${pm.name} 說：${pmText.slice(0, 800)}
+${ux.name} 說：${uxText.slice(0, 800)}
 
-${ux.name}（UX 設計師）說：
-${uxText.slice(0, 1500)}
+以 ${qa.name} 的口吻，審查這個方案：
+1. 有沒有漏掉的使用場景？（例如：使用者可能會...但方案沒考慮到）
+2. 哪些頁面的功能描述太模糊？需要更具體
+3. 導航流程有沒有死角？（某個操作後使用者會卡住？）
+4. 如果你是使用者，第一次打開這個 app，你會困惑什麼？
 
-請用繁體中文，以 ${tech.name} 的口吻：
+語氣直接，像在 code review：「這邊有個問題...」「${ux.name} 說的 XX 頁面缺少...」`, qa.name, 1500);
 
-1. 簡短總結（2-3 句：我們要做什麼、怎麼做）
-2. 確認最終頁面清單（綜合 ${pm.name} 和 ${ux.name} 的意見）
-3. 列出需要注意的技術點
+    fullDiscussion += `${qa.name}（${qa.role}）：\n${qaText}\n\n`;
+  } catch {
+    onThinking('（審查中斷，繼續...）\n');
+  }
 
-語氣：「好，那我整理一下...」「最終我們確定...」`, tech.name, 1500);
+  // ── Bob (Tech Lead): 最終整合 + 明確總結 ──
+  onThinking(`\n\n---\n\n${tech.emoji} **${tech.name}**（${tech.role}）：\n\n`);
+  let techText = '';
+  try {
+    techText = await callAIStream(`你是 ${tech.name}，技術主管。團隊討論完了，你要做最後總結。
+
+客戶需求：「${userMessage.slice(0, 300)}」
+
+${pm.name}（產品經理）：${pmText.slice(0, 1000)}
+${ux.name}（UX 設計師）：${uxText.slice(0, 1000)}
+${qa.name}（QA 審查員）：${qaText.slice(0, 1000)}
+
+以 ${tech.name} 的口吻做最終總結：
+
+1. 「好，我整理一下大家的意見...」
+2. 回應 ${qa.name} 提出的問題（怎麼解決）
+3. 確認最終頁面清單：每個頁面一行，格式「• 頁面名：核心功能」
+4. 「接下來我們開始製作，預計 X 個頁面...」
+
+語氣果斷，像在做決定。`, tech.name, 1500);
 
     fullDiscussion += `${tech.name}（${tech.role}）：\n${techText}\n\n`;
   } catch {

@@ -62,9 +62,12 @@ LAYOUT RULES (CRITICAL — prevents broken layouts):
 - NEVER use position:absolute/fixed for layout (only for small overlays like tooltips)
 - Image placeholders: use <div style="background:#E5E5E5;aspect-ratio:16/9;border-radius:4px;"></div> — NOT purple/colored backgrounds
 - Card images: <div class="card-img" style="background:#E5E5E5;height:180px;"></div>
-- Tables: ALWAYS use .table class, columns use text-align:left, no word-break
-- Long text: use white-space:normal; overflow-wrap:break-word; on text containers
-- Tags/badges: use .tag or .badge classes with flex-wrap:wrap on parent
+- Tables: ALWAYS use .table class with proper column widths (first col 30%, rest auto)
+- Table cells: white-space:nowrap for short data (dates, numbers), normal for descriptions
+- Info grid (label:value pairs): use display:grid; grid-template-columns: 100px 1fr; gap:8px — NOT nested tables
+- Long text: overflow-wrap:break-word on containers
+- Tags/badges: use .tag or .badge with flex-wrap:wrap on parent, gap:6px
+- Date/time: display inline on one line, e.g. "2024/07/20 (六) 14:00-16:00" — NOT broken into separate lines
 
 QUALITY STANDARDS:
 - Fill with realistic domain-appropriate content (real product names, prices, descriptions)
