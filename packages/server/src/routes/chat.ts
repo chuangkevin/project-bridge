@@ -1034,7 +1034,17 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         const planSkills = getActiveSkills(projectId as string).map(s => ({
           name: s.name, description: s.description || '', content: s.content,
         }));
-        const plan = await planAndReview(userContent, (text) => {
+        // Add design direction context to user message for planning agents
+        const earlyDesignRow = db.prepare('SELECT description, tokens, inherit_global FROM design_profiles WHERE project_id = ?').get(projectId) as any;
+        let planUserMsg = userContent;
+        if (earlyDesignRow?.description) {
+          planUserMsg += `\n\n【設計方向】${earlyDesignRow.description}`;
+          try {
+            const t = JSON.parse(earlyDesignRow.tokens || '{}');
+            if (t.primaryColor) planUserMsg += `\n主色：${t.primaryColor}`;
+          } catch {}
+        }
+        const plan = await planAndReview(planUserMsg, (text) => {
           res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
           aiThinkingText += text;
         }, planSkills);
@@ -1062,6 +1072,24 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         finalPages = ['首頁', '列表瀏覽', '詳情頁面', '操作功能', '個人帳戶'];
         isMultiPage = true;
       }
+    }
+
+    // Read project design profile BEFORE parallel path
+    const projDesign = db.prepare('SELECT * FROM design_profiles WHERE project_id = ?').get(projectId) as any;
+    const projInheritGlobal = projDesign ? projDesign.inherit_global !== 0 : true;
+    if (projDesign && !projInheritGlobal) {
+      // Override designConvention with project-specific design
+      let projTokens: any = {};
+      try { projTokens = JSON.parse(projDesign.tokens || '{}'); } catch {}
+      designConvention = `PROJECT DESIGN (override global):
+Design Direction: ${projDesign.description || ''}
+Primary Color: ${projTokens.primaryColor || '#8E6FA7'}
+Secondary Color: ${projTokens.secondaryColor || '#64748b'}
+Font: ${projTokens.fontFamily || 'system'}
+Border Radius: ${projTokens.borderRadius || 4}px
+Shadow: ${projTokens.shadowStyle || '輕柔'}
+IMPORTANT: Follow the project design direction, NOT the HousePrice default.`;
+      console.log('[chat] Using project design:', projDesign.description);
     }
 
     // === PARALLEL GENERATION PATH ===
