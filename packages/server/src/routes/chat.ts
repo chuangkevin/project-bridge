@@ -1047,6 +1047,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       }
     }
 
+    // Track accumulated thinking from AI analysis (for metadata)
+    let aiThinkingText = '';
+
     // === AI ANALYSIS — determines pages for non-keyword requests ===
     // Also streams reasoning to client (Figma-style)
     console.log('[chat] Pre-analysis check: finalPages=', finalPages.length, 'intent=', intent);
@@ -1085,6 +1088,7 @@ PAGES: 首頁, 頁面2, 頁面3, ...
               res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
             }
           }
+          aiThinkingText = thinking.replace(/\n?PAGES:\s*.+$/i, '').trim();
           const pagesMatch = thinking.match(/PAGES:\s*(.+)/i);
           if (pagesMatch) {
             const extracted = pagesMatch[1].split(/[,、，]/)
@@ -1150,11 +1154,17 @@ PAGES: 首頁, 頁面2, 頁面3, ...
             'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
           ).run(userMsgId, projectId, 'user', userContent, 'user');
 
-          // Save assistant response (the full HTML)
+          // Build summary for parallel result
+          const parallelPages = parallelResult.pages;
+          const parallelSummary = `我已經為您建立了「${userContent.slice(0, 30)}」的原型，包含 ${parallelPages.length} 個頁面。\n此原型採用 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換。\n\n包含頁面：\n${parallelPages.map((p: string) => `• ${p}`).join('\n')}`;
+          const parallelThinking = aiThinkingText || `分析需求：「${userContent.slice(0, 100)}」\n偵測到 ${parallelPages.length} 個頁面：${parallelPages.join('、')}`;
+          const parallelMeta = JSON.stringify({ summary: parallelSummary, pages: parallelPages, thinking: parallelThinking });
+
+          // Save assistant response with metadata
           const assistantMsgId = uuidv4();
           db.prepare(
-            'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
-          ).run(assistantMsgId, projectId, 'assistant', parallelResult.html, 'generate');
+            'INSERT INTO conversations (id, project_id, role, content, message_type, metadata) VALUES (?, ?, ?, ?, ?, ?)'
+          ).run(assistantMsgId, projectId, 'assistant', parallelResult.html, 'generate', parallelMeta);
 
           // Validate
           {
@@ -1179,13 +1189,17 @@ PAGES: 首頁, 頁面2, 頁面3, ...
           db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
           triggerQualityScoring(versionId, parallelResult.html, apiKey);
 
+          // Send pages event + done with summary
+          res.write(`data: ${JSON.stringify({ type: 'pages', pages: parallelPages })}\n\n`);
           res.write(`data: ${JSON.stringify({
             done: true,
             html: parallelResult.html,
             messageType: 'generate',
             intent,
             isMultiPage: true,
-            pages: parallelResult.pages,
+            pages: parallelPages,
+            summary: parallelSummary,
+            pageCount: parallelPages.length,
           })}\n\n`);
           res.end();
           return;
