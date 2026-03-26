@@ -315,7 +315,10 @@ img { max-width: 100%; display: block; }
 
   const pages: PageAssignment[] = pageNames.map((name, i) => {
     const otherPages = pageNames.filter(p => p !== name);
-    let spec = `頁面「${name}」使用 HousePrice 設計規範。
+    let spec = `用戶需求：「${userMessage.slice(0, 200)}」
+
+頁面「${name}」— 使用 HousePrice 設計規範。
+重要：此頁面的所有內容必須與用戶需求「${userMessage.slice(0, 50)}」直接相關。不要生成與需求無關的內容（例如：用戶要寵物美容，不要生成房屋或房價相關內容）。
 
 佈局：使用 .container 包裹，max-width: 1200px。頂部有 .site-header（紫色 #8E6FA7）和 .site-nav（灰色 #F1F1F1 導覽列）。
 

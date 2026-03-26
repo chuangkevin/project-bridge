@@ -1049,6 +1049,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // === AI ANALYSIS — determines pages for non-keyword requests ===
     // Also streams reasoning to client (Figma-style)
+    console.log('[chat] Pre-analysis check: finalPages=', finalPages.length, 'intent=', intent);
     if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
       const analysisKey = getGeminiApiKey();
