@@ -3,7 +3,6 @@ import db from '../db/connection';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 let cachedKeys: string[] = [];
-let keyIndex = 0;
 let lastLoadTime = 0;
 const CACHE_TTL = 60_000; // reload from DB every 60s
 
@@ -90,24 +89,22 @@ function getAvailableKeys(): string[] {
   return available.length > 0 ? available : keys;
 }
 
-/** Assign N unique keys for parallel sub-agents — each gets its own key */
+/** Assign N unique keys for parallel sub-agents — shuffled to avoid hot-spotting */
 export function assignBatchKeys(count: number): string[] {
-  const available = getAvailableKeys();
-  const assigned: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const key = available.find(k => !assigned.includes(k));
-    assigned.push(key || available[i % available.length]);
+  const available = [...getAvailableKeys()];
+  // Fisher-Yates shuffle
+  for (let i = available.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [available[i], available[j]] = [available[j], available[i]];
   }
-  return assigned;
+  return available.slice(0, count);
 }
 
-/** Get the next API key using round-robin rotation, skipping bad keys */
+/** Get a random available API key — avoids hot-spotting front keys */
 export function getGeminiApiKey(): string | null {
   const keys = getAvailableKeys();
   if (keys.length === 0) return null;
-  const key = keys[keyIndex % keys.length];
-  keyIndex = (keyIndex + 1) % keys.length;
-  return key;
+  return keys[Math.floor(Math.random() * keys.length)];
 }
 
 /** Get a key excluding a specific failed key */

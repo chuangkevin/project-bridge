@@ -1052,16 +1052,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     console.log('[chat] Pre-analysis check: finalPages=', finalPages.length, 'intent=', intent);
     if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
-      // Use assignBatchKeys to get a fresh key (avoids recently-used keys)
-      const [analysisKey] = assignBatchKeys(1);
-      if (analysisKey) {
-        try {
-          const analyzeGenai = new GoogleGenerativeAI(analysisKey);
-          const analyzeModel = analyzeGenai.getGenerativeModel({
-            model: getGeminiModel(),
-            generationConfig: { maxOutputTokens: 1500, temperature: 0.4 },
-          });
-          const analyzePrompt = `你是 UI 設計師。用戶要求：「${userContent.slice(0, 300)}」
+
+      const analyzePrompt = `你是 UI 設計師。用戶要求：「${userContent.slice(0, 300)}」
 
 請簡短分析（10行內），然後在最後一行列出需要的頁面：
 PAGES: 首頁, 頁面2, 頁面3, ...
@@ -1073,6 +1065,17 @@ PAGES: 首頁, 頁面2, 頁面3, ...
 - 錯誤範例：「線上點餐，對手是ub列表」← 太長且含標點
 - 至少 3 個頁面，最多 6 個
 - 思考這個應用的核心流程`;
+
+      // Try up to 3 different keys until one works
+      const analysisKeys = assignBatchKeys(3);
+      for (const tryKey of analysisKeys) {
+        if (finalPages.length >= 2) break; // already got pages
+        try {
+          const analyzeGenai = new GoogleGenerativeAI(tryKey);
+          const analyzeModel = analyzeGenai.getGenerativeModel({
+            model: getGeminiModel(),
+            generationConfig: { maxOutputTokens: 1500, temperature: 0.4 },
+          });
           const result = await analyzeModel.generateContentStream(analyzePrompt);
           let thinking = '';
           for await (const chunk of result.stream) {
@@ -1093,18 +1096,17 @@ PAGES: 首頁, 頁面2, 頁面3, ...
               isMultiPage = true;
             }
           }
+          break; // success, stop trying
         } catch (e: any) {
-          console.warn('[chat] AI analysis failed:', e.message?.slice(0, 60));
-          markKeyBad(analysisKey);
+          console.warn('[chat] AI analysis failed on key ...' + tryKey.slice(-4) + ':', e.message?.slice(0, 40));
+          markKeyBad(tryKey);
         }
       }
-      // Last resort: smart generic fallback using user's own words
+      // Last resort: clean generic names (sub-agent specs carry the user's actual request)
       if (finalPages.length <= 1) {
-        // Extract the subject from user message
-        const subject = userContent.replace(/我要|我想要|請|幫我|建立|一個|做|設計|生成|網站|網頁|系統|平台|讓使用者|可以|的|體驗|服務/g, '').trim().slice(0, 10) || '服務';
-        finalPages = ['首頁', `${subject}列表`, `${subject}詳情`, '預約/訂購', '我的帳戶'];
+        finalPages = ['首頁', '列表瀏覽', '詳情頁面', '操作功能', '個人帳戶'];
         isMultiPage = true;
-        console.log('[chat] Smart generic fallback:', finalPages);
+        console.log('[chat] Generic fallback (AI analysis failed)');
       }
     }
 
