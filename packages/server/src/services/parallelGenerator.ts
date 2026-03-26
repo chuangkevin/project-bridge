@@ -110,6 +110,28 @@ export async function generateParallel(
   }
   console.log('[parallel] Results:', fragments.filter(f => f.success).length, 'ok,', failedCount, 'failed');
 
+  // Step 2.5: QA — strip embedded navs from fragments (sub-agents sometimes add them)
+  for (const frag of fragments) {
+    if (frag.success && frag.html) {
+      // Remove any nav/header/footer that sub-agent included inside the page div
+      frag.html = frag.html
+        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+        .replace(/<header[^>]*class="site-header"[^>]*>[\s\S]*?<\/header>/gi, '')
+        .replace(/<footer[^>]*class="site-footer"[^>]*>[\s\S]*?<\/footer>/gi, '');
+    }
+  }
+
+  // Step 2.6: QA — check content quality, log thin pages
+  for (const frag of fragments) {
+    if (frag.success) {
+      const textContent = frag.html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      if (textContent.length < 100) {
+        console.warn(`[parallel-qa] Page "${frag.name}" is thin: only ${textContent.length} chars of text`);
+        onProgress?.({ phase: 'generating', page: frag.name, status: 'error', message: `⚠️ ${frag.name} 內容不足，可能需要微調` });
+      }
+    }
+  }
+
   // Step 3: Assemble
   onProgress?.({ phase: 'assembling', message: '組裝原型...' });
   let html = assemblePrototype(plan, fragments);

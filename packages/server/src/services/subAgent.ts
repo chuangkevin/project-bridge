@@ -25,6 +25,8 @@ Return ONLY an HTML fragment — a single <div> element:
 </div>
 
 DO NOT return <!DOCTYPE>, <html>, <head>, <body>, <style>, or <script> tags.
+DO NOT include navigation bars, headers, or footers — these are handled by the assembler.
+Your page div should ONLY contain the page-specific content, NOT site-wide elements.
 
 DESIGN TOKENS (pre-defined in :root — use these variables):
 ${cssVariables || '/* use defaults: var(--primary), var(--text), var(--bg), var(--border) */'}
