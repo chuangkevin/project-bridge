@@ -1,6 +1,6 @@
 import { GenerationPlan, buildLocalPlan, PageAssignment } from './masterAgent';
 import { generatePageFragment } from './subAgent';
-import { assemblePrototype } from './htmlAssembler';
+import { assemblePrototype, fixNavigation } from './htmlAssembler';
 import { compileDesignTokens, DesignTokens } from './designTokenCompiler';
 import { assignBatchKeys, getGeminiApiKeyExcluding, markKeyBad } from './geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from './htmlSanitizer';
@@ -110,6 +110,13 @@ export async function generateParallel(
   // Step 3: Assemble
   onProgress?.({ phase: 'assembling', message: '組裝原型...' });
   let html = assemblePrototype(plan, fragments);
+
+  // Step 3.5: Fix navigation links (broken targets, page- prefix, etc.)
+  const navFix = fixNavigation(html);
+  html = navFix.html;
+  if (navFix.fixes.length > 0) {
+    console.log('[parallel] Navigation fixes:', navFix.fixes.length, navFix.fixes.slice(0, 5));
+  }
 
   // Step 5: Post-process
   html = sanitizeGeneratedHtml(html, true);

@@ -12,7 +12,7 @@ import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlS
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
 import { generateParallel } from '../services/parallelGenerator';
-import { assemblePrototype } from '../services/htmlAssembler';
+import { assemblePrototype, fixNavigation } from '../services/htmlAssembler';
 import { buildLocalPlan } from '../services/masterAgent';
 import { getActiveSkills } from './skills';
 import { scorePrototype } from '../services/qualityScorer';
@@ -1553,6 +1553,11 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
           // Update DB with assembled HTML
           db.prepare('UPDATE prototype_versions SET html = ? WHERE id = ?').run(html, versionId);
           db.prepare('UPDATE conversations SET content = ? WHERE id = ?').run(html, assistantMsgId);
+          // Fix navigation links
+          const navFix = fixNavigation(html);
+          html = navFix.html;
+          if (navFix.fixes.length > 0) console.log('[chat] Nav fixes:', navFix.fixes.slice(0, 5));
+          db.prepare('UPDATE prototype_versions SET html = ? WHERE id = ?').run(html, versionId);
           console.log('[chat] Assembled multi-page HTML with showPage, length:', html.length);
         } catch (assembleErr: any) {
           console.warn('[chat] Assembly fallback failed:', assembleErr.message);

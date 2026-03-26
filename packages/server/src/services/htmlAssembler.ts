@@ -109,6 +109,55 @@ document.addEventListener('DOMContentLoaded', function() {
 </html>`;
 }
 
+/**
+ * Post-assembly navigation validator — fixes broken showPage links.
+ * 1. Removes 'page-' prefix from showPage targets (sub-agents sometimes add it)
+ * 2. Redirects non-existent page targets to nearest matching page
+ * 3. Logs fixes applied
+ */
+export function fixNavigation(html: string): { html: string; fixes: string[] } {
+  const fixes: string[] = [];
+
+  // Extract valid page names from data-page attributes
+  const validPages = new Set<string>();
+  const pageMatches = html.match(/data-page="([^"]+)"/g) || [];
+  for (const m of pageMatches) {
+    const name = m.match(/data-page="([^"]+)"/)?.[1];
+    if (name) validPages.add(name);
+  }
+  if (validPages.size === 0) return { html, fixes };
+
+  const pageList = [...validPages];
+
+  // Fix 1: Remove 'page-' prefix from showPage targets
+  let fixed = html.replace(/showPage\('page-([^']+)'\)/g, (match, name) => {
+    fixes.push(`Fixed page- prefix: page-${name} → ${name}`);
+    return `showPage('${name}')`;
+  });
+
+  // Fix 2: Redirect non-existent targets to closest match
+  fixed = fixed.replace(/showPage\('([^']+)'\)/g, (match, target) => {
+    if (validPages.has(target)) return match; // valid
+    // Try fuzzy match — find page name that shares the most characters
+    let bestMatch = pageList[0];
+    let bestScore = 0;
+    for (const page of pageList) {
+      let score = 0;
+      for (const char of target) {
+        if (page.includes(char)) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = page;
+      }
+    }
+    fixes.push(`Redirected: ${target} → ${bestMatch}`);
+    return `showPage('${bestMatch}')`;
+  });
+
+  return { html: fixed, fixes };
+}
+
 function buildSharedCss(plan: GenerationPlan): string {
   const parts: string[] = [];
 
