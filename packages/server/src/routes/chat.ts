@@ -7,13 +7,14 @@ import db from '../db/connection';
 import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
-import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad, assignBatchKeys } from '../services/geminiKeys';
+import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
 import { generateParallel } from '../services/parallelGenerator';
 import { assemblePrototype, fixNavigation } from '../services/htmlAssembler';
 import { buildLocalPlan } from '../services/masterAgent';
+import { planAndReview } from '../services/plannerAgent';
 import { getActiveSkills } from './skills';
 import { scorePrototype } from '../services/qualityScorer';
 import { generationQueue } from '../services/generationQueue';
@@ -886,7 +887,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Fetch project design
     const designRow = db.prepare('SELECT * FROM design_profiles WHERE project_id = ?').get(projectId) as any;
     const inheritGlobal = designRow ? designRow.inherit_global !== 0 : true;
-    const supplement = designRow?.supplement || '';
+    let supplement = designRow?.supplement || '';
 
     // Inject global design block
     if (inheritGlobal && globalRow) {
@@ -1015,102 +1016,40 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       isMultiPage = false;
     }
 
-    // === KEYWORD PAGE OVERRIDE (must run BEFORE parallel check) ===
-    {
-      const msg = userContent.toLowerCase();
-      let keywordPages: string[] = [];
-      if (/購物|商城|電商|shop|store|ecommerce|網店/i.test(msg)) {
-        keywordPages = ['首頁', '商品列表', '商品詳情', '購物車', '結帳'];
-      } else if (/旅遊|旅行|travel|tour|訂房|住宿|hotel|booking/i.test(msg)) {
-        keywordPages = ['首頁', '行程列表', '行程詳情', '訂購確認', '我的訂單'];
-      } else if (/部落格|blog|文章|新聞|news/i.test(msg)) {
-        keywordPages = ['首頁', '文章列表', '文章內容', '關於我們'];
-      } else if (/後台|admin|dashboard|管理|CMS/i.test(msg)) {
-        keywordPages = ['儀表板', '列表管理', '詳情編輯', '設定'];
-      } else if (/社群|social|論壇|forum|討論/i.test(msg)) {
-        keywordPages = ['首頁', '貼文列表', '貼文詳情', '個人檔案'];
-      } else if (/訂餐|餐廳|restaurant|food|外送|美食/i.test(msg)) {
-        keywordPages = ['首頁', '菜單', '購物車', '訂單確認'];
-      } else if (/房|不動產|real.?estate|租屋|買屋|房屋/i.test(msg)) {
-        keywordPages = ['首頁', '物件列表', '物件詳情', '聯絡我們'];
-      } else if (/教育|課程|course|learn|學習|線上課/i.test(msg)) {
-        keywordPages = ['首頁', '課程列表', '課程詳情', '我的學習', '個人設定'];
-      } else if (/醫療|診所|clinic|hospital|預約|掛號/i.test(msg)) {
-        keywordPages = ['首頁', '醫師列表', '預約掛號', '看診紀錄'];
-      } else if (/圖書|library|借閱|租借|書籍/i.test(msg)) {
-        keywordPages = ['首頁', '書籍列表', '書籍詳情', '我的借閱', '個人設定'];
-      }
-      if (keywordPages.length >= 2) {
-        console.log('[chat] Keyword pages override:', keywordPages);
-        finalPages = keywordPages;
-        isMultiPage = true;
-      }
-    }
-
     // Track accumulated thinking from AI analysis (for metadata)
     let aiThinkingText = '';
 
-    // === AI ANALYSIS — determines pages for non-keyword requests ===
-    // Also streams reasoning to client (Figma-style)
+    // === PLAN + REVIEW (replaces keyword matching + AI analysis) ===
     console.log('[chat] Pre-analysis check: finalPages=', finalPages.length, 'intent=', intent);
     if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
 
-      const analyzePrompt = `你是 UI 設計師。用戶要求：「${userContent.slice(0, 300)}」
+      try {
+        const plan = await planAndReview(userContent, (text) => {
+          res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
+          aiThinkingText += text;
+        });
 
-請簡短分析（10行內），然後在最後一行列出需要的頁面：
-PAGES: 首頁, 頁面2, 頁面3, ...
+        finalPages = plan.pages.map(p => p.name);
+        isMultiPage = finalPages.length >= 2;
 
-規則：
-- 根據需求推理出合適的頁面（不是固定模板）
-- 頁面名稱用繁體中文，2-6 個字，不含標點符號和特殊字元
-- 頁面名稱範例：首頁、商品列表、商品詳情、購物車、結帳、個人設定
-- 錯誤範例：「線上點餐，對手是ub列表」← 太長且含標點
-- 至少 3 個頁面，最多 6 個
-- 思考這個應用的核心流程`;
-
-      // Try up to 3 different keys until one works
-      const analysisKeys = assignBatchKeys(3);
-      for (const tryKey of analysisKeys) {
-        if (finalPages.length >= 2) break; // already got pages
-        try {
-          const analyzeGenai = new GoogleGenerativeAI(tryKey);
-          const analyzeModel = analyzeGenai.getGenerativeModel({
-            model: getGeminiModel(),
-            generationConfig: { maxOutputTokens: 1500, temperature: 0.4 },
-          });
-          const result = await analyzeModel.generateContentStream(analyzePrompt);
-          let thinking = '';
-          for await (const chunk of result.stream) {
-            const text = chunk.text();
-            if (text) {
-              thinking += text;
-              res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
-            }
-          }
-          aiThinkingText = thinking.replace(/\n?PAGES:\s*.+$/i, '').trim();
-          const pagesMatch = thinking.match(/PAGES:\s*(.+)/i);
-          if (pagesMatch) {
-            const extracted = pagesMatch[1].split(/[,、，]/)
-              .map((p: string) => p.trim().replace(/[^\u4e00-\u9fff\u3400-\u4dbfa-zA-Z0-9]/g, '').slice(0, 12))
-              .filter((p: string) => p && p.length >= 2 && p.length <= 12);
-            if (extracted.length >= 2) {
-              console.log('[chat] AI analysis pages:', extracted);
-              finalPages = extracted;
-              isMultiPage = true;
-            }
-          }
-          break; // success, stop trying
-        } catch (e: any) {
-          console.warn('[chat] AI analysis failed on key ...' + tryKey.slice(-4) + ':', e.message?.slice(0, 40));
-          markKeyBad(tryKey);
+        // Store plan constraints in supplement for sub-agents
+        if (plan.constraints.length > 0) {
+          supplement += '\n\n=== 設計約束 ===\n' + plan.constraints.join('\n');
         }
-      }
-      // Last resort: clean generic names (sub-agent specs carry the user's actual request)
-      if (finalPages.length <= 1) {
+
+        // Store navigation map for sub-agents
+        const navMap = plan.navigation.map(n => `${n.from} → ${n.to}（${n.trigger}）`).join('\n');
+        if (navMap) {
+          supplement += '\n\n=== 導航流程 ===\n' + navMap;
+        }
+
+        console.log('[chat] Plan+Review pages:', finalPages);
+      } catch (e: any) {
+        console.warn('[chat] Plan+Review failed:', e.message?.slice(0, 60));
+        // Last resort fallback
         finalPages = ['首頁', '列表瀏覽', '詳情頁面', '操作功能', '個人帳戶'];
         isMultiPage = true;
-        console.log('[chat] Generic fallback (AI analysis failed)');
       }
     }
 
