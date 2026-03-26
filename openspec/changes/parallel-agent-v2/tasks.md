@@ -70,10 +70,13 @@
 - [x] 9.3 Unified skill directory: D:\Projects\project-bridge\skill\
 - [x] 9.4 All planning agents receive skills context
 
-## 10. Remaining Issues
+## 10. Known Bugs (Critical)
 
-- [ ] 10.1 Thinking/Reasoning not always visible after page reload (closure issue partially fixed)
-- [ ] 10.2 Sub-agent still sometimes generates nav inside page div despite rules
-- [ ] 10.3 Some pages have thin content (need post-gen QA agent to re-generate)
-- [ ] 10.4 Code editor not editable (read-only)
-- [ ] 10.5 Post-generation code review agent (validate all pages have content + navigation works)
+- [ ] 10.1 **空頁面** — 多頁生成後部分頁面看似空白（HTML 有內容但 CSS 沒套上或 display 沒切換）
+- [ ] 10.2 **設計風格錯誤** — 設定「簡約蘋果風格」+藍色主色 但生成出來依然是 HousePrice 暖米色+紫色
+- [ ] 10.3 **跑版** — 預約確認頁右側營業時間文字斷行擠壓、橘色色塊溢出
+- [ ] 10.4 **Thinking 不顯示** — 重整頁面後 Reasoning 消失
+- [ ] 10.5 Sub-agent 仍然在 page div 內生成 nav（導致 QA strip 後內容變少）
+- [ ] 10.6 Post-generation code review agent 缺失（沒有最終品質驗證）
+- [ ] 10.7 Code editor 不可編輯（read-only）
+- [ ] 10.8 **project design_profiles 的 tokens 沒有替換 buildLocalPlan 的 sharedCss** — 只替換了 designConvention 文字但 CSS :root 變數還是 HousePrice 的
