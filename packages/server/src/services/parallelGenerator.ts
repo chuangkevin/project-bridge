@@ -1,8 +1,8 @@
-import { GenerationPlan, planGeneration, buildLocalPlan, PageAssignment } from './masterAgent';
+import { GenerationPlan, buildLocalPlan, PageAssignment } from './masterAgent';
 import { generatePageFragment } from './subAgent';
 import { assemblePrototype } from './htmlAssembler';
 import { compileDesignTokens, DesignTokens } from './designTokenCompiler';
-import { getGeminiApiKey, getGeminiApiKeyExcluding, getKeyCount } from './geminiKeys';
+import { assignBatchKeys, getGeminiApiKeyExcluding, markKeyBad } from './geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from './htmlSanitizer';
 import { autoFixDesignViolations } from './designSystemValidator';
 import db from '../db/connection';
@@ -35,59 +35,31 @@ export async function generateParallel(
   onProgress?: ProgressCallback,
 ): Promise<{ html: string; pages: string[]; isMultiPage: boolean }> {
 
-  // Step 1: Compile design tokens
-  onProgress?.({ phase: 'tokens', message: '提取設計規範...' });
-  let designTokens: DesignTokens | null = null;
-  try {
-    designTokens = await compileDesignTokens(projectId);
-  } catch (err) {
-    console.warn('[parallel] Token compilation failed, using defaults:', err);
-  }
-
-  // Step 2: Master agent plans (with local fallback on failure)
+  // Step 1: Build local plan — NO API call, instant
   onProgress?.({ phase: 'planning', message: '規劃頁面架構...' });
-  let plan: GenerationPlan;
-  try {
-    plan = await planGeneration(
-      analysisData,
-      designTokens,
-      architectureBlock,
-      designConvention,
-      userMessage,
-    );
-  } catch (masterErr: any) {
-    console.warn('[parallel] Master agent failed, using local plan:', masterErr.message);
-    onProgress?.({ phase: 'planning', message: '使用本地規劃...' });
-    // Extract page names from analysisData
-    const pageNames: string[] = analysisData?.pages?.map((p: any) => p.name || p) || [];
-    if (pageNames.length < 2) throw new Error('No pages to generate');
-    plan = buildLocalPlan(pageNames, userMessage, designConvention);
-  }
+  const pageNamesFromAnalysis: string[] = analysisData?.pages?.map((p: any) => p.name || p) || [];
+  if (pageNamesFromAnalysis.length < 2) throw new Error('No pages to generate');
+  const plan = buildLocalPlan(pageNamesFromAnalysis, userMessage, designConvention);
+  console.log('[parallel] Local plan ready:', plan.pages.length, 'pages, sharedCss:', plan.sharedCss.length, 'chars');
 
   const totalPages = plan.pages.length;
   const pageNames = plan.pages.map(p => p.name);
 
-  // Step 3: Generate pages in parallel, batched by available keys
-  const keyCount = getKeyCount();
-  const batchSize = Math.max(1, Math.min(keyCount, 4)); // Max 4 parallel
+  // Step 2: Assign unique keys — each sub-agent gets its own
+  const batchKeys = assignBatchKeys(totalPages);
+  const batchSize = Math.min(totalPages, batchKeys.length, 5); // Max 5 parallel
+  console.log('[parallel] Assigned', batchKeys.length, 'keys for', totalPages, 'pages');
   const fragments: { name: string; html: string; success: boolean; error?: string }[] = [];
 
   for (let i = 0; i < plan.pages.length; i += batchSize) {
     const batch = plan.pages.slice(i, i + batchSize);
 
     // Assign a different key to each sub-agent in this batch
-    const usedKeys: string[] = [];
-    const batchPromises = batch.map((page, idx) => {
-      let key: string | null;
-      if (idx === 0 || usedKeys.length === 0) {
-        key = getGeminiApiKey();
-      } else {
-        key = getGeminiApiKeyExcluding(usedKeys[usedKeys.length - 1]!);
-      }
-      if (!key) key = getGeminiApiKey(); // fallback
-      if (key) usedKeys.push(key);
 
+    const batchPromises = batch.map((page, idx) => {
       const pageIdx = i + idx;
+      const key = batchKeys[pageIdx] || batchKeys[0];
+
       onProgress?.({
         phase: 'generating',
         page: page.name,
@@ -96,27 +68,30 @@ export async function generateParallel(
       });
 
       return generatePageFragment(
-        key!,
+        key,
         page,
         plan.cssVariables,
         plan.sharedCss,
         designConvention,
-      ).then(result => {
-        onProgress?.({
-          phase: 'generating',
-          page: page.name,
-          status: result.success ? 'done' : 'error',
-          progress: `${pageIdx + 1}/${totalPages}`,
-          error: result.error,
-        });
-
-        // Retry once on failure with a different key
-        if (!result.success && key) {
-          const retryKey = getGeminiApiKeyExcluding(key);
-          if (retryKey) {
-            return generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention);
-          }
+      ).then(async (result) => {
+        if (result.success) {
+          onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}` });
+          return result;
         }
+        // Retry up to 2 times with different keys
+        markKeyBad(key);
+        for (let retry = 0; retry < 2; retry++) {
+          const retryKey = getGeminiApiKeyExcluding(key);
+          if (!retryKey) break;
+          onProgress?.({ phase: 'generating', page: page.name, status: 'started', progress: `${pageIdx + 1}/${totalPages}`, message: `重試 ${retry + 1}` });
+          const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention);
+          if (retryResult.success) {
+            onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}` });
+            return retryResult;
+          }
+          markKeyBad(retryKey);
+        }
+        onProgress?.({ phase: 'generating', page: page.name, status: 'error', progress: `${pageIdx + 1}/${totalPages}`, error: result.error });
         return result;
       });
     });
@@ -125,7 +100,14 @@ export async function generateParallel(
     fragments.push(...batchResults);
   }
 
-  // Step 4: Assemble
+  // Check failure rate
+  const failedCount = fragments.filter(f => !f.success).length;
+  if (failedCount > totalPages / 2) {
+    throw new Error(`多數頁面生成失敗 (${failedCount}/${totalPages})，請稍後重試`);
+  }
+  console.log('[parallel] Results:', fragments.filter(f => f.success).length, 'ok,', failedCount, 'failed');
+
+  // Step 3: Assemble
   onProgress?.({ phase: 'assembling', message: '組裝原型...' });
   let html = assemblePrototype(plan, fragments);
 

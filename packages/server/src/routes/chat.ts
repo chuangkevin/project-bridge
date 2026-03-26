@@ -1149,7 +1149,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             res.end();
             return;
           } catch (retryErr: any) {
-            console.error('[parallel] Retry also failed, falling back to single-call:', retryErr.message);
+            console.error('[parallel] Retry also failed:', retryErr.message);
+            res.write(`data: ${JSON.stringify({ error: '多頁面生成失敗，請稍後重試: ' + retryErr.message?.slice(0, 100) })}\n\n`);
+            res.end();
+            return;
           }
         }
       }
@@ -1209,76 +1212,19 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       }],
     }));
 
-    // ── Phase 1: Analysis + step-by-step status ──
+    // ── Phase 1: Local analysis (NO API call — instant) ──
     res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
 
-    // Step 1: AI analysis — detailed reasoning
-    let accumulatedThinking = '';
-    try {
-      const analyzeGenai = new GoogleGenerativeAI(apiKey);
-      const analyzeModel = analyzeGenai.getGenerativeModel({
-        model: getGeminiModel(),
-        generationConfig: { maxOutputTokens: 1500, temperature: 0.5 },
-      });
-      const pageContext = isMultiPage && finalPages.length > 0
-        ? `\n偵測到的頁面：${finalPages.join('、')}`
-        : '';
-      const analyzePrompt = `你是資深 UI 設計師。用戶要求：「${userContent.slice(0, 500)}」${pageContext}
-
-請用繁體中文，以第一人稱思考過程的方式分析這個需求（20-30行）。
-
-讓我分析這個請求：
-
-1. 這是什麼類型的應用？目標用戶是誰？
-2. 需要哪些頁面？（列出每個頁面名稱和用途，包含使用者沒明確說但必要的頁面，如首頁、列表頁）
-3. 每個頁面需要哪些核心元件？（列出具體的 UI 元件）
-4. 頁面之間的導航流程？
-5. 資料模型和狀態管理？
-
-關於設計：
-- 需要使用 HousePrice 設計系統（暖米色背景 #FAF4EB、紫色主色 #8E6FA7）
-- 響應式設計策略
-- 用戶操作流程
-
-讓我開始實現：
-1. 首先建立頁面結構...
-2. 設定導航系統...
-3. 實作每個頁面的元件...
-
-最後，在回答的最後一行，請輸出頁面列表，格式為：
-PAGES: 首頁, 商品列表, 商品詳情, 購物車, 結帳
-
-直接回答，用自然的思考語氣，不要加 markdown 標題。使用數字列表和 bullet points。`;
-      const analyzeResult = await analyzeModel.generateContentStream(analyzePrompt);
-      for await (const chunk of analyzeResult.stream) {
-        const text = chunk.text();
-        if (text) {
-          accumulatedThinking += text;
-          res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
-        }
-      }
-    } catch (e: any) {
-      console.warn('[chat] Analysis call failed:', e.message?.slice(0, 80));
-      if (e.message?.includes('429') || e.message?.includes('quota') || e.message?.includes('rate')) {
-        const { markKeyBad } = require('../services/geminiKeys');
-        markKeyBad(apiKey);
-      }
+    // Build local thinking text — saves 1 API call, eliminates 429 risk
+    let accumulatedThinking = `分析需求：「${userContent.slice(0, 100)}」\n`;
+    if (isMultiPage && finalPages.length > 0) {
+      accumulatedThinking += `\n偵測到 ${finalPages.length} 個頁面：${finalPages.join('、')}\n`;
+      accumulatedThinking += `\n頁面規劃：\n${finalPages.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n`;
     }
-
-    // Step 1.5: Extract pages from reasoning if page detection failed
-    if (accumulatedThinking && finalPages.length <= 1) {
-      const pagesMatch = accumulatedThinking.match(/PAGES:\s*(.+)/i);
-      if (pagesMatch) {
-        const extracted = pagesMatch[1].split(/[,、，]/).map(p => p.trim()).filter(p => p && p.length < 20);
-        if (extracted.length >= 2) {
-          console.log('[chat] Extracted pages from reasoning:', extracted);
-          finalPages = extracted;
-          isMultiPage = true;
-        }
-      }
-      // Remove the PAGES: line from thinking display (it's metadata, not for user)
-      accumulatedThinking = accumulatedThinking.replace(/\n?PAGES:\s*.+$/i, '').trim();
-    }
+    if (designConvention) accumulatedThinking += '\n載入 HousePrice 設計規範（暖米色背景、紫色主色）';
+    if (activeSkills.length > 0) accumulatedThinking += `\n注入 ${activeSkills.length} 個專案技能`;
+    accumulatedThinking += '\n\n開始生成...';
+    res.write(`data: ${JSON.stringify({ type: 'thinking', content: accumulatedThinking })}\n\n`);
 
     // Step 1.6: Keyword-based page override — explicit keywords ALWAYS win over AI analysis
     // (AI often gets confused by brand name "HousePrice" and generates real estate instead of what user asked)

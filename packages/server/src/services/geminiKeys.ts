@@ -90,6 +90,17 @@ function getAvailableKeys(): string[] {
   return available.length > 0 ? available : keys;
 }
 
+/** Assign N unique keys for parallel sub-agents — each gets its own key */
+export function assignBatchKeys(count: number): string[] {
+  const available = getAvailableKeys();
+  const assigned: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const key = available.find(k => !assigned.includes(k));
+    assigned.push(key || available[i % available.length]);
+  }
+  return assigned;
+}
+
 /** Get the next API key using round-robin rotation, skipping bad keys */
 export function getGeminiApiKey(): string | null {
   const keys = getAvailableKeys();

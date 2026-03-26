@@ -272,7 +272,46 @@ img { max-width: 100%; display: block; }
 .pagination { display: flex; justify-content: center; gap: 4px; margin-top: 24px; }
 .pagination a, .pagination span { padding: 8px 14px; border-radius: 4px; font-size: 14px; }
 .pagination .active { background: var(--primary); color: white; }
-.pagination a:hover { background: var(--surface); }`;
+.pagination a:hover { background: var(--surface); }
+
+/* Extra utilities */
+.hero-section { padding: 48px 0; text-align: center; }
+.stat-card { padding: 20px; background: var(--surface); border-radius: 4px; text-align: center; }
+.stat-card .stat-value { font-size: 28px; font-weight: 700; color: var(--primary); }
+.stat-card .stat-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.timeline { position: relative; padding-left: 32px; }
+.timeline-item { position: relative; padding-bottom: 24px; border-left: 2px solid var(--divider); padding-left: 20px; }
+.timeline-item::before { content: ''; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--primary); }
+.step-indicator { display: flex; gap: 16px; margin-bottom: 24px; }
+.step-indicator .step { flex: 1; text-align: center; padding: 12px; border-radius: 4px; background: var(--surface); font-size: 13px; }
+.step-indicator .step.active { background: var(--primary); color: white; }
+.accordion { border: 1px solid var(--divider); border-radius: 4px; }
+.accordion-item { border-bottom: 1px solid var(--divider); }
+.accordion-header { padding: 14px 16px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; }
+.accordion-body { padding: 12px 16px; font-size: 14px; }
+.progress-bar { height: 8px; background: var(--divider); border-radius: 4px; overflow: hidden; }
+.progress-bar .fill { height: 100%; background: var(--primary); border-radius: 4px; }
+.rating { color: #F7991C; }
+.layout-sidebar { display: grid; grid-template-columns: 240px 1fr; gap: 24px; }
+@media (max-width: 768px) { .layout-sidebar { grid-template-columns: 1fr; } }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.calendar-grid .day { padding: 8px; border-radius: 4px; cursor: pointer; }
+.calendar-grid .day:hover, .calendar-grid .day.selected { background: var(--primary); color: white; }
+.toggle { width: 44px; height: 24px; border-radius: 12px; background: var(--divider); position: relative; cursor: pointer; }
+.toggle.on { background: var(--primary); }
+.toggle::after { content: ''; width: 20px; height: 20px; border-radius: 50%; background: white; position: absolute; top: 2px; left: 2px; transition: transform 0.2s; }
+.toggle.on::after { transform: translateX(20px); }`;
+
+  // Detect website type from user message for template selection
+  const msg = userMessage.toLowerCase();
+  type SiteType = 'shopping' | 'travel' | 'education' | 'medical' | 'saas' | 'news' | 'generic';
+  let siteType: SiteType = 'generic';
+  if (/購物|商城|電商|shop|store|ecommerce/i.test(msg)) siteType = 'shopping';
+  else if (/旅遊|旅行|travel|tour|訂房|住宿|hotel/i.test(msg)) siteType = 'travel';
+  else if (/教育|課程|course|learn|學習/i.test(msg)) siteType = 'education';
+  else if (/醫療|診所|clinic|hospital|預約|掛號/i.test(msg)) siteType = 'medical';
+  else if (/後台|admin|dashboard|管理|CMS/i.test(msg)) siteType = 'saas';
+  else if (/新聞|news|部落格|blog|文章/i.test(msg)) siteType = 'news';
 
   const pages: PageAssignment[] = pageNames.map((name, i) => {
     const otherPages = pageNames.filter(p => p !== name);
@@ -285,45 +324,57 @@ img { max-width: 100%; display: block; }
 頁面背景：#FAF4EB（暖米色），卡片背景 #F8F7F5，絕不使用純白。
 
 `;
-    // Add page-specific content based on common patterns
-    if (/首頁|home|index/i.test(name)) {
-      spec += `首頁包含：
-- Hero 區塊：小型文字 banner（絕不用大面積純色/漸層），搜尋框
-- 商品分類：使用 .tag 按鈕（全部、電子產品、服飾、家居...），可切換
-- 熱門商品 grid：.grid-4，每個 .card 含商品圖（.card-img）、名稱、價格（NT$ 格式）、分類 badge
-- 促銷區塊：2-3 個橫幅 .card，文字+小 CTA 按鈕
-- 頁尾 .site-footer`;
-    } else if (/商品列表|products?.*list|catalog/i.test(name)) {
-      spec += `商品列表頁：
-- 左側篩選欄（寬 240px）：分類 checkbox、價格範圍 slider、品牌篩選
-- 右側商品 grid：.grid-3
-- 排序下拉選單（最新、價格低到高、熱門）
-- 分頁 .pagination
-- 每張商品卡：圖片、名稱、價格 NT$、評分星星、加入購物車 .btn-primary`;
-    } else if (/商品詳情|product.*detail|item/i.test(name)) {
-      spec += `商品詳情頁：
-- 左：大圖展示（主圖 + 縮圖列表）
-- 右：商品名稱（24px bold）、價格（.card-price）、描述、規格表 .table
-- 數量選擇器（-/+按鈕）、加入購物車 .btn-primary、立即購買 .btn-cta
-- 分頁 tabs：商品描述、規格、評價
-- 相關商品推薦 .grid-4`;
-    } else if (/購物車|cart/i.test(name)) {
-      spec += `購物車頁：
-- 商品清單 .table：圖片、名稱、單價、數量（可調整）、小計、刪除按鈕
-- 右側訂單摘要卡片：商品總計、運費、折扣碼輸入、總金額
-- 底部：繼續購物 .btn-secondary、前往結帳 .btn-cta
-- 空購物車狀態：icon + "購物車是空的" + 去逛逛按鈕`;
-    } else if (/結帳|checkout/i.test(name)) {
-      spec += `結帳頁：
-- 步驟指示器（1.配送資訊 2.付款方式 3.訂單確認）
-- 配送表單：姓名、電話、地址（縣市/區/路）、備註 — 全部用 .form-group
-- 付款方式：信用卡/ATM/超商取貨 radio
-- 訂單摘要（右側）：商品列表簡要、金額
-- 確認下單 .btn-cta`;
+    // Add page-specific content based on site type + page name
+    const templateSpecs: Record<string, Record<string, string>> = {
+      shopping: {
+        '首頁': '- Hero：搜尋框 + 一行標語（絕不用大面積純色背景）\n- 分類 .tag 按鈕（全部、電子產品、服飾、家居、美妝）\n- 熱門商品 .grid-4，每個 .card 含 .card-img、名稱、NT$ 價格、加入購物車按鈕\n- 點「查看」跳轉商品詳情：onclick="showPage(\'商品詳情\')"',
+        '商品列表': '- .layout-sidebar（左 240px 篩選 + 右 .grid-3 商品）\n- 篩選：分類 checkbox、價格範圍、品牌\n- 排序下拉（最新/價格/熱門）\n- 分頁 .pagination\n- 每卡：圖+名+價+星+加入購物車按鈕',
+        '商品詳情': '- 左：大圖+縮圖列表\n- 右：名稱(24px)、價格(.card-price)、描述、規格 .table\n- 數量選擇器(-/+)、加入購物車 .btn-primary、立即購買 .btn-cta onclick="showPage(\'購物車\')"\n- Tabs：描述/規格/評價\n- 推薦商品 .grid-4',
+        '購物車': '- .table：商品圖+名+單價+數量+小計+刪除\n- 右側摘要：小計+運費+折扣碼+總金額\n- 繼續購物 .btn-secondary onclick="showPage(\'商品列表\')"\n- 前往結帳 .btn-cta onclick="showPage(\'結帳\')"\n- 空狀態：icon+"購物車是空的"',
+        '結帳': '- .step-indicator（1.配送 2.付款 3.確認）\n- 配送 .form-group：姓名/電話/地址(縣市/區/路)/備註\n- 付款 radio：信用卡/ATM/超商取貨\n- 右側摘要\n- 確認下單 .btn-cta',
+      },
+      travel: {
+        '首頁': '- Hero：搜尋列（目的地+日期+人數+搜尋 .btn-cta）\n- 熱門目的地 .grid-3：.card 有目的地照片+名稱+「X天Y夜」badge+價格\n- 季節推薦 .grid-4\n- 點卡片 onclick="showPage(\'行程詳情\')"',
+        '行程列表': '- .layout-sidebar（篩選：目的地/天數/價格範圍/主題 tag）\n- .grid-3 行程卡：目的地圖+標題+天數+價格+.rating 星+出發日期 badge\n- 排序+分頁\n- 點卡 onclick="showPage(\'行程詳情\')"',
+        '行程詳情': '- Hero 大圖+行程名稱+價格+報名 .btn-cta onclick="showPage(\'訂購確認\')"\n- .timeline 行程表（Day 1/2/3 各有景點+餐食+住宿）\n- 包含項目列表（交通/住宿/餐食/門票）\n- 注意事項 .accordion\n- 相關行程 .grid-3',
+        '訂購確認': '- .step-indicator（1.選擇 2.旅客資料 3.付款）\n- 旅客 .form-group：姓名/護照號/生日/電話/Email/特殊需求\n- 付款方式 radio\n- 右側行程摘要+總金額\n- 確認 .btn-cta',
+        '我的訂單': '- .table 訂單列表：訂單號/行程名/出發日/金額/狀態 .badge（已確認/進行中/已完成）\n- 點訂單展開詳情\n- 空狀態："尚無訂單，去探索世界吧！" + 按鈕 onclick="showPage(\'首頁\')"',
+      },
+      education: {
+        '首頁': '- Hero：搜尋+標語「開啟學習之旅」\n- 分類 .tag（程式/設計/語言/商業/資料科學）\n- 精選課程 .grid-4：.card 有課程圖+標題+講師+價格+.rating\n- 點卡 onclick="showPage(\'課程詳情\')"',
+        '課程列表': '- .layout-sidebar（分類/價格/程度/語言 篩選）\n- .grid-3 課程卡：縮圖+標題+講師名+NT$價格+.rating 星+學生數 badge\n- 排序+分頁\n- 點卡 onclick="showPage(\'課程詳情\')"',
+        '課程詳情': '- 課程影片預覽區（灰色佔位）+標題+講師\n- 側邊購買卡：價格+加入購物車+立即開始\n- .accordion 課程大綱（第1章/第2章...每章有多個課堂）\n- 講師介紹\n- 學生評價列表',
+        '我的學習': '- 學習中課程 .grid-2：.card 有課程圖+標題+.progress-bar 進度+繼續學習 .btn-primary\n- 已完成課程+證書下載\n- 空狀態 onclick="showPage(\'課程列表\')"',
+        '個人設定': '- .form-group：頭像上傳+姓名+Email+密碼\n- 通知偏好 .toggle\n- 付款方式管理\n- 學習目標設定',
+      },
+      medical: {
+        '首頁': '- 科別 .grid-3：.card icon+科別名（內科/外科/牙科/眼科/兒科/皮膚科）\n- 快速預約 .btn-cta onclick="showPage(\'預約掛號\')"\n- 醫師推薦 .grid-4：照片+姓名+專長\n- 最新公告列表',
+        '醫師列表': '- .layout-sidebar（科別篩選+星期選擇）\n- .grid-3 醫師卡：照片+姓名+科別 .badge+專長+可約時段\n- 點「預約」onclick="showPage(\'預約掛號\')"',
+        '預約掛號': '- .step-indicator（1.選科別 2.選醫師 3.選時段 4.確認）\n- 科別 .tag 選擇\n- 醫師卡片+看診時間 .calendar-grid\n- 時段選擇（上午/下午/晚上各 3-4 個時段 .tag）\n- 確認 .form-group（姓名/身分證/電話/症狀描述）',
+        '看診紀錄': '- .table：日期/醫師/科別/診斷/狀態 .badge（已完成/已取消）\n- 展開看詳情+下載報告 .btn-secondary\n- 空狀態 onclick="showPage(\'預約掛號\')"',
+      },
+      saas: {
+        '儀表板': '- .grid-4 .stat-card（營收/用戶/訂單/轉換率 .stat-value + .stat-label）\n- 折線圖區域（用 div 佔位 300px 高 + 標題）\n- 最近活動 .table（5 筆：時間+操作+用戶+狀態）',
+        '列表管理': '- 頂部：搜尋框+篩選下拉+新增 .btn-primary\n- .table：checkbox+ID+名稱+狀態 .badge+建立日期+操作（編輯/刪除）\n- 批次操作列\n- .pagination\n- 點「編輯」onclick="showPage(\'詳情編輯\')"',
+        '詳情編輯': '- 頂部 breadcrumb（列表 > 編輯 #123）\n- Tabs（基本資料/進階設定/操作記錄）\n- .form-group 欄位：名稱/描述/分類/狀態/標籤\n- 儲存 .btn-primary + 取消 .btn-secondary\n- 操作記錄 .timeline',
+        '設定': '- 一般設定：網站名稱/Logo/語言 .form-group\n- 通知設定：Email/.toggle 開關\n- 安全設定：密碼變更/兩步驟驗證 .toggle\n- API 設定：API Key 顯示+重新生成',
+      },
+      news: {
+        '首頁': '- 頭條新聞 Hero .card（大圖+標題+摘要+時間）\n- 分類 .tag（政治/財經/科技/娛樂/生活/國際）\n- 最新文章 .grid-3：.card 圖+標題+摘要+日期+作者\n- 點卡 onclick="showPage(\'文章內容\')"',
+        '文章列表': '- 分類 .tag 切換\n- 文章列表（圖左+文右）：標題+摘要(2行)+日期+作者+分類 .badge\n- 側邊欄：熱門文章排行+標籤雲\n- .pagination\n- 點文章 onclick="showPage(\'文章內容\')"',
+        '文章內容': '- 文章標題(24px)+作者+日期+分類 .badge\n- 正文內容（3-4 段落+引用區塊+圖片）\n- 標籤 .tag 列表\n- 分享按鈕列\n- 相關文章 .grid-3',
+        '關於我們': '- 媒體介紹段落\n- 團隊成員 .grid-4：照片+姓名+職稱\n- 聯絡 .form-group：姓名/Email/主題/訊息/送出 .btn-primary',
+      },
+    };
+
+    // Get spec from type-specific templates, fallback to generic
+    const typeTemplates = templateSpecs[siteType] || {};
+    const matchedSpec = typeTemplates[name];
+    if (matchedSpec) {
+      spec += matchedSpec;
     } else {
-      spec += `此頁面包含標題區、主要內容區（使用 .grid 佈局）、互動元件。
-使用 .card 組件展示資訊，.btn-primary 和 .btn-secondary 按鈕。
-包含表單元素 .form-group 或資料表格 .table。`;
+      // Try generic patterns
+      spec += getGenericPageSpec(name, otherPages);
     }
 
     return {
@@ -346,4 +397,23 @@ img { max-width: 100%; display: block; }
     cssVariables,
     pages,
   };
+}
+
+function getGenericPageSpec(name: string, otherPages: string[]): string {
+  if (/首頁|home|index/i.test(name)) {
+    return '- Hero：搜尋框+標語（小型 banner，絕不用大面積純色）\n- 精選內容 .grid-4：.card 有圖+標題+描述\n- 分類導覽 .tag 按鈕\n- 頁尾 .site-footer';
+  }
+  if (/列表|list|catalog|搜尋|search/i.test(name)) {
+    return '- .layout-sidebar（左篩選+右 .grid-3 卡片）\n- 排序下拉+分頁 .pagination\n- 每卡：圖+標題+描述+操作按鈕';
+  }
+  if (/詳情|detail|內容|content/i.test(name)) {
+    return '- 頂部大圖/Banner\n- 主要資訊區（標題+描述+屬性 .table）\n- 操作按鈕 .btn-primary + .btn-cta\n- 相關推薦 .grid-3';
+  }
+  if (/設定|settings|profile|個人/i.test(name)) {
+    return '- .form-group 欄位：名稱/Email/密碼\n- .toggle 開關設定\n- 儲存 .btn-primary + 取消 .btn-secondary';
+  }
+  if (/儀表|dashboard|總覽|overview/i.test(name)) {
+    return '- .grid-4 .stat-card（4 個數據指標）\n- 圖表區（div 佔位 300px）\n- 最近活動 .table';
+  }
+  return `- 標題區 + .container 內容\n- .grid 佈局展示主要資訊\n- .card 組件 + .btn-primary 操作按鈕\n- 導航：${otherPages.map(p => `onclick="showPage('${p}')"`).join(', ')}`;
 }

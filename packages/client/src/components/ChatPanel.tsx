@@ -390,6 +390,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setThinkingContent('');
     setActiveSkillNames([]);
     setTokenCount(0);
+    setPageProgress({});
     setError(null);
     setLastGenerationSummary('');
     setLastGeneratedPages([]);
@@ -478,6 +479,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             if (data.type === 'pages' && Array.isArray(data.pages)) {
               setLastGeneratedPages(data.pages);
               setThinkingContent(prev => prev + '\n\n📄 偵測到 ' + data.pages.length + ' 個頁面: ' + data.pages.join(', '));
+              // Initialize all pages as pending for per-page progress
+              const initial: Record<string, 'pending' | 'started' | 'done' | 'error'> = {};
+              data.pages.forEach((p: string) => { initial[p] = 'pending'; });
+              setPageProgress(initial);
             }
             if (data.type === 'phase') {
               if (data.phase === 'analyzing' || data.phase === 'planning' || data.phase === 'generating' || data.phase === 'done') {
@@ -605,7 +610,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           {generationPhase === 'parallel' ? (
             <div style={{ padding: '4px 0' }}>
               <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#8E6FA7' }}>
-                {parallelMessage || `並行生成 ${Object.keys(pageProgress).length} 個頁面...`}
+                {Object.values(pageProgress).filter(s => s === 'done').length > 0
+                  ? `${Object.values(pageProgress).filter(s => s === 'done').length}/${Object.keys(pageProgress).length} 頁面完成`
+                  : parallelMessage || `並行生成 ${Object.keys(pageProgress).length} 個頁面...`}
               </div>
               {Object.keys(pageProgress).length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
