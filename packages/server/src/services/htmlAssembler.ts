@@ -104,6 +104,12 @@ function showPage(name) {
 document.addEventListener('DOMContentLoaded', function() {
   showPage('${firstPage}');
 });
+// Listen for parent postMessage to switch pages
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'show-page' && e.data.name) {
+    showPage(e.data.name);
+  }
+});
 </script>
 </body>
 </html>`;

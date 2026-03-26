@@ -345,30 +345,15 @@ export default function WorkspacePage() {
 
   const handleNavigatePage = useCallback((page: string) => {
     setActivePage(page);
-    // Call showPage() inside the iframe directly
+    // Method 1: postMessage (works even with sandbox)
     try {
       const iframe = document.querySelector('iframe') as HTMLIFrameElement;
       if (iframe?.contentWindow) {
-        const win = iframe.contentWindow as any;
-        // Try exact match first
-        if (win.showPage) {
-          win.showPage(page);
-          // If that didn't work (page name mismatch), try matching by nav text
-          const doc = iframe.contentDocument;
-          if (doc) {
-            const navEls = doc.querySelectorAll('[data-nav]');
-            for (const el of navEls) {
-              const dataNav = el.getAttribute('data-nav') || '';
-              const text = el.textContent?.trim() || '';
-              if (text === page && dataNav !== page) {
-                win.showPage(dataNav);
-                break;
-              }
-            }
-          }
-        }
+        iframe.contentWindow.postMessage({ type: 'show-page', name: page }, '*');
+        // Method 2: direct call as fallback
+        try { (iframe.contentWindow as any).showPage?.(page); } catch {}
       }
-    } catch { /* cross-origin */ }
+    } catch { /* ignore */ }
   }, []);
 
   const injectStyles = useCallback((css: string) => {
