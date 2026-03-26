@@ -7,7 +7,7 @@ import db from '../db/connection';
 import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
-import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
+import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad, assignBatchKeys } from '../services/geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
@@ -1052,7 +1052,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     console.log('[chat] Pre-analysis check: finalPages=', finalPages.length, 'intent=', intent);
     if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
-      const analysisKey = getGeminiApiKey();
+      // Use assignBatchKeys to get a fresh key (avoids recently-used keys)
+      const [analysisKey] = assignBatchKeys(1);
       if (analysisKey) {
         try {
           const analyzeGenai = new GoogleGenerativeAI(analysisKey);
@@ -1093,11 +1094,13 @@ PAGES: 首頁, 頁面2, 頁面3, ...
           markKeyBad(analysisKey);
         }
       }
-      // Last resort: generic fallback
+      // Last resort: smart generic fallback using user's own words
       if (finalPages.length <= 1) {
-        finalPages = ['首頁', '功能頁', '詳情頁', '設定'];
+        // Extract the subject from user message
+        const subject = userContent.replace(/我要|我想要|請|幫我|建立|一個|做|設計|生成|網站|網頁|系統|平台|讓使用者|可以|的|體驗|服務/g, '').trim().slice(0, 10) || '服務';
+        finalPages = ['首頁', `${subject}列表`, `${subject}詳情`, '預約/訂購', '我的帳戶'];
         isMultiPage = true;
-        console.log('[chat] Generic multi-page fallback');
+        console.log('[chat] Smart generic fallback:', finalPages);
       }
     }
 
