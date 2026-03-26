@@ -97,10 +97,14 @@ Generate the complete page fragment now. Return ONLY the <div class="page"> elem
     const model = genai.getGenerativeModel({
       model: getGeminiModel(),
       systemInstruction: systemPrompt,
-      generationConfig: { maxOutputTokens: 16384 },
+      generationConfig: { maxOutputTokens: 8192 },
     });
 
-    const result = await model.generateContent(userPrompt);
+    // 60 second timeout per page
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout generating ${pageName}`)), 60000)
+    );
+    const result = await Promise.race([model.generateContent(userPrompt), timeoutPromise]);
     const response = result.response;
     try { trackUsage(apiKey, getGeminiModel(), `sub-agent-${pageName}`, response.usageMetadata); } catch {}
 

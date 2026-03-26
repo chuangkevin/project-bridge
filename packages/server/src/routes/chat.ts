@@ -1024,11 +1024,17 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
 
+      // Heartbeat during planning (3 agents discussion can take 30-60s)
+      const planHeartbeat = setInterval(() => {
+        try { res.write(`: heartbeat\n\n`); } catch { clearInterval(planHeartbeat); }
+      }, 10000);
+
       try {
         const plan = await planAndReview(userContent, (text) => {
           res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
           aiThinkingText += text;
         });
+        clearInterval(planHeartbeat);
 
         finalPages = plan.pages.map(p => p.name);
         isMultiPage = finalPages.length >= 2;
@@ -1046,6 +1052,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
         console.log('[chat] Plan+Review pages:', finalPages);
       } catch (e: any) {
+        clearInterval(planHeartbeat);
         console.warn('[chat] Plan+Review failed:', e.message?.slice(0, 60));
         // Last resort fallback
         finalPages = ['首頁', '列表瀏覽', '詳情頁面', '操作功能', '個人帳戶'];
@@ -1075,6 +1082,11 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       {
         res.write(`data: ${JSON.stringify({ phase: 'planning', message: '規劃頁面架構...' })}\n\n`);
 
+        // SSE heartbeat — keep connection alive during long parallel generation
+        const heartbeat = setInterval(() => {
+          try { res.write(`: heartbeat\n\n`); } catch { clearInterval(heartbeat); }
+        }, 15000); // every 15 seconds
+
         try {
           const parallelResult = await generateParallel(
             projectId as string,
@@ -1093,6 +1105,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             'INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)'
           ).run(userMsgId, projectId, 'user', userContent, 'user');
 
+          clearInterval(heartbeat);
           // Build summary for parallel result
           const parallelPages = parallelResult.pages;
           const parallelSummary = `我已經為您建立了「${userContent.slice(0, 30)}」的原型，包含 ${parallelPages.length} 個頁面。\n此原型採用 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換。\n\n包含頁面：\n${parallelPages.map((p: string) => `• ${p}`).join('\n')}`;
@@ -1143,6 +1156,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           res.end();
           return;
         } catch (err: any) {
+          clearInterval(heartbeat);
           console.error('[parallel] Pipeline failed, retrying once:', err.message);
           // Retry once with a different key
           try {
