@@ -1044,10 +1044,59 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         console.log('[chat] Keyword pages override:', keywordPages);
         finalPages = keywordPages;
         isMultiPage = true;
-      } else if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
+      }
+    }
+
+    // === AI ANALYSIS — determines pages for non-keyword requests ===
+    // Also streams reasoning to client (Figma-style)
+    if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
+      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
+      const analysisKey = getGeminiApiKey();
+      if (analysisKey) {
+        try {
+          const analyzeGenai = new GoogleGenerativeAI(analysisKey);
+          const analyzeModel = analyzeGenai.getGenerativeModel({
+            model: getGeminiModel(),
+            generationConfig: { maxOutputTokens: 1500, temperature: 0.4 },
+          });
+          const analyzePrompt = `你是 UI 設計師。用戶要求：「${userContent.slice(0, 300)}」
+
+請簡短分析（10行內），然後在最後一行列出需要的頁面：
+PAGES: 首頁, 頁面2, 頁面3, ...
+
+規則：
+- 根據需求推理出合適的頁面（不是固定模板）
+- 頁面名稱用繁體中文
+- 至少 3 個頁面
+- 思考這個應用的核心流程`;
+          const result = await analyzeModel.generateContentStream(analyzePrompt);
+          let thinking = '';
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              thinking += text;
+              res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
+            }
+          }
+          const pagesMatch = thinking.match(/PAGES:\s*(.+)/i);
+          if (pagesMatch) {
+            const extracted = pagesMatch[1].split(/[,、，]/).map((p: string) => p.trim()).filter((p: string) => p && p.length < 20);
+            if (extracted.length >= 2) {
+              console.log('[chat] AI analysis pages:', extracted);
+              finalPages = extracted;
+              isMultiPage = true;
+            }
+          }
+        } catch (e: any) {
+          console.warn('[chat] AI analysis failed:', e.message?.slice(0, 60));
+          markKeyBad(analysisKey);
+        }
+      }
+      // Last resort: generic fallback
+      if (finalPages.length <= 1) {
         finalPages = ['首頁', '功能頁', '詳情頁', '設定'];
         isMultiPage = true;
-        console.log('[chat] Generic multi-page fallback:', finalPages);
+        console.log('[chat] Generic multi-page fallback');
       }
     }
 
@@ -1216,67 +1265,8 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       }],
     }));
 
-    // ── Phase 1: AI Analysis — stream reasoning to client ──
-    res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
-
+    // accumulatedThinking was already set by AI analysis above (before parallel check)
     let accumulatedThinking = '';
-    const analysisKey = getGeminiApiKey();
-    if (analysisKey) {
-      try {
-        const analyzeGenai = new GoogleGenerativeAI(analysisKey);
-        const analyzeModel = analyzeGenai.getGenerativeModel({
-          model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: 2000, temperature: 0.4 },
-        });
-        const pageContext = isMultiPage && finalPages.length > 0
-          ? `\n已規劃頁面：${finalPages.join('、')}`
-          : '';
-        const analyzePrompt = `你是資深 UI 設計師，專為「HousePrice」品牌設計原型。
-用戶要求：「${userContent.slice(0, 500)}」${pageContext}
-
-請用繁體中文，以第一人稱思考：
-
-1. 這是什麼類型的應用？目標用戶是誰？
-2. 需要哪些頁面？（列出每個頁面名稱和用途，包含使用者沒說但必要的）
-3. 每個頁面需要哪些核心 UI 元件？
-4. 頁面之間怎麼導航？（哪個按鈕跳到哪頁）
-5. 注意事項（例如：圖書館不該有價格、醫院需要預約流程）
-
-設計原則：HousePrice 設計系統（暖米色 #FAF4EB 背景、紫色 #8E6FA7 主色、無大面積色塊）
-
-最後一行，輸出頁面列表：
-PAGES: 頁面1, 頁面2, 頁面3, ...
-
-直接回答，用自然思考語氣。`;
-        const analyzeResult = await analyzeModel.generateContentStream(analyzePrompt);
-        for await (const chunk of analyzeResult.stream) {
-          const text = chunk.text();
-          if (text) {
-            accumulatedThinking += text;
-            res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
-          }
-        }
-        // Extract PAGES from reasoning
-        const pagesMatch = accumulatedThinking.match(/PAGES:\s*(.+)/i);
-        if (pagesMatch) {
-          const extracted = pagesMatch[1].split(/[,、，]/).map((p: string) => p.trim()).filter((p: string) => p && p.length < 20);
-          if (extracted.length >= 2) {
-            console.log('[chat] AI analysis pages:', extracted);
-            finalPages = extracted;
-            isMultiPage = true;
-          }
-          accumulatedThinking = accumulatedThinking.replace(/\n?PAGES:\s*.+$/i, '').trim();
-        }
-      } catch (e: any) {
-        console.warn('[chat] Analysis call failed, using keyword fallback:', e.message?.slice(0, 60));
-        markKeyBad(analysisKey);
-      }
-    }
-
-    // Fallback: if AI analysis didn't produce pages, keep keyword-detected pages
-    if (finalPages.length <= 1) {
-      console.log('[chat] Analysis produced no pages, keyword fallback already applied');
-    }
 
     // Step 2: Emit processing steps
     res.write(`data: ${JSON.stringify({ type: 'thinking', content: '\n\n' })}\n\n`);
