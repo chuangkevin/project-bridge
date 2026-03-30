@@ -37,7 +37,7 @@ export async function planAndReview(
   let keyIdx = 0;
   const getKey = () => keys[keyIdx++ % keys.length];
 
-  async function callAIStream(prompt: string, agentName: string, maxTokens: number = 4000): Promise<string> {
+  async function callAIStream(prompt: string, agentName: string, maxTokens: number = 8000): Promise<string> {
     for (let attempt = 0; attempt < 3; attempt++) {
       const key = getKey();
       try {
@@ -108,7 +108,7 @@ ${skillsContext}
 4. 2-3 個潛在的坑（每個 1 行）
 5. 建議頁面名稱（2-6 字，一行列完）
 
-語氣像開會：精準、不囉唆。`, pm.name, 3000);
+語氣像開會：精準、不囉唆。`, pm.name, 8000);
 
     fullDiscussion += `${pm.name}（${pm.role}）：\n${pmText}\n\n`;
   } catch {
@@ -135,7 +135,7 @@ ${pmText.slice(0, 2000)}
 
 最後一行：PAGES: 頁面1, 頁面2, 頁面3, ...
 
-精簡！不要展開每個元件的詳細說明。`, ux.name, 3000);
+精簡！不要展開每個元件的詳細說明。`, ux.name, 8000);
 
     fullDiscussion += `${ux.name}（${ux.role}）：\n${uxText}\n\n`;
   } catch {
@@ -160,7 +160,7 @@ ${ux.name} 說：${uxText.slice(0, 800)}
 2. 哪個頁面描述太模糊？（指名 1-2 個）
 3. 導航死角？（1-2 個）
 
-語氣：code review 風格，直接指出問題。`, qa.name, 2000);
+語氣：code review 風格，直接指出問題。`, qa.name, 6000);
 
     fullDiscussion += `${qa.name}（${qa.role}）：\n${qaText}\n\n`;
   } catch {
@@ -186,7 +186,7 @@ ${qa.name}（QA 審查員）：${qaText.slice(0, 1000)}
 3. 最終頁面清單（「• 頁面名：3 個核心功能」格式，每頁 1 行）
 4. 「開始製作，分配任務。」
 
-語氣果斷。`, tech.name, 2000);
+語氣果斷。`, tech.name, 6000);
 
     fullDiscussion += `${tech.name}（${tech.role}）：\n${techText}\n\n`;
   } catch {
