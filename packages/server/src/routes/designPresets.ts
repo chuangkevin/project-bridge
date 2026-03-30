@@ -75,7 +75,7 @@ router.get('/', (_req: Request, res: Response) => {
 });
 
 // ─── POST /api/design-presets ──────────────────────────────
-router.post('/', requireAdmin, (req: Request, res: Response) => {
+router.post('/', (req: Request, res: Response) => {
   try {
     const { name, description, tokens, reference_urls, reference_analysis, design_convention, is_default } = req.body;
     const id = uuidv4();
@@ -99,7 +99,7 @@ router.post('/', requireAdmin, (req: Request, res: Response) => {
 });
 
 // ─── PUT /api/design-presets/:id ───────────────────────────
-router.put('/:id', requireAdmin, (req: Request, res: Response) => {
+router.put('/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const existing = db.prepare('SELECT * FROM design_presets WHERE id = ?').get(id);
@@ -131,7 +131,7 @@ router.put('/:id', requireAdmin, (req: Request, res: Response) => {
 });
 
 // ─── DELETE /api/design-presets/:id ────────────────────────
-router.delete('/:id', requireAdmin, (req: Request, res: Response) => {
+router.delete('/:id', (req: Request, res: Response) => {
   try {
     const preset = db.prepare('SELECT * FROM design_presets WHERE id = ?').get(req.params.id) as any;
     if (!preset) return res.status(404).json({ error: 'Not found' });
@@ -147,7 +147,7 @@ router.delete('/:id', requireAdmin, (req: Request, res: Response) => {
 });
 
 // ─── POST /api/design-presets/:id/copy ─────────────────────
-router.post('/:id/copy', requireAdmin, (req: Request, res: Response) => {
+router.post('/:id/copy', (req: Request, res: Response) => {
   try {
     const original = db.prepare('SELECT * FROM design_presets WHERE id = ?').get(req.params.id) as any;
     if (!original) return res.status(404).json({ error: 'Not found' });
