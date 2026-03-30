@@ -60,6 +60,14 @@ export function assemblePrototype(
     }
     // Remove style tags from fragment
     html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+    // Fix unbalanced divs — add missing closing tags
+    const openCount = (html.match(/<div[\s>]/gi) || []).length;
+    const closeCount = (html.match(/<\/div>/gi) || []).length;
+    if (openCount > closeCount) {
+      const missing = openCount - closeCount;
+      html += '</div>'.repeat(missing);
+      console.log(`[assembler] Fixed ${missing} unclosed divs in page "${f.name}"`);
+    }
     cleanedFragments.push(html);
   }
 
