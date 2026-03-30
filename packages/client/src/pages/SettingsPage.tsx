@@ -131,6 +131,13 @@ export default function SettingsPage() {
   const [importPreview, setImportPreview] = useState<{ name: string; description: string; content: string; depends?: string[]; isNew: boolean }[] | null>(null);
   const [importLoading, setImportLoading] = useState(false);
 
+  // Design presets (Task 4)
+  const [presets, setPresets] = useState<any[]>([]);
+  const [editingPreset, setEditingPreset] = useState<any | null>(null);
+  const [presetUrls, setPresetUrls] = useState<string[]>(['']);
+  const [analyzingUrls, setAnalyzingUrls] = useState(false);
+  const [urlAnalysisResult, setUrlAnalysisResult] = useState<any>(null);
+
   // Reference tags (Task 4)
   const [skillRefs, setSkillRefs] = useState<Record<string, { outgoing: string[]; incoming: string[] }>>({});
 
@@ -562,6 +569,11 @@ export default function SettingsPage() {
   useEffect(() => {
     if (skills.length > 0) fetchSkillRefs();
   }, [skills, fetchSkillRefs]);
+
+  // Fetch design presets (Task 4)
+  useEffect(() => {
+    fetch('/api/design-presets').then(r => r.json()).then(setPresets).catch(() => {});
+  }, []);
 
   const handleSaveSkill = async () => {
     if (!skillForm.name.trim() || !skillForm.content.trim()) return;
@@ -1557,6 +1569,183 @@ export default function SettingsPage() {
           )}
         </section>
 
+        {/* ── Section: Design Preset Library (Task 4) ────── */}
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>設計風格庫</h2>
+          <p style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>管理設計風格預設，可分析網站 URL 自動提取設計規範</p>
+
+          <button style={{ ...styles.addBtn, marginBottom: 16 }} onClick={() => setEditingPreset({ name: '', description: '', tokens: {}, reference_urls: [], is_new: true })}>
+            ＋ 新增風格
+          </button>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 16 }}>
+            {presets.map(p => {
+              const tokens = typeof p.tokens === 'string' ? JSON.parse(p.tokens || '{}') : (p.tokens || {});
+              return (
+                <div key={p.id} style={{ background: 'var(--bg-secondary, #f8f7f5)', borderRadius: 8, padding: 16, border: '1px solid var(--border-primary, #e2e8f0)' }}>
+                  {/* Color dots */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    {[tokens.primaryColor || '#8E6FA7', tokens.secondaryColor || '#64748b', tokens.backgroundColor || '#FAF4EB'].map((c: string, i: number) => (
+                      <div key={i} style={{ width: 20, height: 20, borderRadius: '50%', background: c, border: '1px solid #ddd' }} />
+                    ))}
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name} {p.is_default ? '⭐' : ''}</div>
+                  <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{p.description || '無描述'}</div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button style={styles.smallBtn} onClick={() => setEditingPreset({ ...p, tokens, is_new: false })}>編輯</button>
+                    <button style={styles.smallBtn} onClick={async () => {
+                      const res = await fetch(`/api/design-presets/${p.id}/copy`, { method: 'POST', headers: authHeaders() });
+                      if (res.ok) { const all = await fetch('/api/design-presets').then(r => r.json()); setPresets(all); }
+                    }}>複製</button>
+                    {!p.is_default && (
+                      <button style={{ ...styles.smallBtn, color: '#ef4444' }} onClick={async () => {
+                        if (!confirm('確定刪除此風格？')) return;
+                        await fetch(`/api/design-presets/${p.id}`, { method: 'DELETE', headers: authHeaders() });
+                        setPresets(prev => prev.filter(x => x.id !== p.id));
+                      }}>刪除</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Preset Editor Modal (Task 4) */}
+        {editingPreset && (
+          <div style={styles.modalOverlay} onClick={() => setEditingPreset(null)}>
+            <div style={{ ...styles.modalContent, maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ marginBottom: 16 }}>{editingPreset.is_new ? '新增設計風格' : '編輯設計風格'}</h3>
+
+              {/* Name */}
+              <div style={styles.formGroup}>
+                <label style={styles.label}>名稱</label>
+                <input style={styles.input} value={editingPreset.name} onChange={e => setEditingPreset({...editingPreset, name: e.target.value})} />
+              </div>
+
+              {/* Description */}
+              <div style={styles.formGroup}>
+                <label style={styles.label}>描述</label>
+                <input style={styles.input} value={editingPreset.description || ''} onChange={e => setEditingPreset({...editingPreset, description: e.target.value})} />
+              </div>
+
+              {/* Color pickers */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+                {[
+                  { key: 'primaryColor', label: '主色', default: '#8E6FA7' },
+                  { key: 'secondaryColor', label: '副色', default: '#64748b' },
+                  { key: 'backgroundColor', label: '背景色', default: '#FAF4EB' },
+                ].map(c => (
+                  <div key={c.key}>
+                    <label style={{ fontSize: 12, color: '#666' }}>{c.label}</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <input type="color" value={editingPreset.tokens?.[c.key] || c.default}
+                        onChange={e => setEditingPreset({...editingPreset, tokens: {...(editingPreset.tokens || {}), [c.key]: e.target.value}})} />
+                      <span style={{ fontSize: 12, fontFamily: 'monospace' }}>{editingPreset.tokens?.[c.key] || c.default}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Font, Radius, Shadow */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: '#666' }}>字型</label>
+                  <select style={styles.input} value={editingPreset.tokens?.fontFamily || 'system'}
+                    onChange={e => setEditingPreset({...editingPreset, tokens: {...(editingPreset.tokens || {}), fontFamily: e.target.value}})}>
+                    <option value="system">系統字型</option>
+                    <option value="serif">襯線字型</option>
+                    <option value="monospace">等寬字型</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: '#666' }}>圓角: {editingPreset.tokens?.borderRadius || 4}px</label>
+                  <input type="range" min="0" max="24" value={editingPreset.tokens?.borderRadius || 4}
+                    onChange={e => setEditingPreset({...editingPreset, tokens: {...(editingPreset.tokens || {}), borderRadius: parseInt(e.target.value)}})}
+                    style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: '#666' }}>陰影</label>
+                  <select style={styles.input} value={editingPreset.tokens?.shadowStyle || '輕柔'}
+                    onChange={e => setEditingPreset({...editingPreset, tokens: {...(editingPreset.tokens || {}), shadowStyle: e.target.value}})}>
+                    <option value="無">無</option>
+                    <option value="輕柔">輕柔</option>
+                    <option value="中等">中等</option>
+                    <option value="強烈">強烈</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* URL Analysis */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, display: 'block' }}>參考網站分析</label>
+                {presetUrls.map((url, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                    <input style={{ ...styles.input, flex: 1 }} placeholder="https://example.com" value={url}
+                      onChange={e => { const next = [...presetUrls]; next[i] = e.target.value; setPresetUrls(next); }} />
+                    {i === presetUrls.length - 1 && presetUrls.length < 3 && (
+                      <button style={styles.smallBtn} onClick={() => setPresetUrls([...presetUrls, ''])}>＋</button>
+                    )}
+                  </div>
+                ))}
+                <button style={{ ...styles.addBtn, marginTop: 8 }} disabled={analyzingUrls || presetUrls.every(u => !u.trim())}
+                  onClick={async () => {
+                    setAnalyzingUrls(true);
+                    try {
+                      const res = await fetch('/api/design-presets/analyze-url', {
+                        method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ urls: presetUrls.filter(u => u.trim()) }),
+                      });
+                      const data = await res.json();
+                      if (data.tokens) {
+                        setEditingPreset((prev: any) => ({
+                          ...prev,
+                          tokens: { ...(prev.tokens || {}), ...data.tokens },
+                          reference_analysis: data.analysis || '',
+                          design_convention: data.convention || '',
+                          reference_urls: presetUrls.filter(u => u.trim()),
+                        }));
+                        setUrlAnalysisResult(data);
+                      }
+                    } catch { /* ignore */ } finally { setAnalyzingUrls(false); }
+                  }}>
+                  {analyzingUrls ? '分析中...' : '🔍 AI 分析風格'}
+                </button>
+                {urlAnalysisResult?.analysis && (
+                  <div style={{ marginTop: 8, padding: 12, background: '#f0f9ff', borderRadius: 6, fontSize: 12, lineHeight: 1.6 }}>
+                    {urlAnalysisResult.analysis}
+                  </div>
+                )}
+              </div>
+
+              {/* Save / Cancel */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button style={styles.cancelBtn} onClick={() => { setEditingPreset(null); setUrlAnalysisResult(null); setPresetUrls(['']); }}>取消</button>
+                <button style={styles.saveBtn} onClick={async () => {
+                  const body = {
+                    name: editingPreset.name,
+                    description: editingPreset.description,
+                    tokens: editingPreset.tokens,
+                    reference_urls: editingPreset.reference_urls || presetUrls.filter(u => u.trim()),
+                    reference_analysis: editingPreset.reference_analysis || '',
+                    design_convention: editingPreset.design_convention || '',
+                  };
+                  const url = editingPreset.is_new ? '/api/design-presets' : `/api/design-presets/${editingPreset.id}`;
+                  const method = editingPreset.is_new ? 'POST' : 'PUT';
+                  const res = await fetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                  if (res.ok) {
+                    const all = await fetch('/api/design-presets').then(r => r.json());
+                    setPresets(all);
+                    setEditingPreset(null);
+                    setUrlAnalysisResult(null);
+                    setPresetUrls(['']);
+                  }
+                }}>儲存</button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
@@ -1616,4 +1805,12 @@ const styles: Record<string, React.CSSProperties> = {
   statusBadge: { padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 },
   statusActive: { backgroundColor: '#f0fdf4', color: '#15803d' },
   statusDisabled: { backgroundColor: '#fef2f2', color: '#b91c1c' },
+  // Design preset styles (Task 4)
+  smallBtn: { padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, background: 'white', cursor: 'pointer' },
+  addBtn: { padding: '8px 16px', border: '1px solid var(--border-primary)', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },
+  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modalContent: { background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 24, width: '90vw', maxHeight: '85vh', overflowY: 'auto' as const },
+  formGroup: { marginBottom: 12 },
+  cancelBtn: { padding: '8px 16px', border: '1px solid var(--border-primary)', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '14px', cursor: 'pointer' },
+  saveBtn: { padding: '8px 16px', border: 'none', borderRadius: '8px', backgroundColor: '#8E6FA7', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
 };

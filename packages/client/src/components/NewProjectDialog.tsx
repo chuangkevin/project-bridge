@@ -15,8 +15,16 @@ export default function NewProjectDialog({ onClose, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Design presets (Task 5)
+  const [presets, setPresets] = useState<any[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState<string>('');
+
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/design-presets').then(r => r.json()).then(setPresets).catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,7 +36,7 @@ export default function NewProjectDialog({ onClose, onCreated }: Props) {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ name: name.trim(), mode }),
+        body: JSON.stringify({ name: name.trim(), mode, design_preset_id: selectedPreset || undefined }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -83,6 +91,19 @@ export default function NewProjectDialog({ onClose, onCreated }: Props) {
               <div style={styles.modeDesc}>跳過架構，直接開始聊天生成</div>
             </button>
           </div>
+
+          {presets.length > 0 && (
+            <div style={{ marginBottom: 16, marginTop: 12 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>設計風格</label>
+              <select value={selectedPreset} onChange={e => setSelectedPreset(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: 14, backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' as const }}>
+                <option value="">使用預設風格</option>
+                {presets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} {p.is_default ? '⭐' : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <label style={{ ...styles.label, marginTop: '16px' }}>專案名稱</label>
           <input
