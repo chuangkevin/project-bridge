@@ -38,7 +38,7 @@ export default function GlobalDesignPage() {
   const [summarizing, setSummarizing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [designConvention, setDesignConvention] = useState('');
-  const [activeTab, setActiveTab] = useState<'design' | 'convention'>('design');
+  const [activeTab, setActiveTab] = useState<'design' | 'convention' | 'presets'>('design');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevAllDoneRef = useRef(false);
 
@@ -178,6 +178,9 @@ export default function GlobalDesignPage() {
           <button type="button" onClick={() => setActiveTab('convention')} style={{ ...styles.tabBtn, borderBottom: activeTab === 'convention' ? '2px solid #8E6FA7' : '2px solid transparent', fontWeight: activeTab === 'convention' ? 600 : 400, color: activeTab === 'convention' ? '#8E6FA7' : '#666' }}>
             設計準則
           </button>
+          <button type="button" onClick={() => setActiveTab('presets')} style={{ ...styles.tabBtn, borderBottom: activeTab === 'presets' ? '2px solid #8E6FA7' : '2px solid transparent', fontWeight: activeTab === 'presets' ? 600 : 400, color: activeTab === 'presets' ? '#8E6FA7' : '#666' }}>
+            風格預設
+          </button>
         </div>
 
         {activeTab === 'convention' && (
@@ -197,6 +200,17 @@ export default function GlobalDesignPage() {
                 重置為預設檔案
               </button>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'presets' && (
+          <div style={{ padding: '16px 0' }}>
+            <p style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
+              管理多組設計風格預設。建立專案時可選擇不同風格，也可以貼網站 URL 讓 AI 分析風格。
+            </p>
+            <button onClick={() => navigate('/settings')} style={{ padding: '10px 20px', background: '#8E6FA7', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+              前往設定頁管理風格預設 →
+            </button>
           </div>
         )}
 
