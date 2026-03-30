@@ -73,13 +73,13 @@ ${visibleHtml.slice(0, 3000)}`);
   }
 
   // Send to Gemini for synthesis
-  const keys = assignBatchKeys(3);
+  const keys = assignBatchKeys(5);
   for (const key of keys) {
     try {
       const genai = new GoogleGenerativeAI(key);
       const model = genai.getGenerativeModel({
         model: getGeminiModel(),
-        generationConfig: { maxOutputTokens: 4000, temperature: 0.2, responseMimeType: 'application/json' },
+        generationConfig: { maxOutputTokens: 8192, temperature: 0.2, responseMimeType: 'application/json' },
       });
       const prompt = `你是 UI/UX 設計分析師。分析以下網站的設計風格，提取設計系統。
 
