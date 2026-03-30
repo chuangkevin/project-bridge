@@ -41,6 +41,26 @@ export async function generateParallel(
   const pageNamesFromAnalysis: string[] = analysisData?.pages?.map((p: any) => p.name || p) || [];
   if (pageNamesFromAnalysis.length < 2) throw new Error('No pages to generate');
   const plan = buildLocalPlan(pageNamesFromAnalysis, userMessage, designConvention);
+
+  // Override CSS :root with project design tokens if designConvention has PROJECT DESIGN
+  const projColorMatch = designConvention.match(/Primary Color:\s*(#[0-9a-fA-F]{6})/i);
+  const projSecondaryMatch = designConvention.match(/Secondary Color:\s*(#[0-9a-fA-F]{6})/i);
+  const projRadiusMatch = designConvention.match(/Border Radius:\s*(\d+)/i);
+  if (projColorMatch) {
+    const primary = projColorMatch[1];
+    const secondary = projSecondaryMatch?.[1] || '#64748b';
+    const radius = projRadiusMatch?.[1] || '4';
+    // Replace hardcoded HousePrice colors in cssVariables and sharedCss
+    plan.cssVariables = plan.cssVariables
+      .replace(/--primary:\s*#8E6FA7/g, `--primary: ${primary}`)
+      .replace(/--primary-hover:\s*#8557A8/g, `--primary-hover: ${primary}dd`)
+      .replace(/--header-bg:\s*#8E6FA7/g, `--header-bg: ${primary}`);
+    plan.sharedCss = plan.sharedCss
+      .replace(/#8E6FA7/g, primary)
+      .replace(/#8557A8/g, `${primary}dd`);
+    console.log('[parallel] Overriding design tokens: primary=' + primary + ' secondary=' + secondary + ' radius=' + radius);
+  }
+
   console.log('[parallel] Local plan ready:', plan.pages.length, 'pages, sharedCss:', plan.sharedCss.length, 'chars');
 
   const totalPages = plan.pages.length;

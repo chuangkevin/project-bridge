@@ -1077,7 +1077,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Read project design profile BEFORE parallel path
     const projDesign = db.prepare('SELECT * FROM design_profiles WHERE project_id = ?').get(projectId) as any;
     const projInheritGlobal = projDesign ? projDesign.inherit_global !== 0 : true;
-    if (projDesign && !projInheritGlobal) {
+    if (projDesign && (!projInheritGlobal || projDesign.tokens)) {
       // Override designConvention with project-specific design
       let projTokens: any = {};
       try { projTokens = JSON.parse(projDesign.tokens || '{}'); } catch {}
