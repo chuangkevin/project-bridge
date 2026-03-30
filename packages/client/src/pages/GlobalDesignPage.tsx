@@ -38,7 +38,7 @@ export default function GlobalDesignPage() {
   const [summarizing, setSummarizing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [designConvention, setDesignConvention] = useState('');
-  const [activeTab, setActiveTab] = useState<'design' | 'convention' | 'presets'>('design');
+  // tabs removed — presets only now
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevAllDoneRef = useRef(false);
 
@@ -144,13 +144,7 @@ export default function GlobalDesignPage() {
     }
   }, [description, references, tokens, designConvention]);
 
-  const handleResetConvention = async () => {
-    const res = await fetch('/api/global-design/reset-convention', { method: 'POST' });
-    if (res.ok) {
-      const data = await res.json();
-      setDesignConvention(data.content);
-    }
-  };
+  // handleResetConvention removed — convention now managed per-preset
 
   const updateToken = <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => {
     setTokens(prev => ({ ...prev, [key]: value }));
@@ -165,50 +159,16 @@ export default function GlobalDesignPage() {
             <path d="M10 3L5 8l5 5" />
           </svg>
         </button>
-        <h1 style={styles.title}>🌐 全域設計</h1>
-        <p style={styles.subtitle}>設定品牌基礎風格，所有繼承的專案生成時自動套用</p>
+        <h1 style={styles.title}>🌐 設計風格管理</h1>
+        <p style={styles.subtitle}>管理設計風格預設，建立專案時選擇風格。可貼 URL 讓 AI 分析風格。</p>
       </div>
 
       <div style={styles.scrollArea}>
-        {/* Tab bar */}
-        <div style={styles.tabBar}>
-          <button type="button" onClick={() => setActiveTab('design')} style={{ ...styles.tabBtn, borderBottom: activeTab === 'design' ? '2px solid #8E6FA7' : '2px solid transparent', fontWeight: activeTab === 'design' ? 600 : 400, color: activeTab === 'design' ? '#8E6FA7' : '#666' }}>
-            全域設計
-          </button>
-          <button type="button" onClick={() => setActiveTab('convention')} style={{ ...styles.tabBtn, borderBottom: activeTab === 'convention' ? '2px solid #8E6FA7' : '2px solid transparent', fontWeight: activeTab === 'convention' ? 600 : 400, color: activeTab === 'convention' ? '#8E6FA7' : '#666' }}>
-            設計準則
-          </button>
-          <button type="button" onClick={() => setActiveTab('presets')} style={{ ...styles.tabBtn, borderBottom: activeTab === 'presets' ? '2px solid #8E6FA7' : '2px solid transparent', fontWeight: activeTab === 'presets' ? 600 : 400, color: activeTab === 'presets' ? '#8E6FA7' : '#666' }}>
-            風格預設
-          </button>
-        </div>
+        <PresetLibrary />
 
-        {activeTab === 'convention' && (
-          <div>
-            <p style={styles.conventionHint}>
-              此內容會自動注入到每次 AI 生成的 system prompt 中。支援 Markdown 格式。
-            </p>
-            <textarea
-              value={designConvention}
-              onChange={e => setDesignConvention(e.target.value)}
-              style={styles.conventionTextarea}
-              placeholder="輸入設計準則..."
-              title="設計準則"
-            />
-            <div style={styles.conventionActions}>
-              <button type="button" onClick={handleResetConvention} style={styles.resetBtn}>
-                重置為預設檔案
-              </button>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'presets' && (
-          <PresetLibrary />
-        )}
-
-        {activeTab === 'design' && (
-        <>{/* Design Direction */}
+        {/* Old design tab content removed — now managed per-preset */}
+        {false && (
+        <>{/* Keep JSX balanced */}
         <div style={styles.section}>
           <div style={styles.sectionLabelRow}>
             <label style={styles.sectionLabel}>設計方向</label>
@@ -452,6 +412,12 @@ function PresetLibrary() {
                 {analysisResult.analysis}
               </div>
             )}
+
+            {/* Design Convention */}
+            <label style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>設計準則（AI 生成時注入的 system prompt）</label>
+            <textarea value={editing.design_convention || ''} onChange={e => setEditing({ ...editing, design_convention: e.target.value })}
+              placeholder="貼上 URL 並按「AI 分析風格」會自動填入，或手動輸入設計規範..."
+              style={{ width: '100%', minHeight: 120, padding: '8px 10px', border: '1px solid var(--border-primary, #ddd)', borderRadius: 6, fontSize: 12, lineHeight: 1.6, resize: 'vertical', background: 'var(--bg-input, white)', color: 'var(--text-primary)', boxSizing: 'border-box', fontFamily: 'inherit' }} />
 
             {/* Actions */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
