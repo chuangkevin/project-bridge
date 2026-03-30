@@ -340,6 +340,16 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       try { designConvention = fs.readFileSync(colorConventionPath, 'utf-8'); } catch {}
     }
 
+    // Check if project has a design preset (overrides global convention)
+    const projectForPreset = db.prepare('SELECT design_preset_id FROM projects WHERE id = ?').get(projectId) as any;
+    if (projectForPreset?.design_preset_id) {
+      const preset = db.prepare('SELECT * FROM design_presets WHERE id = ?').get(projectForPreset.design_preset_id) as any;
+      if (preset?.design_convention) {
+        designConvention = preset.design_convention;
+        console.log('[chat] Using design preset:', preset.name);
+      }
+    }
+
     // ─── MICRO-ADJUST PATH ─────────────────────────
     if (intent === 'micro-adjust' && currentPrototype) {
 
@@ -1090,6 +1100,27 @@ Border Radius: ${projTokens.borderRadius || 4}px
 Shadow: ${projTokens.shadowStyle || '輕柔'}
 IMPORTANT: Follow the project design direction, NOT the HousePrice default.`;
       console.log('[chat] Using project design:', projDesign.description);
+    }
+
+    // Also check design preset tokens (supplements or overrides projDesign)
+    if (projectForPreset?.design_preset_id) {
+      const presetForTokens = db.prepare('SELECT * FROM design_presets WHERE id = ?').get(projectForPreset.design_preset_id) as any;
+      if (presetForTokens?.tokens) {
+        let presetTokens: any = {};
+        try { presetTokens = JSON.parse(presetForTokens.tokens); } catch {}
+        if (presetTokens.primaryColor) {
+          designConvention = `PROJECT DESIGN (override global):
+Design Direction: ${presetForTokens.description || presetForTokens.name || ''}
+Primary Color: ${presetTokens.primaryColor || '#8E6FA7'}
+Secondary Color: ${presetTokens.secondaryColor || '#64748b'}
+Background Color: ${presetTokens.backgroundColor || '#ffffff'}
+Font: ${presetTokens.fontFamily || 'system'}
+Border Radius: ${presetTokens.borderRadius || 4}px
+Shadow: ${presetTokens.shadowStyle || '輕柔'}
+IMPORTANT: Follow the project design direction, NOT the HousePrice default.`;
+          console.log('[chat] Using design preset tokens:', presetForTokens.name);
+        }
+      }
     }
 
     // === PARALLEL GENERATION PATH ===

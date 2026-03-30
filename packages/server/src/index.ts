@@ -31,6 +31,7 @@ import skillsRouter from './routes/skills';
 import preferencesRouter from './routes/preferences';
 import promptTemplatesRouter from './routes/promptTemplates';
 import queueRouter from './routes/queue';
+import designPresetsRouter from './routes/designPresets';
 import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
 import { HOUSEPRICE_DESIGN_SYSTEM_V2 } from './services/designSystemV2';
@@ -71,6 +72,7 @@ app.use('/api/projects', pageMappingsRouter);
 app.use('/api/skills', skillsRouter);
 app.use('/api/prompt-templates', promptTemplatesRouter);
 app.use('/api/queue', queueRouter);
+app.use('/api/design-presets', designPresetsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
