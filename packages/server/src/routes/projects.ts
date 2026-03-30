@@ -25,10 +25,11 @@ router.post('/', (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     const ownerId = (req as any).user?.id || null;
+    const designPresetId = req.body.design_preset_id || null;
     const stmt = db.prepare(
-      'INSERT INTO projects (id, name, share_token, owner_id, mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO projects (id, name, share_token, owner_id, mode, design_preset_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    stmt.run(id, name.trim(), share_token, ownerId, projectMode, now, now);
+    stmt.run(id, name.trim(), share_token, ownerId, projectMode, designPresetId, now, now);
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     return res.status(201).json(project);
