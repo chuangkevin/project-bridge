@@ -49,7 +49,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
 
 // ─── POST /api/design-presets/analyze-url ──────────────────
 // MUST be before /:id routes to prevent Express treating "analyze-url" as an id
-router.post('/analyze-url', requireAdmin, async (req: Request, res: Response) => {
+router.post('/analyze-url', async (req: Request, res: Response) => {
   const { urls } = req.body;
   if (!urls || !Array.isArray(urls) || urls.length === 0) {
     return res.status(400).json({ error: 'urls array required' });
