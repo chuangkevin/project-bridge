@@ -204,14 +204,7 @@ export default function GlobalDesignPage() {
         )}
 
         {activeTab === 'presets' && (
-          <div style={{ padding: '16px 0' }}>
-            <p style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
-              管理多組設計風格預設。建立專案時可選擇不同風格，也可以貼網站 URL 讓 AI 分析風格。
-            </p>
-            <button onClick={() => navigate('/settings')} style={{ padding: '10px 20px', background: '#8E6FA7', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
-              前往設定頁管理風格預設 →
-            </button>
-          </div>
+          <PresetLibrary />
         )}
 
         {activeTab === 'design' && (
@@ -332,6 +325,150 @@ export default function GlobalDesignPage() {
       </div>
 
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
+    </div>
+  );
+}
+
+function PresetLibrary() {
+  const [presets, setPresets] = useState<any[]>([]);
+  const [editing, setEditing] = useState<any>(null);
+  const [urls, setUrls] = useState<string[]>(['']);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+
+  const authHeaders = (): Record<string, string> => {
+    const h: Record<string, string> = {};
+    const legacy = sessionStorage.getItem('admin_token');
+    if (legacy) h['Authorization'] = `Bearer ${legacy}`;
+    const bridge = localStorage.getItem('pb-auth-token');
+    if (bridge) h['Authorization'] = `Bearer ${bridge}`;
+    return h;
+  };
+
+  useEffect(() => { fetch('/api/design-presets').then(r => r.json()).then(setPresets).catch(() => {}); }, []);
+
+  const refresh = () => fetch('/api/design-presets').then(r => r.json()).then(setPresets).catch(() => {});
+
+  return (
+    <div style={{ padding: '16px 0' }}>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary, #666)', marginBottom: 16 }}>
+        管理多組設計風格預設。建立專案時可選擇不同風格，也可以貼網站 URL 讓 AI 分析風格。
+      </p>
+
+      <button type="button" onClick={() => setEditing({ name: '', description: '', tokens: {}, is_new: true })}
+        style={{ padding: '8px 16px', background: 'var(--accent, #8E6FA7)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+        ＋ 新增風格
+      </button>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+        {presets.map(p => {
+          const t = typeof p.tokens === 'string' ? JSON.parse(p.tokens || '{}') : (p.tokens || {});
+          return (
+            <div key={p.id} style={{ background: 'var(--bg-secondary, #f8f7f5)', borderRadius: 8, padding: 14, border: '1px solid var(--border-primary, #e2e8f0)' }}>
+              <div style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
+                {[t.primaryColor || '#8E6FA7', t.secondaryColor || '#64748b', t.backgroundColor || '#FAF4EB'].map((c: string, i: number) => (
+                  <div key={i} style={{ width: 18, height: 18, borderRadius: '50%', background: c, border: '1px solid var(--border-primary, #ddd)' }} />
+                ))}
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{p.name} {p.is_default ? '⭐' : ''}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary, #666)', marginTop: 2 }}>{p.description || '無描述'}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <button type="button" style={{ padding: '3px 8px', fontSize: 11, border: '1px solid var(--border-primary, #ddd)', borderRadius: 4, background: 'var(--bg-primary, white)', cursor: 'pointer', color: 'var(--text-primary)' }}
+                  onClick={() => { setEditing({ ...p, tokens: t, is_new: false }); setUrls(JSON.parse(p.reference_urls || '[]').concat([''])); }}>編輯</button>
+                <button type="button" style={{ padding: '3px 8px', fontSize: 11, border: '1px solid var(--border-primary, #ddd)', borderRadius: 4, background: 'var(--bg-primary, white)', cursor: 'pointer', color: 'var(--text-primary)' }}
+                  onClick={async () => { await fetch(`/api/design-presets/${p.id}/copy`, { method: 'POST', headers: authHeaders() }); refresh(); }}>複製</button>
+                {!p.is_default && (
+                  <button type="button" style={{ padding: '3px 8px', fontSize: 11, border: '1px solid #fca5a5', borderRadius: 4, background: 'var(--bg-primary, white)', cursor: 'pointer', color: '#ef4444' }}
+                    onClick={async () => { if (confirm('確定刪除？')) { await fetch(`/api/design-presets/${p.id}`, { method: 'DELETE', headers: authHeaders() }); refresh(); } }}>刪除</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Editor Modal */}
+      {editing && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => { setEditing(null); setAnalysisResult(null); setUrls(['']); }}>
+          <div style={{ background: 'var(--bg-primary, white)', borderRadius: 12, padding: 24, width: '90%', maxWidth: 520, maxHeight: '85vh', overflow: 'auto', color: 'var(--text-primary)' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 16, fontSize: 16 }}>{editing.is_new ? '新增設計風格' : '編輯設計風格'}</h3>
+
+            <label style={{ fontSize: 12, fontWeight: 600 }}>名稱</label>
+            <input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border-primary, #ddd)', borderRadius: 6, fontSize: 14, marginBottom: 12, background: 'var(--bg-input, white)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+
+            <label style={{ fontSize: 12, fontWeight: 600 }}>描述</label>
+            <input value={editing.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border-primary, #ddd)', borderRadius: 6, fontSize: 14, marginBottom: 12, background: 'var(--bg-input, white)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+
+            {/* Colors */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+              {[{ key: 'primaryColor', label: '主色', def: '#8E6FA7' }, { key: 'secondaryColor', label: '副色', def: '#64748b' }, { key: 'backgroundColor', label: '背景', def: '#FAF4EB' }].map(c => (
+                <div key={c.key}>
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary, #666)' }}>{c.label}</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <input type="color" value={editing.tokens?.[c.key] || c.def}
+                      onChange={e => setEditing({ ...editing, tokens: { ...editing.tokens, [c.key]: e.target.value } })} />
+                    <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{editing.tokens?.[c.key] || c.def}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* URL Analysis */}
+            <label style={{ fontSize: 12, fontWeight: 600 }}>參考網站 URL</label>
+            {urls.map((url, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+                <input value={url} onChange={e => { const n = [...urls]; n[i] = e.target.value; setUrls(n); }}
+                  placeholder="https://example.com"
+                  style={{ flex: 1, padding: '6px 8px', border: '1px solid var(--border-primary, #ddd)', borderRadius: 4, fontSize: 12, background: 'var(--bg-input, white)', color: 'var(--text-primary)' }} />
+                {i === urls.length - 1 && urls.length < 3 && (
+                  <button type="button" onClick={() => setUrls([...urls, ''])} style={{ padding: '4px 8px', fontSize: 11, border: '1px solid var(--border-primary, #ddd)', borderRadius: 4, cursor: 'pointer', background: 'var(--bg-primary, white)', color: 'var(--text-primary)' }}>＋</button>
+                )}
+              </div>
+            ))}
+            <button type="button" disabled={analyzing || urls.every(u => !u.trim())}
+              onClick={async () => {
+                setAnalyzing(true);
+                try {
+                  const res = await fetch('/api/design-presets/analyze-url', {
+                    method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ urls: urls.filter(u => u.trim()) }),
+                  });
+                  const data = await res.json();
+                  if (data.tokens) {
+                    setEditing((prev: any) => ({ ...prev, tokens: { ...prev.tokens, ...data.tokens }, reference_analysis: data.analysis, design_convention: data.convention, reference_urls: urls.filter(u => u.trim()) }));
+                    setAnalysisResult(data);
+                  }
+                } catch {} finally { setAnalyzing(false); }
+              }}
+              style={{ margin: '8px 0 12px', padding: '6px 14px', background: 'var(--accent, #8E6FA7)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
+              {analyzing ? '分析中...' : '🔍 AI 分析風格'}
+            </button>
+            {analysisResult?.analysis && (
+              <div style={{ padding: 10, background: 'var(--bg-secondary, #f0f9ff)', borderRadius: 6, fontSize: 11, lineHeight: 1.6, marginBottom: 12, color: 'var(--text-primary)' }}>
+                {analysisResult.analysis}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+              <button type="button" onClick={() => { setEditing(null); setAnalysisResult(null); setUrls(['']); }}
+                style={{ padding: '8px 16px', border: '1px solid var(--border-primary, #ddd)', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-primary, white)', color: 'var(--text-primary)' }}>取消</button>
+              <button type="button" onClick={async () => {
+                const body = { name: editing.name, description: editing.description, tokens: editing.tokens, reference_urls: editing.reference_urls || urls.filter(u => u.trim()), reference_analysis: editing.reference_analysis || '', design_convention: editing.design_convention || '' };
+                const url = editing.is_new ? '/api/design-presets' : `/api/design-presets/${editing.id}`;
+                const method = editing.is_new ? 'POST' : 'PUT';
+                await fetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                refresh(); setEditing(null); setAnalysisResult(null); setUrls(['']);
+              }}
+                style={{ padding: '8px 16px', background: 'var(--accent, #8E6FA7)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>儲存</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
