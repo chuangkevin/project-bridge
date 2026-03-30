@@ -38,8 +38,8 @@ export async function planGeneration(
 
   const cssVariables = designTokens ? tokensToCssVariables(designTokens) : '';
 
-  const prompt = `You are a senior UI architect for HousePrice (好房網), Taiwan's leading real estate platform.
-You MUST follow the HousePrice Design System strictly. Every generated prototype must look like it belongs on houseprice.tw.
+  const prompt = `You are a senior UI architect designing a multi-page interactive prototype.
+Follow the design system tokens strictly. All colors must use CSS variables (var(--primary), var(--bg), etc.).
 
 CRITICAL RULES:
 - Include ALL pages from the analysis — missing pages means broken navigation
@@ -47,6 +47,7 @@ CRITICAL RULES:
 - Sub-agents cannot see other pages — they rely ENTIRELY on your spec and sharedCss
 - Use realistic placeholder data appropriate to the domain (product names, prices, dates)
 - sharedCss must define ALL shared components (nav, footer, cards, buttons, forms, modals)
+- ALL colors in sharedCss MUST use var() references — NEVER hardcode hex colors
 
 SPEC QUALITY REQUIREMENTS:
 - Each page spec MUST be 200+ words
@@ -55,18 +56,10 @@ SPEC QUALITY REQUIREMENTS:
 
 SHARED CSS REQUIREMENTS (CRITICAL):
 - Must be 150+ lines of actual CSS
-- Must include: CSS reset, :root with ALL design tokens, .container, .card, .btn-primary, .btn-secondary, .btn-cta, .form-group, .form-input, .form-select, nav/header/footer, .badge, .tag, grid utilities, @media responsive
-- Must use HousePrice tokens: --primary: #8E6FA7, --bg: #FAF4EB, --surface: #F8F7F5, --text: #333333, etc.
+- Must include: CSS reset, .container, .card, .btn-primary, .btn-secondary, .btn-cta, .form-group, .form-input, .form-select, nav/header/footer, .badge, .tag, grid utilities, @media responsive
+- ALL colors must use var() from the provided CSS variables — NEVER hardcode hex values
 
-ANTI-PATTERNS (VIOLATIONS):
-- NEVER use #FFFFFF as page background (use #FAF4EB)
-- NEVER use large solid color blocks for section backgrounds
-- NEVER use gradients on hero sections (only on small CTA buttons)
-- NEVER use box-shadow with blur > 4px
-- NEVER use border-radius > 8px on buttons
-- NEVER use non-system fonts
-
-${designConvention ? `HOUSEPRICE DESIGN SYSTEM (MANDATORY — follow exactly):\n${designConvention.slice(0, 5000)}\n` : ''}
+${designConvention ? `DESIGN SYSTEM (follow the design direction):\n${designConvention.slice(0, 5000)}\n` : ''}
 
 INPUT:
 ${architectureBlock ? `Architecture:\n${architectureBlock}\n` : ''}
@@ -167,34 +160,57 @@ export function buildLocalPlan(
   userMessage: string,
   designConvention: string,
 ): GenerationPlan {
+  // Extract design tokens from designConvention string (set by preset or project design)
+  const extractColor = (label: string, fallback: string) => {
+    const m = designConvention.match(new RegExp(label + ':\\s*(#[0-9a-fA-F]{3,8})', 'i'));
+    return m?.[1] || fallback;
+  };
+  const primary = extractColor('Primary Color', '#3b82f6');
+  const secondary = extractColor('Secondary Color', '#64748b');
+  const bgColor = extractColor('Background Color', '#f9fafb');
+  const radiusMatch = designConvention.match(/Border Radius:\s*(\d+)/i);
+  const radius = radiusMatch?.[1] || '8';
+
+  // Derive complementary colors from primary
+  const primaryHover = darkenColor(primary, 0.12);
+  const surface = bgColor === '#f9fafb' ? '#ffffff' : lightenColor(bgColor, 0.03);
+  const accentCta = darkenColor(primary, 0.05); // CTA should be a strong visible color, not gray
+
   const cssVariables = `:root {
-  --primary: #8E6FA7;
-  --primary-hover: #8557A8;
-  --accent-cta: #F97D03;
-  --accent-cta-hover: #E06C00;
-  --bg: #FAF4EB;
-  --surface: #F8F7F5;
-  --text: #333333;
-  --text-secondary: #666666;
-  --text-muted: #8C8C8C;
-  --placeholder: #B0B0B0;
-  --border: #D5D5D5;
-  --divider: #EAEAEA;
-  --nav-bg: #F1F1F1;
-  --nav-text: #434343;
-  --nav-active-bg: #434343;
+  --primary: ${primary};
+  --primary-hover: ${primaryHover};
+  --secondary: ${secondary};
+  --accent-cta: ${accentCta};
+  --accent-cta-hover: ${darkenColor(accentCta, 0.1)};
+  --bg: ${bgColor};
+  --background: ${bgColor};
+  --surface: ${surface};
+  --text: #1f2937;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --placeholder: #9ca3af;
+  --border: #e5e7eb;
+  --divider: #f3f4f6;
+  --nav-bg: ${surface};
+  --nav-text: #374151;
+  --nav-active-bg: ${primary};
   --nav-active-text: #FFFFFF;
-  --header-bg: #8E6FA7;
+  --header-bg: ${primary};
   --header-text: #FFFFFF;
-  --error: #EC3C1F;
-  --success: #85BB0E;
-  --tag-bg: #EBE3F2;
+  --error: #ef4444;
+  --success: #22c55e;
+  --tag-bg: ${primary}1a;
+  --radius-sm: ${Math.max(2, parseInt(radius) - 2)}px;
+  --radius-md: ${radius}px;
+  --radius-lg: ${Math.min(16, parseInt(radius) + 4)}px;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }`;
 
   const sharedCss = `/* CSS Reset */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+body { font-family: var(--font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); background: var(--bg); color: var(--text); line-height: 1.5; }
 a { color: var(--primary); text-decoration: none; }
+a:hover { opacity: 0.85; }
 img { max-width: 100%; display: block; }
 
 /* Layout */
@@ -206,18 +222,13 @@ img { max-width: 100%; display: block; }
 .flex { display: flex; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
 
-/* Navigation */
-.site-header { background: var(--header-bg); color: var(--header-text); padding: 12px 0; }
-.site-header .container { display: flex; justify-content: space-between; align-items: center; }
-.site-header .logo { font-size: 20px; font-weight: 700; color: white; }
-.site-nav { background: var(--nav-bg); border-bottom: 1px solid var(--divider); }
-.site-nav ul { list-style: none; display: flex; gap: 0; }
-.site-nav li a { display: block; padding: 14px 20px; color: var(--nav-text); font-weight: 700; font-size: 14px; transition: background 0.2s; cursor: pointer; }
-.site-nav li a:hover, .site-nav li a.active { background: var(--nav-active-bg); color: var(--nav-active-text); }
+/* NOTE: Navigation (.site-header, .site-nav) is NOT defined here.
+   The assembler provides its own nav (.top-nav, .nav-link).
+   Sub-agents must NOT add any nav/header/footer elements. */
 
 /* Cards */
-.card { background: var(--surface); border-radius: 4px; overflow: hidden; transition: transform 0.2s; }
-.card:hover { transform: translateY(-2px); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+.card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 .card-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: var(--divider); }
 .card-body { padding: 16px 20px; }
 .card-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
@@ -225,10 +236,10 @@ img { max-width: 100%; display: block; }
 .card-price { font-size: 18px; font-weight: 700; color: var(--primary); margin-top: 8px; }
 
 /* Buttons */
-.btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px; border: none; border-radius: 4px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s, opacity 0.2s; }
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px; border: none; border-radius: var(--radius-md); font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s, opacity 0.2s; }
 .btn-primary { background: var(--primary); color: white; }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-cta { background: linear-gradient(180deg, #EAAB57, #F97D03); color: white; }
+.btn-primary:hover { background: var(--primary-hover); opacity: 0.9; }
+.btn-cta { background: var(--accent-cta); color: white; }
 .btn-cta:hover { opacity: 0.9; }
 .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
 .btn-secondary:hover { background: var(--surface); }
@@ -236,29 +247,39 @@ img { max-width: 100%; display: block; }
 /* Forms */
 .form-group { margin-bottom: 16px; }
 .form-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
-.form-input, .form-select { width: 100%; height: 48px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 4px; font-size: 16px; background: white; color: var(--text); transition: border-color 0.2s; }
-.form-input:focus, .form-select:focus { outline: none; border-color: var(--primary); }
+.form-input, .form-select { width: 100%; height: 48px; padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 16px; background: var(--surface); color: var(--text); transition: border-color 0.2s; }
+.form-input:focus, .form-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
 .form-input::placeholder { color: var(--placeholder); }
 
 /* Badges & Tags */
-.badge { display: inline-block; padding: 2px 8px; font-size: 12px; border-radius: 4px; }
+.badge { display: inline-block; padding: 2px 8px; font-size: 12px; border-radius: var(--radius-sm); }
 .badge-primary { background: var(--tag-bg); color: var(--primary); }
-.badge-error { background: #FEE; color: var(--error); }
-.badge-success { background: #EFE; color: var(--success); }
-.tag { display: inline-block; padding: 4px 12px; font-size: 13px; border-radius: 4px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
-.tag.active, .tag:hover { background: var(--primary); color: white; }
+.badge-error { background: #fef2f2; color: var(--error); }
+.badge-success { background: #f0fdf4; color: var(--success); }
+.tag { display: inline-block; padding: 4px 12px; font-size: 13px; border-radius: var(--radius-sm); background: var(--surface); color: var(--text-secondary); cursor: pointer; border: 1px solid var(--border); }
+.tag.active, .tag:hover { background: var(--primary); color: white; border-color: var(--primary); }
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--divider); }
 .table th { background: var(--surface); font-weight: 600; font-size: 13px; color: var(--text-secondary); }
 
-/* Footer */
-.site-footer { background: var(--nav-bg); padding: 32px 0; margin-top: 48px; color: var(--text-secondary); font-size: 13px; text-align: center; }
+/* NOTE: Footer is NOT defined here — assembler handles it if needed.
+   Sub-agents must NOT add <footer> elements. */
+
+/* Forms */
+textarea { width: 100%; min-height: 80px; padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 14px; font-family: inherit; resize: vertical; }
+
+/* Card action area — ensure buttons/prices visible */
+.card-body .btn, .card .btn { min-width: 80px; }
+.card-price { font-size: 18px; font-weight: 700; color: var(--primary); margin-top: 8px; }
+
+/* Generic link/button that sub-agents might generate */
+a.btn, button { cursor: pointer; }
 
 /* Responsive */
 @media (max-width: 992px) { .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 640px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } .site-nav ul { flex-wrap: wrap; } }
+@media (max-width: 640px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } /* responsive nav handled by assembler */ }
 
 /* Section */
 .section { padding: 32px 0; }
@@ -270,32 +291,32 @@ img { max-width: 100%; display: block; }
 
 /* Pagination */
 .pagination { display: flex; justify-content: center; gap: 4px; margin-top: 24px; }
-.pagination a, .pagination span { padding: 8px 14px; border-radius: 4px; font-size: 14px; }
+.pagination a, .pagination span { padding: 8px 14px; border-radius: var(--radius-sm); font-size: 14px; }
 .pagination .active { background: var(--primary); color: white; }
 .pagination a:hover { background: var(--surface); }
 
 /* Extra utilities */
 .hero-section { padding: 48px 0; text-align: center; }
-.stat-card { padding: 20px; background: var(--surface); border-radius: 4px; text-align: center; }
+.stat-card { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); text-align: center; }
 .stat-card .stat-value { font-size: 28px; font-weight: 700; color: var(--primary); }
 .stat-card .stat-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 .timeline { position: relative; padding-left: 32px; }
 .timeline-item { position: relative; padding-bottom: 24px; border-left: 2px solid var(--divider); padding-left: 20px; }
 .timeline-item::before { content: ''; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--primary); }
 .step-indicator { display: flex; gap: 16px; margin-bottom: 24px; }
-.step-indicator .step { flex: 1; text-align: center; padding: 12px; border-radius: 4px; background: var(--surface); font-size: 13px; }
+.step-indicator .step { flex: 1; text-align: center; padding: 12px; border-radius: var(--radius-md); background: var(--surface); font-size: 13px; }
 .step-indicator .step.active { background: var(--primary); color: white; }
-.accordion { border: 1px solid var(--divider); border-radius: 4px; }
+.accordion { border: 1px solid var(--divider); border-radius: var(--radius-md); }
 .accordion-item { border-bottom: 1px solid var(--divider); }
 .accordion-header { padding: 14px 16px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; }
 .accordion-body { padding: 12px 16px; font-size: 14px; }
-.progress-bar { height: 8px; background: var(--divider); border-radius: 4px; overflow: hidden; }
-.progress-bar .fill { height: 100%; background: var(--primary); border-radius: 4px; }
-.rating { color: #F7991C; }
+.progress-bar { height: 8px; background: var(--divider); border-radius: var(--radius-sm); overflow: hidden; }
+.progress-bar .fill { height: 100%; background: var(--primary); border-radius: var(--radius-sm); }
+.rating { color: #f59e0b; }
 .layout-sidebar { display: grid; grid-template-columns: 240px 1fr; gap: 24px; }
 @media (max-width: 768px) { .layout-sidebar { grid-template-columns: 1fr; } }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
-.calendar-grid .day { padding: 8px; border-radius: 4px; cursor: pointer; }
+.calendar-grid .day { padding: 8px; border-radius: var(--radius-sm); cursor: pointer; }
 .calendar-grid .day:hover, .calendar-grid .day.selected { background: var(--primary); color: white; }
 .toggle { width: 44px; height: 24px; border-radius: 12px; background: var(--divider); position: relative; cursor: pointer; }
 .toggle.on { background: var(--primary); }
@@ -317,14 +338,13 @@ img { max-width: 100%; display: block; }
     const otherPages = pageNames.filter(p => p !== name);
     let spec = `用戶需求：「${userMessage.slice(0, 200)}」
 
-頁面「${name}」— 使用 HousePrice 設計規範。
-重要：此頁面的所有內容必須與用戶需求「${userMessage.slice(0, 50)}」直接相關。不要生成與需求無關的內容（例如：用戶要寵物美容，不要生成房屋或房價相關內容）。
+頁面「${name}」— 嚴格遵守設計系統的 CSS 變數。
+重要：此頁面的所有內容必須與用戶需求「${userMessage.slice(0, 50)}」直接相關。不要生成與需求無關的內容。
 
-佈局：使用 .container 包裹，max-width: 1200px。頂部有 .site-header（紫色 #8E6FA7）和 .site-nav（灰色 #F1F1F1 導覽列）。
+佈局：使用 .container 包裹，max-width: 1200px。
+⚠️ 不要包含 .site-header、.site-nav、<nav>、<header>、<footer> — 這些由組裝器自動添加。只生成頁面主體內容。
 
-導覽列項目：${pageNames.join('、')}，點擊切換頁面。當前頁面的 nav item 加上 .active class。
-
-頁面背景：#FAF4EB（暖米色），卡片背景 #F8F7F5，絕不使用純白。
+所有顏色必須使用 CSS 變數（var(--primary), var(--bg), var(--surface), var(--text) 等），絕不硬編碼色碼。
 
 `;
     // Add page-specific content based on site type + page name
@@ -363,7 +383,7 @@ img { max-width: 100%; display: block; }
         '設定': '- 一般設定：網站名稱/Logo/語言 .form-group\n- 通知設定：Email/.toggle 開關\n- 安全設定：密碼變更/兩步驟驗證 .toggle\n- API 設定：API Key 顯示+重新生成',
       },
       library: {
-        '首頁': '- Hero：搜尋框「輸入書名、作者或關鍵字」+ .btn-cta 搜尋\n- 熱門推薦 .grid-4：每個 .card 含書封圖(.card-img)+書名+作者+狀態 .badge（可借閱=綠/已借出=紅）\n- ⚠️ 每張卡片必須有 <a onclick="showPage(\'書籍詳情\');return false;" class="btn btn-primary">查看詳情</a>\n- 分類瀏覽 .tag（文學/科學/歷史/藝術/兒童/商業）\n- ⚠️ 這是圖書館，絕不顯示價格 NT$\n- 頁尾 .site-footer',
+        '首頁': '- Hero：搜尋框「輸入書名、作者或關鍵字」+ .btn-cta 搜尋\n- 熱門推薦 .grid-4：每個 .card 含書封圖(.card-img)+書名+作者+狀態 .badge（可借閱=綠/已借出=紅）\n- ⚠️ 每張卡片必須有 <a onclick="showPage(\'書籍詳情\');return false;" class="btn btn-primary">查看詳情</a>\n- 分類瀏覽 .tag（文學/科學/歷史/藝術/兒童/商業）\n- ⚠️ 這是圖書館，絕不顯示價格 NT$\n- 不要加 nav/header/footer',
         '書籍列表': '- .layout-sidebar（左篩選：分類 checkbox + 狀態「可借閱/已借出」+ 出版年份）\n- 右側 .grid-3 書籍卡：書封+書名+作者+狀態 .badge + <a onclick="showPage(\'書籍詳情\');return false;" class="btn btn-primary">查看詳情</a>\n- 排序下拉（最新上架/熱門/作者）\n- .pagination 分頁\n- ⚠️ 圖書館不顯示價格',
         '書籍詳情': '- 左：書封大圖\n- 右：書名(24px bold)、作者、出版社、出版日期、ISBN\n- 狀態 .badge（可借閱=綠色/已借出=紅色+預計歸還日）\n- 借閱 .btn-cta onclick="showPage(\'我的借閱\')" / 預約 .btn-secondary\n- 書籍簡介段落（3-4行真實內容）\n- 借閱規則（借閱期限30天、可續借1次）\n- 相關推薦書籍 .grid-4 + 每本有 onclick="showPage(\'書籍詳情\')"',
         '我的借閱': '- 目前借閱 .table：書封小圖+書名+借出日+到期日+狀態 .badge（借閱中/已逾期/已歸還）+續借 .btn-secondary+歸還 .btn-primary\n- 借閱歷史 .table\n- 空狀態："您還沒有借閱書籍，去探索圖書館吧！" + .btn-cta onclick="showPage(\'書籍列表\')"',
@@ -391,7 +411,7 @@ img { max-width: 100%; display: block; }
       name,
       viewport: 'desktop' as const,
       spec,
-      constraints: `必須包含 .site-header + .site-nav 導覽列，頁面背景 #FAF4EB`,
+      constraints: `不要包含 nav/header/footer（由組裝器加），所有顏色使用 CSS var()`,
       navigationOut: otherPages,
     };
   });
@@ -411,7 +431,7 @@ img { max-width: 100%; display: block; }
 
 function getGenericPageSpec(name: string, otherPages: string[]): string {
   if (/首頁|home|index/i.test(name)) {
-    return '- Hero：搜尋框+標語（小型 banner，絕不用大面積純色）\n- 精選內容 .grid-4：.card 有圖+標題+描述\n- 分類導覽 .tag 按鈕\n- 頁尾 .site-footer';
+    return '- Hero：搜尋框+標語（小型 banner，絕不用大面積純色）\n- 精選內容 .grid-4：.card 有圖+標題+描述\n- 分類導覽 .tag 按鈕\n- 不要加 nav/header/footer';
   }
   if (/列表|list|catalog|搜尋|search/i.test(name)) {
     return '- .layout-sidebar（左篩選+右 .grid-3 卡片）\n- 排序下拉+分頁 .pagination\n- 每卡：圖+標題+描述+操作按鈕';
@@ -426,4 +446,24 @@ function getGenericPageSpec(name: string, otherPages: string[]): string {
     return '- .grid-4 .stat-card（4 個數據指標）\n- 圖表區（div 佔位 300px）\n- 最近活動 .table';
   }
   return `- 標題區 + .container 內容\n- .grid 佈局展示主要資訊\n- .card 組件 + .btn-primary 操作按鈕\n- 導航：${otherPages.map(p => `onclick="showPage('${p}')"`).join(', ')}`;
+}
+
+/** Lighten a hex color by a given amount (0-1) */
+function lightenColor(hex: string, amount: number): string {
+  const h = hex.replace('#', '');
+  const num = parseInt(h, 16);
+  const r = Math.min(255, ((num >> 16) & 0xff) + Math.round(255 * amount));
+  const g = Math.min(255, ((num >> 8) & 0xff) + Math.round(255 * amount));
+  const b = Math.min(255, (num & 0xff) + Math.round(255 * amount));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+/** Darken a hex color by a given amount (0-1) */
+function darkenColor(hex: string, amount: number): string {
+  const h = hex.replace('#', '');
+  const num = parseInt(h, 16);
+  const r = Math.max(0, ((num >> 16) & 0xff) - Math.round(255 * amount));
+  const g = Math.max(0, ((num >> 8) & 0xff) - Math.round(255 * amount));
+  const b = Math.max(0, (num & 0xff) - Math.round(255 * amount));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }

@@ -179,15 +179,20 @@ export const BRIDGE_SCRIPT = `
         styleEl.textContent = css;
         document.head.appendChild(styleEl);
       }
-    } else if (e.data.type === 'navigate') {
-      var pageName = e.data.page;
-      var allPages = document.querySelectorAll('.page[data-page]');
-      allPages.forEach(function(p) {
-        p.style.display = 'none';
-      });
-      var target = document.querySelector('.page[data-page="' + pageName + '"]');
-      if (target) {
-        target.style.display = '';
+    } else if (e.data.type === 'show-page' || e.data.type === 'navigate') {
+      // show-page: sent by WorkspacePage sidebar clicks
+      // navigate: legacy format
+      var pageName = e.data.name || e.data.page;
+      if (typeof window.showPage === 'function') {
+        window.showPage(pageName);
+      } else {
+        var allPages = document.querySelectorAll('.page[data-page]');
+        allPages.forEach(function(p) { p.style.display = 'none'; });
+        var target = document.getElementById('page-' + pageName) || document.querySelector('.page[data-page="' + pageName + '"]');
+        if (target) { target.style.setProperty('display', 'block'); }
+        document.querySelectorAll('[data-nav]').forEach(function(l) {
+          l.classList.toggle('active', l.dataset.nav === pageName);
+        });
       }
     } else if (e.data.type === 'navigate-page') {
       var npName = e.data.page;

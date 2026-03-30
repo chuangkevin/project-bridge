@@ -43,56 +43,47 @@ ${cssVariables || '/* use defaults: var(--primary), var(--text), var(--bg), var(
 SHARED CSS (use these classes for consistent look):
 ${sharedCss || '/* use .container, .card, .btn-primary, .btn-secondary */'}
 
-${designConvention ? `HOUSEPRICE DESIGN SYSTEM (MANDATORY — follow exactly):\n${designConvention.slice(0, 5000)}\n` : ''}
+${designConvention ? `DESIGN SYSTEM (follow the design direction):\n${designConvention.slice(0, 5000)}\n` : ''}
 
-❌ VIOLATIONS THAT WILL BE REJECTED:
-1. Using #FFFFFF or white as page/section background → use #FAF4EB or #F8F7F5
-2. Large solid color blocks (>150px height) in orange/yellow/purple as section bg
-3. Drop shadows with blur > 4px → max is "0px 1px 4px rgba(0,0,0,0.15)"
-4. Any font other than system sans-serif
-5. border-radius > 8px on buttons (no rounded-full/pill)
-6. Empty placeholder cards with just "商品名稱" repeated → use varied realistic content
-7. Hero sections with full-width gradients → hero should use image or subtle bg
-
-COLOR USAGE (CRITICAL):
-- ALL brand colors MUST use CSS variables: var(--primary), var(--bg), var(--surface), var(--text), var(--text-secondary), var(--border)
-- These are defined in :root via sharedCss
-- NEVER hardcode #8E6FA7, #FAF4EB etc. — always use var()
+⚠️⚠️⚠️ COLOR USAGE — ABSOLUTELY CRITICAL:
+- ALL colors MUST use CSS variables: var(--primary), var(--bg), var(--surface), var(--text), var(--text-secondary), var(--border), var(--header-bg), var(--nav-bg), var(--divider)
+- NEVER hardcode ANY hex color values (#XXXXXX) — always use var() references
+- The :root CSS variables already contain the correct brand colors from the design preset
+- Buttons: .btn-primary uses var(--primary), .btn-cta uses var(--accent-cta)
+- Backgrounds: page uses var(--bg), cards use var(--surface)
+- Text: primary var(--text), secondary var(--text-secondary)
+- Image placeholders: use <div style="background:var(--divider);aspect-ratio:16/9;border-radius:var(--radius-md);"></div>
 
 CONTENT QUALITY:
 - 繁體中文 UI — all visible text in Traditional Chinese
-- Product cards: use VARIED names (e.g. "北歐風格沙發", "手沖咖啡壺", "無線降噪耳機"), not "商品 1", "商品 2"
+- Use VARIED, realistic content appropriate to the domain (real product names, prices, descriptions)
 - Prices: use realistic NT$ values (NT$ 1,280, NT$ 3,990, etc.)
-- Forms: proper labels, input types, placeholder text, validation hints
-- Tables: realistic column data, not "XXX" or "---"
+- Forms: proper labels, input types, placeholder text
+- NEVER use placeholder text like "商品 1", "商品 2", "XXX"
 
 LAYOUT RULES (CRITICAL — prevents broken layouts):
 - ALWAYS wrap page content in <div class="container"> (max-width 1200px, centered)
 - ONLY use shared CSS classes for layout: .grid, .grid-2, .grid-3, .grid-4, .flex, .flex-between, .layout-sidebar
 - NEVER write inline style for width, display, grid, flex — use the shared classes
-- NEVER use position:absolute/fixed for layout (only for small overlays like tooltips)
-- Image placeholders: use <div style="background:#E5E5E5;aspect-ratio:16/9;border-radius:4px;"></div> — NOT purple/colored backgrounds
-- Card images: <div class="card-img" style="background:#E5E5E5;height:180px;"></div>
-- Tables: ALWAYS use .table class with proper column widths (first col 30%, rest auto)
-- Table cells: white-space:nowrap for short data (dates, numbers), normal for descriptions
-- Info grid (label:value pairs): use display:grid; grid-template-columns: 100px 1fr; gap:8px — NOT nested tables
-- Long text: overflow-wrap:break-word on containers
-- Tags/badges: use .tag or .badge with flex-wrap:wrap on parent, gap:6px
-- Date/time: display inline on one line, e.g. "2024/07/20 (六) 14:00-16:00" — NOT broken into separate lines
+- NEVER use position:absolute/fixed for layout (only for small overlays)
+- NEVER use writing-mode: vertical or any vertical text layout
+- Card images: <div class="card-img" style="background:var(--divider);height:180px;"></div>
+- Tables: ALWAYS use .table class
+- Tags/badges: use .tag or .badge with flex-wrap:wrap on parent
+- Forms: use .form-group > .form-label + .form-input pattern. ALL inputs must be full-width.
+- NEVER use narrow columns (<200px) for form content — forms should always be in a wide area
 
 QUALITY STANDARDS:
-- Fill with realistic domain-appropriate content (real product names, prices, descriptions)
 - Use data-bridge-id="[unique-kebab-id]" on ALL significant elements
 - All interactive elements need working onclick handlers
 - Use shared CSS classes: .btn-primary, .btn-secondary, .card, .container
-- Use CSS variables: var(--primary), var(--text), var(--bg), var(--border)
 - Minimum 400px of meaningful, realistic content
-- Include proper empty states, hover effects, active states
 - NEVER use <style> tags — all styling via shared CSS classes or CSS variables
 
-NAVIGATION between pages:
-onclick="showPage('targetPageName');return false;"
-This page links to: ${page.navigationOut.length > 0 ? page.navigationOut.join(', ') : '(none)'}
+NAVIGATION between pages (CRITICAL — cards/buttons MUST link to detail pages):
+- Use onclick="showPage('targetPageName');return false;" on cards, buttons, links
+- Every card in a list MUST have a clickable link to its detail page
+- This page links to: ${page.navigationOut.length > 0 ? page.navigationOut.join(', ') : '(none)'}
 
 ${page.viewport === 'mobile' ? `MOBILE: single column, max-width 480px, touch targets 48px+, text 15-16px` : 'DESKTOP: responsive layout, grid/flexbox, max-width 1200px'}`;
 

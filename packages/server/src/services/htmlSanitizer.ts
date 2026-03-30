@@ -123,35 +123,44 @@ function ensureShowPage(html: string): string {
 export function injectConventionColors(html: string, conventionText: string): string {
   if (!conventionText) return html;
 
-  // Extract hex colors from convention
+  // Extract hex colors from convention — support both PROJECT DESIGN format and legacy format
   const colorMap: Record<string, string> = {};
 
-  // Match patterns like: `c-purple-600` | `#8E6FA7` | 主要 CTA
-  const hexMatches = conventionText.matchAll(/c-purple-600[`\s|]*[`]?#([0-9a-fA-F]{6})/g);
-  for (const m of hexMatches) {
-    colorMap['--primary'] = `#${m[1]}`;
+  // PROJECT DESIGN format: "Primary Color: #XXXXXX"
+  const primaryMatch = conventionText.match(/Primary Color:\s*(#[0-9a-fA-F]{3,8})/i);
+  if (primaryMatch) colorMap['--primary'] = primaryMatch[1];
+
+  const secondaryMatch = conventionText.match(/Secondary Color:\s*(#[0-9a-fA-F]{3,8})/i);
+  if (secondaryMatch) colorMap['--secondary'] = secondaryMatch[1];
+
+  const bgMatch = conventionText.match(/Background Color:\s*(#[0-9a-fA-F]{3,8})/i);
+  if (bgMatch) {
+    colorMap['--bg'] = bgMatch[1];
+    colorMap['--background'] = bgMatch[1];
   }
 
-  // Also look for explicit primary color mentions
-  const primaryMatch = conventionText.match(/主要.*?CTA.*?#([0-9a-fA-F]{6})/);
-  if (primaryMatch && !colorMap['--primary']) {
-    colorMap['--primary'] = `#${primaryMatch[1]}`;
-  }
-
-  // Fallback: find the first c-purple-600 hex
+  // Legacy format: c-purple-600 | #XXXXXX
   if (!colorMap['--primary']) {
-    const fallback = conventionText.match(/#([89a-fA-F][0-9a-fA-F]{5})/);
-    if (fallback) colorMap['--primary'] = `#${fallback[1]}`;
+    const hexMatches = conventionText.matchAll(/c-purple-600[`\s|]*[`]?#([0-9a-fA-F]{6})/g);
+    for (const m of hexMatches) {
+      colorMap['--primary'] = `#${m[1]}`;
+    }
   }
 
-  // Extract more convention colors
-  const purple700 = conventionText.match(/c-purple-700[`\s|]*[`]?#([0-9a-fA-F]{6})/);
-  if (purple700) colorMap['--primary-hover'] = `#${purple700[1]}`;
-
-  const brown = conventionText.match(/c-brown-\d+[`\s|]*[`]?#([0-9a-fA-F]{6})/);
-  if (brown) colorMap['--bg'] = `#${brown[1]}`;
+  // Fallback: explicit CTA color mentions
+  if (!colorMap['--primary']) {
+    const ctaMatch = conventionText.match(/主要.*?CTA.*?#([0-9a-fA-F]{6})/);
+    if (ctaMatch) colorMap['--primary'] = `#${ctaMatch[1]}`;
+  }
 
   if (Object.keys(colorMap).length === 0) return html;
+
+  // Derive hover from primary
+  if (colorMap['--primary'] && !colorMap['--primary-hover']) {
+    colorMap['--primary-hover'] = colorMap['--primary'] + 'dd';
+    colorMap['--header-bg'] = colorMap['--primary'];
+    colorMap['--nav-active-bg'] = colorMap['--primary'];
+  }
 
   // Build override CSS
   const overrideVars = Object.entries(colorMap).map(([k, v]) => `  ${k}: ${v} !important;`).join('\n');

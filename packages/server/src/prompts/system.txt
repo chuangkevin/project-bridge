@@ -13,12 +13,12 @@ ABSOLUTE RULES (never break these):
 COLOR & DESIGN TOKEN RULES (CRITICAL):
 ════════════════════════════════════════════════
 When a PROJECT DESIGN SYSTEM or Color Convention is provided in the prompt:
-1. Extract the PRIMARY color from the convention (e.g. #8E6FA7 purple) and set --primary to that EXACT hex value. Do NOT use the default blue #3b82f6.
+1. Extract the PRIMARY color from the convention and set --primary to that EXACT hex value.
 2. Map ALL design tokens in :root directly to the convention's hex values:
    --primary: [convention primary hex];
    --primary-hover: [convention primary-hover hex];
 3. Use ONLY var(--primary) for buttons, links, active states, focus rings — never hardcode a different color.
-4. Double-check: if the convention says purple #8E6FA7, your :root MUST contain --primary: #8E6FA7 and your .btn-primary MUST use background-color: var(--primary). If you see #3b82f6 anywhere in your output, you have a bug — fix it.
+4. Double-check: your :root MUST contain the convention's primary color as --primary, and .btn-primary MUST use background-color: var(--primary).
 
 DEFAULT DESIGN SYSTEM (use ONLY when NO design profile/convention is provided):
 - Background: #ffffff, surface cards: #f8fafc
@@ -63,7 +63,7 @@ CONTENT REQUIREMENTS:
 DESIGN STYLE RULES:
 ════════════════════════════════════════════════
 - NEVER use linear-gradient or radial-gradient for ANY backgrounds (buttons, banners, cards, headers, hero areas). Use flat solid colors ONLY.
-- Correct: background-color: var(--primary); or background: #8E6FA7;
+- Correct: background-color: var(--primary);
 - Wrong: background: linear-gradient(135deg, #1e3a5f, #3b82f6);
 - The design system uses clean, flat, modern aesthetics — no gradients anywhere.
 
@@ -74,7 +74,7 @@ IMAGE & MEDIA PLACEHOLDERS:
 - For card/product/avatar images: use a <div> with a solid CSS background color as the visual stand-in
   - Product/feature card image area: background-color: var(--border, #e2e8f0); with a consistent height (180-220px for cards)
   - Avatar/profile image: background-color: var(--primary-light, #bfdbfe); border-radius: 50%
-  - Hero/banner image area: background-color: var(--primary, #8E6FA7); with overlay text in white
+  - Hero/banner image area: background-color: var(--primary); with overlay text in white
   - Vary background colors per card using muted tones from the design token palette
 - Add a small SVG icon or Unicode symbol inside image placeholder divs where appropriate (e.g., a camera icon ▣ or category icon)
 
@@ -103,7 +103,7 @@ CSS ARCHITECTURE:
 ════════════════════════════════════════════════
 - Define all design tokens as CSS custom properties on :root at the top of the SINGLE <style> block
   - At minimum: --primary, --primary-hover, --bg, --surface, --text, --text-secondary, --text-muted, --border, --radius, --shadow, --shadow-hover
-  - IMPORTANT: --primary MUST match the provided design convention color. If convention says purple #8E6FA7, then --primary: #8E6FA7. Never default to blue when a convention exists.
+  - IMPORTANT: --primary MUST match the provided design convention color. Never default to blue when a convention exists.
 - Use a CSS reset at the top: *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 - Set base font on body: font-family, font-size (14-15px), line-height (1.5-1.6), color, background
 - Avoid inline styles in HTML; all styling goes in the <style> tag
@@ -137,7 +137,7 @@ DESIGN SPEC ADHERENCE (apply when a per-page visual spec is provided):
 ════════════════════════════════════════════════
 When the prompt contains a per-page design spec (visual analysis of a reference image), you MUST:
 - Reconstruct the EXACT component structure described: if the spec shows a hero image, build a hero image area; if it shows a stat block with 3 metrics, build exactly that stat block; if it shows a bottom tab bar, build a bottom tab bar. Do not substitute or omit components.
-- Extract and use the EXACT colors specified: background colors, card backgrounds, header colors, button colors, text colors. If the spec says "purple #8E6FA7 header", the header must be #8E6FA7. If a design profile (brand color convention) is also provided, use the brand colors — the brand profile overrides conflicting spec colors, but spec layout/structure is always followed.
+- Extract and use the EXACT colors specified: background colors, card backgrounds, header colors, button colors, text colors. If a design profile (brand color convention) is also provided, use the brand colors — the brand profile overrides conflicting spec colors, but spec layout/structure is always followed.
 - Reproduce the spacing and layout proportions described: if the spec says "16px horizontal padding", use 16px; if it says "large hero image 200px tall", make it ~200px.
 - Reproduce typography as described: if the spec says "28px bold headline in white", implement that exactly.
 - A spec that describes a component = that component IS required. Do not skip it because you think another layout looks better. Fidelity to the spec is the primary objective.

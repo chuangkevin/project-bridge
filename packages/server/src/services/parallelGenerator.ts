@@ -6,6 +6,7 @@ import { compileDesignTokens, DesignTokens } from './designTokenCompiler';
 import { assignBatchKeys, getGeminiApiKeyExcluding, markKeyBad } from './geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from './htmlSanitizer';
 import { autoFixDesignViolations } from './designSystemValidator';
+import { validatePrototypeHtml, formatQaReport } from './htmlQaValidator';
 import db from '../db/connection';
 
 export interface GenerationProgress {
@@ -37,29 +38,11 @@ export async function generateParallel(
 ): Promise<{ html: string; pages: string[]; isMultiPage: boolean }> {
 
   // Step 1: Build local plan — NO API call, instant
+  // buildLocalPlan now extracts design tokens from designConvention automatically
   onProgress?.({ phase: 'planning', message: '規劃頁面架構...' });
   const pageNamesFromAnalysis: string[] = analysisData?.pages?.map((p: any) => p.name || p) || [];
   if (pageNamesFromAnalysis.length < 2) throw new Error('No pages to generate');
   const plan = buildLocalPlan(pageNamesFromAnalysis, userMessage, designConvention);
-
-  // Override CSS :root with project design tokens if designConvention has PROJECT DESIGN
-  const projColorMatch = designConvention.match(/Primary Color:\s*(#[0-9a-fA-F]{6})/i);
-  const projSecondaryMatch = designConvention.match(/Secondary Color:\s*(#[0-9a-fA-F]{6})/i);
-  const projRadiusMatch = designConvention.match(/Border Radius:\s*(\d+)/i);
-  if (projColorMatch) {
-    const primary = projColorMatch[1];
-    const secondary = projSecondaryMatch?.[1] || '#64748b';
-    const radius = projRadiusMatch?.[1] || '4';
-    // Replace hardcoded HousePrice colors in cssVariables and sharedCss
-    plan.cssVariables = plan.cssVariables
-      .replace(/--primary:\s*#8E6FA7/g, `--primary: ${primary}`)
-      .replace(/--primary-hover:\s*#8557A8/g, `--primary-hover: ${primary}dd`)
-      .replace(/--header-bg:\s*#8E6FA7/g, `--header-bg: ${primary}`);
-    plan.sharedCss = plan.sharedCss
-      .replace(/#8E6FA7/g, primary)
-      .replace(/#8557A8/g, `${primary}dd`);
-    console.log('[parallel] Overriding design tokens: primary=' + primary + ' secondary=' + secondary + ' radius=' + radius);
-  }
 
   console.log('[parallel] Local plan ready:', plan.pages.length, 'pages, sharedCss:', plan.sharedCss.length, 'chars');
 
@@ -130,16 +113,8 @@ export async function generateParallel(
   }
   console.log('[parallel] Results:', fragments.filter(f => f.success).length, 'ok,', failedCount, 'failed');
 
-  // Step 2.5: QA — strip embedded navs from fragments (sub-agents sometimes add them)
-  for (const frag of fragments) {
-    if (frag.success && frag.html) {
-      // Remove any nav/header/footer that sub-agent included inside the page div
-      frag.html = frag.html
-        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-        .replace(/<header[^>]*class="site-header"[^>]*>[\s\S]*?<\/header>/gi, '')
-        .replace(/<footer[^>]*class="site-footer"[^>]*>[\s\S]*?<\/footer>/gi, '');
-    }
-  }
+  // Step 2.5: QA — nav/header/footer stripping is now done in assembler
+  // (assembler strips ALL nav/header/footer aggressively, not just specific classes)
 
   // Step 2.6: QA — check content quality, log thin pages
   for (const frag of fragments) {
@@ -172,6 +147,17 @@ export async function generateParallel(
   }
   if (designConvention) {
     html = injectConventionColors(html, designConvention);
+  }
+
+  // Step 6: QA validation
+  const qaReport = validatePrototypeHtml(html);
+  console.log(formatQaReport(qaReport));
+  if (!qaReport.passed) {
+    console.warn('[parallel] QA FAILED — critical issues found in generated prototype');
+    // Log critical issues to progress stream so user sees them
+    for (const issue of qaReport.issues.filter(i => i.severity === 'critical')) {
+      onProgress?.({ phase: 'assembling', message: `⚠️ QA: ${issue.message}` });
+    }
   }
 
   onProgress?.({ phase: 'done' });

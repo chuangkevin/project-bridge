@@ -15,7 +15,7 @@ const SCORING_PROMPT = `Analyze this HTML prototype and score it 0-100 on these 
 2. accessibility: Alt text on images, aria-labels, color contrast considerations, keyboard navigation support
 3. responsive: Responsive design patterns, media queries, flexible layouts, viewport meta
 4. consistency: Consistent colors, fonts, spacing, alignment throughout the page
-5. design: Does it follow HousePrice design system? Warm beige backgrounds (#FAF4EB), purple accents (#8E6FA7), no large solid color blocks, no heavy shadows, compact layout.
+5. design: Does it follow the project design system? Uses CSS variables consistently (var(--primary), var(--bg)), no hardcoded colors, no large solid color blocks, no heavy shadows, clean layout.
 
 Return JSON only: {"html": N, "accessibility": N, "responsive": N, "consistency": N, "design": N}
 where N is an integer 0-100.`;

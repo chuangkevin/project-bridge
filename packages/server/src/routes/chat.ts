@@ -699,7 +699,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       designSpecPrefix += '║  DESIGN SPEC — THIS OVERRIDES ALL DEFAULTS BELOW    ║\n';
       designSpecPrefix += '╚══════════════════════════════════════════════════════╝\n';
       designSpecPrefix += 'Uploaded design spec files have been analyzed. You MUST follow the LAYOUT, component structure, and spacing from these specs.\n';
-      designSpecPrefix += 'NOTE: Brand colors (purple #8E6FA7) from the HousePrice Color Convention override spec colors — use the spec for structure/layout, not colors.\n\n';
+      designSpecPrefix += 'NOTE: Use the design preset/convention colors (CSS variables) — use the spec for structure/layout.\n\n';
       for (const row of specRowsEarly) {
         let name = row.original_name;
         try { const fixed = Buffer.from(name, 'latin1').toString('utf8'); if (/[\u4e00-\u9fff]/.test(fixed)) name = fixed; } catch { /* keep */ }
@@ -881,13 +881,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // designConvention already loaded earlier (before micro-adjust path)
     if (designConvention) {
-      effectiveSystemPrompt += `\n\n=== HOUSEPRICE DESIGN SYSTEM ===\n${designConvention.slice(0, 5000)}\n
-❌ VIOLATIONS:
-- NEVER use #FFFFFF as background (use #FAF4EB)
-- NEVER use large solid color blocks
-- NEVER use heavy shadows (max 4px blur)
-- NEVER use non-system fonts
-- ALWAYS use CSS variables for brand colors
+      effectiveSystemPrompt += `\n\n=== DESIGN SYSTEM ===\n${designConvention.slice(0, 5000)}\n
+CRITICAL: ALL colors must use CSS variables (var(--primary), var(--bg), var(--surface), etc.)
+NEVER hardcode hex color values — the design tokens are defined in :root CSS variables.
 ===`;
     }
 
@@ -972,7 +968,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // Design spec analysis reminder (already injected at top — this just reinforces at end)
     if (specRowsEarly.length > 0) {
-      effectiveSystemPrompt += '\n\n[REMINDER: Design spec was injected at the top. Follow the spec LAYOUT and component patterns. Use HousePrice purple #8E6FA7 as primary color, not spec colors.]';
+      effectiveSystemPrompt += '\n\n[REMINDER: Design spec was injected at the top. Follow the spec LAYOUT and component patterns. Use the design preset CSS variables for colors.]';
     }
 
     // Art style injection
@@ -1093,12 +1089,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       try { projTokens = JSON.parse(projDesign.tokens || '{}'); } catch {}
       designConvention = `PROJECT DESIGN (override global):
 Design Direction: ${projDesign.description || ''}
-Primary Color: ${projTokens.primaryColor || '#8E6FA7'}
+Primary Color: ${projTokens.primaryColor || '#3b82f6'}
 Secondary Color: ${projTokens.secondaryColor || '#64748b'}
 Font: ${projTokens.fontFamily || 'system'}
-Border Radius: ${projTokens.borderRadius || 4}px
+Border Radius: ${projTokens.borderRadius || 8}px
 Shadow: ${projTokens.shadowStyle || '輕柔'}
-IMPORTANT: Follow the project design direction, NOT the HousePrice default.`;
+IMPORTANT: Follow the project design direction. All colors must use CSS var() references.`;
       console.log('[chat] Using project design:', projDesign.description);
     }
 
@@ -1111,13 +1107,13 @@ IMPORTANT: Follow the project design direction, NOT the HousePrice default.`;
         if (presetTokens.primaryColor) {
           designConvention = `PROJECT DESIGN (override global):
 Design Direction: ${presetForTokens.description || presetForTokens.name || ''}
-Primary Color: ${presetTokens.primaryColor || '#8E6FA7'}
+Primary Color: ${presetTokens.primaryColor || '#3b82f6'}
 Secondary Color: ${presetTokens.secondaryColor || '#64748b'}
-Background Color: ${presetTokens.backgroundColor || '#ffffff'}
+Background Color: ${presetTokens.backgroundColor || '#f9fafb'}
 Font: ${presetTokens.fontFamily || 'system'}
-Border Radius: ${presetTokens.borderRadius || 4}px
+Border Radius: ${presetTokens.borderRadius || 8}px
 Shadow: ${presetTokens.shadowStyle || '輕柔'}
-IMPORTANT: Follow the project design direction, NOT the HousePrice default.`;
+IMPORTANT: Follow the project design direction. All colors must use CSS var() references.`;
           console.log('[chat] Using design preset tokens:', presetForTokens.name);
         }
       }
@@ -1626,7 +1622,7 @@ ${html.slice(0, 3000)}`;
       if (!generationSummary && finalPages.length > 0) {
         const userReq = userContent.slice(0, 50);
         const intro = `我已經為您建立了「${userReq}」的原型，包含 ${finalPages.length} 個頁面。`;
-        const tech = `此原型採用 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換，並整合了 HousePrice 設計規範。`;
+        const tech = `此原型採用 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換，並整合了專案設計風格。`;
         const features = finalPages.map(p => `• ${p}`).join('\n');
         generationSummary = `${intro}\n${tech}\n\n包含頁面：\n${features}`;
       }

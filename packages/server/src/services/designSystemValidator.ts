@@ -21,7 +21,7 @@ export function validateDesignSystem(html: string): DesignValidationResult {
     violations.push({
       rule: 'no-white-bg',
       severity: 'warning',
-      detail: `Found ${whiteBgMatches.length} instance(s) of #FFFFFF background — should use #FAF4EB or #F8F7F5`,
+      detail: `Found ${whiteBgMatches.length} instance(s) of #FFFFFF background — should use var(--bg) or var(--surface)`,
     });
   }
 
@@ -112,14 +112,13 @@ export function autoFixDesignViolations(html: string): { html: string; fixes: st
   const fixes: string[] = [];
   let fixed = html;
 
-  // 1. Replace white backgrounds on body/main containers
-  // Only replace background-color: #ffffff or #fff (not in :root or small elements)
+  // 1. Replace hardcoded white backgrounds with var(--surface) or var(--bg)
   const whiteBgCount = (fixed.match(/background(-color)?\s*:\s*#fff(fff)?\s*;/gi) || []).length;
   if (whiteBgCount > 0) {
     fixed = fixed.replace(/background(-color)?\s*:\s*#fff(fff)?\s*;/gi, (match) => {
-      return match.replace(/#fff(fff)?/i, '#FAF4EB');
+      return match.replace(/#fff(fff)?/i, 'var(--surface, #f9fafb)');
     });
-    fixes.push(`Replaced ${whiteBgCount} white backgrounds → #FAF4EB`);
+    fixes.push(`Replaced ${whiteBgCount} white backgrounds → var(--surface)`);
   }
 
   // 2. Cap shadow blur at 4px
