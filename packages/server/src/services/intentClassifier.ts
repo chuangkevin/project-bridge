@@ -37,6 +37,9 @@ IMPORTANT:
 - Short imperatives like "做", "產生", "UI", "開始", "go", "generate" = full-page (or in-shell if shell exists)
 - Messages describing a UI problem wanting a fix ("空白太大", "Header太寬") = micro-adjust if it's a small fix, full-page if it's a complete redo
 - Messages starting with "為什麼沒有做出" or "為何沒有" are REQUESTS TO IMPLEMENT = full-page or in-shell
+- "重新設計這個元件" or "設計這個元件" = full-page (redesign intent overrides component keyword)
+- When message mentions redesigning/creating + element/component together, it's full-page NOT component
+- Messages with attached images/screenshots are usually full-page requests (they want to recreate what's in the image)
 - Only classify as "question" if the message is clearly asking for information (contains ?, 什麼, 如何, explain, what, how) with NO fix/generate intent.
 
 Reply ONLY with: question, component, micro-adjust, full-page, or in-shell`,

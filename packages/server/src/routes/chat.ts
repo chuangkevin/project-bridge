@@ -261,6 +261,14 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Detect requests for missing/new pages — force full-page generation
     const isPageRequest = /沒有.*頁|缺少.*頁|加入.*頁|新增.*頁|多.*頁面|少了.*頁|要有.*頁|要.*頁面|需要.*頁|增加.*頁|missing.*page|add.*page|need.*page|請生成.*多|生成.*頁面/i.test(message);
 
+    // Override: attached files with design/redesign intent → full-page (not component)
+    const hasFiles = fileIds && fileIds.length > 0;
+    const hasDesignIntent = /設計|redesign|重新|重做|做出|產生|生成/i.test(message);
+    if (hasFiles && hasDesignIntent && intent === 'component') {
+      intent = 'full-page';
+      console.log('[chat] Override: component → full-page (has files + design intent)');
+    }
+
     // When user requests pages, force full-page intent regardless of existing prototype
     if (isPageRequest) {
       intent = 'full-page';

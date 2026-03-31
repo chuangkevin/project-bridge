@@ -15,6 +15,7 @@ export interface ChatMessage {
   content: string;
   messageType?: 'user' | 'generate' | 'in-shell' | 'component' | 'answer';
   metadata?: { summary?: string; pages?: string[]; thinking?: string };
+  files?: { name: string; id: string }[];
 }
 
 type FileIntent = 'design-spec' | 'data-spec' | 'brand-guide' | 'reference' | null;
@@ -399,16 +400,17 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setLastGenerationSummary('');
     setLastGeneratedPages([]);
 
+    const fileIds = attachedFiles.map(f => f.id);
+    const sentFiles = [...attachedFiles];
+
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: text,
+      files: sentFiles.map(f => ({ name: f.filename, id: f.id })),
     };
 
     setLocalUserMsg(userMsg);
-
-    const fileIds = attachedFiles.map(f => f.id);
-    const sentFiles = [...attachedFiles];
 
     // Clear attached files after sending
     setAttachedFiles([]);
@@ -787,6 +789,15 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 )}
                 {msg.role === 'user' ? (
                   <div style={styles.userBubble}>
+                    {msg.files && msg.files.length > 0 && (
+                      <div style={{ marginBottom: '6px', fontSize: '12px', opacity: 0.8 }}>
+                        {msg.files.map((f, fi) => (
+                          <span key={fi} style={{ display: 'inline-block', background: 'rgba(255,255,255,0.2)', borderRadius: '4px', padding: '2px 6px', marginRight: '4px', marginBottom: '2px' }}>
+                            📎 {f.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {msg.content}
                   </div>
                 ) : msg.messageType === 'answer' ? (
