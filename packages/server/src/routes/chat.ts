@@ -754,7 +754,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
       let qaKey = apiKey;
       let qaRetries = 0;
-      while (qaRetries <= 2) {
+      while (qaRetries <= 4) {
         try {
           const genai = new GoogleGenerativeAI(qaKey);
           const model = genai.getGenerativeModel({
@@ -781,9 +781,14 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         } catch (err: any) {
           const msg = err?.message || '';
           const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-          if (isRateLimit && qaRetries < 2) {
+          if (isRateLimit && qaRetries < 4) {
             const altKey = getGeminiApiKeyExcluding(qaKey);
-            if (altKey) { qaKey = altKey; qaRetries++; continue; }
+            if (altKey) { qaKey = altKey; }
+            qaRetries++;
+            // Wait before retry — let rate limit cool down
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            console.log(`[chat-qa] 429, retrying ${qaRetries}/4 with key ...${qaKey.slice(-4)}`);
+            continue;
           }
           console.error('Gemini QA error:', err);
           res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);

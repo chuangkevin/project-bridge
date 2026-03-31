@@ -68,12 +68,14 @@ export function invalidateKeyCache(): void {
 
 // Temporary bad key tracking — keys that 429'd or errored recently
 const badKeys = new Map<string, number>(); // key → timestamp when marked bad
-const BAD_KEY_COOLDOWN = 120_000; // 2 minutes cooldown
+const BAD_KEY_COOLDOWN = 30_000; // 30 seconds cooldown (Flash rate limits recover fast)
 
 /** Mark a key as temporarily bad (429, quota, auth error) */
 export function markKeyBad(key: string): void {
   badKeys.set(key, Date.now());
-  console.warn('[keys] Marked bad:', '...' + key.slice(-4), '(cooldown 2min)');
+  const total = loadKeys().length;
+  const badCount = badKeys.size;
+  console.warn(`[keys] Marked bad: ...${key.slice(-4)} (cooldown 30s, ${badCount}/${total} keys in cooldown)`);
 }
 
 /** Get available keys excluding temporarily bad ones */
