@@ -15,6 +15,7 @@ import { generateParallel } from '../services/parallelGenerator';
 import { assemblePrototype, fixNavigation } from '../services/htmlAssembler';
 import { buildLocalPlan } from '../services/masterAgent';
 import { planAndReview } from '../services/plannerAgent';
+import { checkSkillConflicts } from '../services/skillConflictChecker';
 import { getActiveSkills } from './skills';
 import { scorePrototype } from '../services/qualityScorer';
 import { generationQueue } from '../services/generationQueue';
@@ -1077,6 +1078,31 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
         // Last resort fallback
         finalPages = ['首頁', '列表瀏覽', '詳情頁面', '操作功能', '個人帳戶'];
         isMultiPage = true;
+      }
+
+      // === SKILL CONFLICT DETECTION ===
+      // Check for conflicts between user requirements and Skill business rules
+      const conflictSkills = getActiveSkills(projectId as string).map(s => ({
+        name: s.name, description: s.description || '', content: s.content,
+      }));
+      if (conflictSkills.length > 0) {
+        try {
+          res.write(`data: ${JSON.stringify({ type: 'thinking', content: '\n\n🔍 檢查業務規則衝突...\n' })}\n\n`);
+          const conflictReport = await checkSkillConflicts(
+            userContent, finalPages, supplement ? [supplement] : [], conflictSkills,
+          );
+          if (conflictReport.conflicts.length > 0) {
+            res.write(`data: ${JSON.stringify({ type: 'conflict-report', conflicts: conflictReport.conflicts })}\n\n`);
+            const criticalCount = conflictReport.conflicts.filter(c => c.severity === 'critical').length;
+            if (criticalCount > 0) {
+              res.write(`data: ${JSON.stringify({ type: 'conflict-pause', message: `發現 ${criticalCount} 個關鍵衝突，30 秒後自動繼續生成` })}\n\n`);
+              // Wait briefly but don't actually block — auto-continue
+              await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+          }
+        } catch (e: any) {
+          console.warn('[chat] Skill conflict check failed:', e.message?.slice(0, 60));
+        }
       }
     }
 

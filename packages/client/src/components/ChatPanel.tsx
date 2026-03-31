@@ -480,6 +480,19 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             if (data.type === 'skills' && Array.isArray(data.skills)) {
               setActiveSkillNames(data.skills);
             }
+            // Handle skill conflict report
+            if (data.type === 'conflict-report' && Array.isArray(data.conflicts)) {
+              const conflictText = data.conflicts.map((c: any) => {
+                const icon = c.severity === 'critical' ? '🔴' : c.severity === 'warning' ? '🟡' : '🔵';
+                return `${icon} **${c.skillName}**：${c.rule}\n   ↳ 使用者：${c.userIntent}\n   💡 ${c.suggestion}`;
+              }).join('\n\n');
+              accThinking += '\n\n⚠️ **業務規則衝突檢測**\n\n' + conflictText + '\n';
+              setThinkingContent(prev => prev + '\n\n⚠️ **業務規則衝突檢測**\n\n' + conflictText + '\n');
+            }
+            if (data.type === 'conflict-pause') {
+              accThinking += '\n\n🛑 ' + (data.message || '發現關鍵衝突，自動繼續生成中...') + '\n';
+              setThinkingContent(prev => prev + '\n\n🛑 ' + (data.message || '發現關鍵衝突，自動繼續生成中...') + '\n');
+            }
             if (data.type === 'pages' && Array.isArray(data.pages)) {
               setLastGeneratedPages(data.pages);
               setThinkingContent(prev => prev + '\n\n📄 偵測到 ' + data.pages.length + ' 個頁面: ' + data.pages.join(', '));

@@ -147,18 +147,24 @@ ${pmText.slice(0, 2000)}
   onThinking(`\n\n---\n\n${qa.emoji} **${qa.name}**（${qa.role}）：\n\n`);
   let qaText = '';
   try {
+    // Build explicit skill rules list for David to compare against
+    const skillRulesList = skills.length > 0
+      ? `\n\n⚠️ 以下是專案知識庫（Skill）的業務規則，你必須逐條比對方案是否違反：\n${skills.slice(0, 5).map(s => `• 【${s.name}】${s.content.slice(0, 200)}`).join('\n')}\n`
+      : '';
+
     qaText = await callAIStream(`你是 ${qa.name}，QA 審查員。你剛聽完 ${pm.name} 和 ${ux.name} 的討論。
 ${skillsContext}
 客戶需求：「${userMessage.slice(0, 300)}」
 
 ${pm.name} 說：${pmText.slice(0, 800)}
 ${ux.name} 說：${uxText.slice(0, 800)}
-
-以 ${qa.name} 的口吻。⚠️ 控制在 10 行以內，直接點問題：
+${skillRulesList}
+以 ${qa.name} 的口吻。⚠️ 控制在 12 行以內，直接點問題：
 
 1. 漏掉的使用場景（2-3 個，每個 1 行）
 2. 哪個頁面描述太模糊？（指名 1-2 個）
 3. 導航死角？（1-2 個）
+${skills.length > 0 ? `4. ⚠️ 業務規則衝突：比對上面的 Skill 規則，指出方案中違反或遺漏的規則（指明【Skill 名稱】和具體規則）` : ''}
 
 語氣：code review 風格，直接指出問題。`, qa.name, 6000);
 

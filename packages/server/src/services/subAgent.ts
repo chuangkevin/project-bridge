@@ -7,14 +7,25 @@ import { PageAssignment } from './masterAgent';
  * Returns <div class="page" id="page-{name}" data-page="{name}">...</div>
  * with page-scoped <style> using .page-{name} prefix.
  */
+export interface SkillForSubAgent {
+  name: string;
+  content: string;
+}
+
 export async function generatePageFragment(
   apiKey: string,
   page: PageAssignment,
   cssVariables: string,
   sharedCss: string,
   designConvention: string,
+  skills: SkillForSubAgent[] = [],
 ): Promise<{ name: string; html: string; success: boolean; error?: string }> {
   const pageName = page.name;
+
+  // Build business rules section from skills
+  const businessRules = skills.length > 0
+    ? `\nBUSINESS RULES (from project knowledge base — follow these):\n${skills.map(s => `【${s.name}】${s.content}`).join('\n\n')}\n`
+    : '';
 
   const systemPrompt = `You are a senior frontend engineer. Generate a SINGLE PAGE for a multi-page prototype.
 
@@ -44,7 +55,7 @@ SHARED CSS (use these classes for consistent look):
 ${sharedCss || '/* use .container, .card, .btn-primary, .btn-secondary */'}
 
 ${designConvention ? `DESIGN SYSTEM (follow the design direction):\n${designConvention.slice(0, 5000)}\n` : ''}
-
+${businessRules}
 ⚠️⚠️⚠️ COLOR USAGE — ABSOLUTELY CRITICAL:
 - ALL colors MUST use CSS variables: var(--primary), var(--bg), var(--surface), var(--text), var(--text-secondary), var(--border), var(--header-bg), var(--nav-bg), var(--divider)
 - NEVER hardcode ANY hex color values (#XXXXXX) — always use var() references

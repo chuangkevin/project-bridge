@@ -1,12 +1,13 @@
 import { GenerationPlan, buildLocalPlan, PageAssignment } from './masterAgent';
 import { AGENTS } from './plannerAgent';
-import { generatePageFragment } from './subAgent';
+import { generatePageFragment, SkillForSubAgent } from './subAgent';
 import { assemblePrototype, fixNavigation } from './htmlAssembler';
 import { compileDesignTokens, DesignTokens } from './designTokenCompiler';
 import { assignBatchKeys, getGeminiApiKeyExcluding, markKeyBad } from './geminiKeys';
 import { sanitizeGeneratedHtml, injectConventionColors } from './htmlSanitizer';
 import { autoFixDesignViolations } from './designSystemValidator';
 import { validatePrototypeHtml, formatQaReport } from './htmlQaValidator';
+import { getActiveSkills } from '../routes/skills';
 import db from '../db/connection';
 
 export interface GenerationProgress {
@@ -46,6 +47,12 @@ export async function generateParallel(
 
   console.log('[parallel] Local plan ready:', plan.pages.length, 'pages, sharedCss:', plan.sharedCss.length, 'chars');
 
+  // Load active skills for sub-agent injection
+  const allSkills = getActiveSkills(projectId).map(s => ({
+    name: s.name, content: s.content,
+  }));
+  console.log('[parallel] Skills for sub-agents:', allSkills.length);
+
   const totalPages = plan.pages.length;
   const pageNames = plan.pages.map(p => p.name);
 
@@ -73,12 +80,16 @@ export async function generateParallel(
         message: `${devName} 正在製作「${page.name}」...`,
       });
 
+      // Select top 3 relevant skills for this page
+      const pageSkills = selectRelevantSkills(allSkills, page.name, page.spec);
+
       return generatePageFragment(
         key,
         page,
         plan.cssVariables,
         plan.sharedCss,
         designConvention,
+        pageSkills,
       ).then(async (result) => {
         if (result.success) {
           onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}`, message: `${devName} 完成了「${page.name}」✓` });
@@ -90,7 +101,7 @@ export async function generateParallel(
           const retryKey = getGeminiApiKeyExcluding(key);
           if (!retryKey) break;
           onProgress?.({ phase: 'generating', page: page.name, status: 'started', progress: `${pageIdx + 1}/${totalPages}`, message: `重試 ${retry + 1}` });
-          const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention);
+          const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention, pageSkills);
           if (retryResult.success) {
             onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}` });
             return retryResult;
@@ -167,4 +178,33 @@ export async function generateParallel(
     pages: pageNames,
     isMultiPage: pageNames.length > 1,
   };
+}
+
+/**
+ * Select top 3 most relevant skills for a page based on keyword overlap.
+ * Each skill content is truncated to 500 chars.
+ */
+function selectRelevantSkills(
+  allSkills: { name: string; content: string }[],
+  pageName: string,
+  pageSpec: string,
+): SkillForSubAgent[] {
+  if (allSkills.length === 0) return [];
+
+  const pageText = (pageName + ' ' + pageSpec).toLowerCase();
+  const scored = allSkills.map(skill => {
+    const keywords = (skill.name + ' ' + skill.content.slice(0, 200)).toLowerCase().split(/\s+/);
+    let score = 0;
+    for (const kw of keywords) {
+      if (kw.length >= 2 && pageText.includes(kw)) score++;
+    }
+    return { skill, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, 3).map(s => ({
+    name: s.skill.name,
+    content: s.skill.content.slice(0, 500) + (s.skill.content.length > 500 ? '...' : ''),
+  }));
 }
