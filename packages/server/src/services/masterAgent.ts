@@ -325,7 +325,7 @@ a.btn, button { cursor: pointer; }
 
   // Detect website type from user message for template selection
   const msg = userMessage.toLowerCase();
-  type SiteType = 'shopping' | 'travel' | 'education' | 'medical' | 'saas' | 'news' | 'generic';
+  type SiteType = 'shopping' | 'travel' | 'education' | 'medical' | 'saas' | 'news' | 'restaurant' | 'portfolio' | 'event' | 'realestate' | 'generic';
   let siteType: SiteType = 'generic';
   if (/購物|商城|電商|shop|store|ecommerce/i.test(msg)) siteType = 'shopping';
   else if (/旅遊|旅行|travel|tour|訂房|住宿|hotel/i.test(msg)) siteType = 'travel';
@@ -333,6 +333,10 @@ a.btn, button { cursor: pointer; }
   else if (/醫療|診所|clinic|hospital|預約|掛號/i.test(msg)) siteType = 'medical';
   else if (/後台|admin|dashboard|管理|CMS/i.test(msg)) siteType = 'saas';
   else if (/新聞|news|部落格|blog|文章/i.test(msg)) siteType = 'news';
+  else if (/餐廳|美食|food|restaurant|menu|菜單|訂位|外送/i.test(msg)) siteType = 'restaurant';
+  else if (/作品集|portfolio|設計師|攝影|gallery|展示/i.test(msg)) siteType = 'portfolio';
+  else if (/活動|event|報名|conference|研討會|工作坊/i.test(msg)) siteType = 'event';
+  else if (/房屋|租屋|買屋|房地產|real.?estate|property|物件/i.test(msg)) siteType = 'realestate';
 
   const pages: PageAssignment[] = pageNames.map((name, i) => {
     const otherPages = pageNames.filter(p => p !== name);
@@ -350,34 +354,34 @@ a.btn, button { cursor: pointer; }
     // Add page-specific content based on site type + page name
     const templateSpecs: Record<string, Record<string, string>> = {
       shopping: {
-        '首頁': '- Hero：搜尋框 + 一行標語（絕不用大面積純色背景）\n- 分類 .tag 按鈕（全部、電子產品、服飾、家居、美妝）\n- 熱門商品 .grid-4，每個 .card 含 .card-img、名稱、NT$ 價格、加入購物車按鈕\n- 點「查看」跳轉商品詳情：onclick="showPage(\'商品詳情\')"',
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'商品詳情\')" 連結\n- Hero：搜尋框 + 一行標語（絕不用大面積純色背景）\n- 分類 .tag 按鈕（全部、電子產品、服飾、家居、美妝）\n- 熱門商品 .grid-4，每個 .card 含 .card-img、名稱、NT$ 價格、加入購物車按鈕\n- 點「查看」跳轉商品詳情：onclick="showPage(\'商品詳情\')"',
         '商品列表': '- .layout-sidebar（左 240px 篩選 + 右 .grid-3 商品）\n- 篩選：分類 checkbox、價格範圍、品牌\n- 排序下拉（最新/價格/熱門）\n- 分頁 .pagination\n- 每卡：圖+名+價+星+加入購物車按鈕',
         '商品詳情': '- 左：大圖+縮圖列表\n- 右：名稱(24px)、價格(.card-price)、描述、規格 .table\n- 數量選擇器(-/+)、加入購物車 .btn-primary、立即購買 .btn-cta onclick="showPage(\'購物車\')"\n- Tabs：描述/規格/評價\n- 推薦商品 .grid-4',
         '購物車': '- .table：商品圖+名+單價+數量+小計+刪除\n- 右側摘要：小計+運費+折扣碼+總金額\n- 繼續購物 .btn-secondary onclick="showPage(\'商品列表\')"\n- 前往結帳 .btn-cta onclick="showPage(\'結帳\')"\n- 空狀態：icon+"購物車是空的"',
         '結帳': '- .step-indicator（1.配送 2.付款 3.確認）\n- 配送 .form-group：姓名/電話/地址(縣市/區/路)/備註\n- 付款 radio：信用卡/ATM/超商取貨\n- 右側摘要\n- 確認下單 .btn-cta',
       },
       travel: {
-        '首頁': '- Hero：搜尋列（目的地+日期+人數+搜尋 .btn-cta）\n- 熱門目的地 .grid-3：.card 有目的地照片+名稱+「X天Y夜」badge+價格\n- 季節推薦 .grid-4\n- 點卡片 onclick="showPage(\'行程詳情\')"',
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'行程詳情\')" 連結\n- Hero：搜尋列（目的地+日期+人數+搜尋 .btn-cta）\n- 熱門目的地 .grid-3：.card 有目的地照片+名稱+「X天Y夜」badge+價格\n- 季節推薦 .grid-4\n- 點卡片 onclick="showPage(\'行程詳情\')"',
         '行程列表': '- .layout-sidebar（篩選：目的地/天數/價格範圍/主題 tag）\n- .grid-3 行程卡：目的地圖+標題+天數+價格+.rating 星+出發日期 badge\n- 排序+分頁\n- 點卡 onclick="showPage(\'行程詳情\')"',
         '行程詳情': '- Hero 大圖+行程名稱+價格+報名 .btn-cta onclick="showPage(\'訂購確認\')"\n- .timeline 行程表（Day 1/2/3 各有景點+餐食+住宿）\n- 包含項目列表（交通/住宿/餐食/門票）\n- 注意事項 .accordion\n- 相關行程 .grid-3',
         '訂購確認': '- .step-indicator（1.選擇 2.旅客資料 3.付款）\n- 旅客 .form-group：姓名/護照號/生日/電話/Email/特殊需求\n- 付款方式 radio\n- 右側行程摘要+總金額\n- 確認 .btn-cta',
         '我的訂單': '- .table 訂單列表：訂單號/行程名/出發日/金額/狀態 .badge（已確認/進行中/已完成）\n- 點訂單展開詳情\n- 空狀態："尚無訂單，去探索世界吧！" + 按鈕 onclick="showPage(\'首頁\')"',
       },
       education: {
-        '首頁': '- Hero：搜尋+標語「開啟學習之旅」\n- 分類 .tag（程式/設計/語言/商業/資料科學）\n- 精選課程 .grid-4：.card 有課程圖+標題+講師+價格+.rating\n- 點卡 onclick="showPage(\'課程詳情\')"',
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'課程詳情\')" 連結\n- Hero：搜尋+標語「開啟學習之旅」\n- 分類 .tag（程式/設計/語言/商業/資料科學）\n- 精選課程 .grid-4：.card 有課程圖+標題+講師+價格+.rating\n- 點卡 onclick="showPage(\'課程詳情\')"',
         '課程列表': '- .layout-sidebar（分類/價格/程度/語言 篩選）\n- .grid-3 課程卡：縮圖+標題+講師名+NT$價格+.rating 星+學生數 badge\n- 排序+分頁\n- 點卡 onclick="showPage(\'課程詳情\')"',
         '課程詳情': '- 課程影片預覽區（灰色佔位）+標題+講師\n- 側邊購買卡：價格+加入購物車+立即開始\n- .accordion 課程大綱（第1章/第2章...每章有多個課堂）\n- 講師介紹\n- 學生評價列表',
         '我的學習': '- 學習中課程 .grid-2：.card 有課程圖+標題+.progress-bar 進度+繼續學習 .btn-primary\n- 已完成課程+證書下載\n- 空狀態 onclick="showPage(\'課程列表\')"',
         '個人設定': '- .form-group：頭像上傳+姓名+Email+密碼\n- 通知偏好 .toggle\n- 付款方式管理\n- 學習目標設定',
       },
       medical: {
-        '首頁': '- 科別 .grid-3：.card icon+科別名（內科/外科/牙科/眼科/兒科/皮膚科）\n- 快速預約 .btn-cta onclick="showPage(\'預約掛號\')"\n- 醫師推薦 .grid-4：照片+姓名+專長\n- 最新公告列表',
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'預約掛號\')" 連結\n- 科別 .grid-3：.card icon+科別名（內科/外科/牙科/眼科/兒科/皮膚科）\n- 快速預約 .btn-cta onclick="showPage(\'預約掛號\')"\n- 醫師推薦 .grid-4：照片+姓名+專長\n- 最新公告列表',
         '醫師列表': '- .layout-sidebar（科別篩選+星期選擇）\n- .grid-3 醫師卡：照片+姓名+科別 .badge+專長+可約時段\n- 點「預約」onclick="showPage(\'預約掛號\')"',
         '預約掛號': '- .step-indicator（1.選科別 2.選醫師 3.選時段 4.確認）\n- 科別 .tag 選擇\n- 醫師卡片+看診時間 .calendar-grid\n- 時段選擇（上午/下午/晚上各 3-4 個時段 .tag）\n- 確認 .form-group（姓名/身分證/電話/症狀描述）',
         '看診紀錄': '- .table：日期/醫師/科別/診斷/狀態 .badge（已完成/已取消）\n- 展開看詳情+下載報告 .btn-secondary\n- 空狀態 onclick="showPage(\'預約掛號\')"',
       },
       saas: {
-        '儀表板': '- .grid-4 .stat-card（營收/用戶/訂單/轉換率 .stat-value + .stat-label）\n- 折線圖區域（用 div 佔位 300px 高 + 標題）\n- 最近活動 .table（5 筆：時間+操作+用戶+狀態）',
+        '儀表板': '- ⚠️ 每張卡片必須有 onclick="showPage(\'詳情編輯\')" 連結\n- .grid-4 .stat-card（營收/用戶/訂單/轉換率 .stat-value + .stat-label）\n- 折線圖區域（用 div 佔位 300px 高 + 標題）\n- 最近活動 .table（5 筆：時間+操作+用戶+狀態）',
         '列表管理': '- 頂部：搜尋框+篩選下拉+新增 .btn-primary\n- .table：checkbox+ID+名稱+狀態 .badge+建立日期+操作（編輯/刪除）\n- 批次操作列\n- .pagination\n- 點「編輯」onclick="showPage(\'詳情編輯\')"',
         '詳情編輯': '- 頂部 breadcrumb（列表 > 編輯 #123）\n- Tabs（基本資料/進階設定/操作記錄）\n- .form-group 欄位：名稱/描述/分類/狀態/標籤\n- 儲存 .btn-primary + 取消 .btn-secondary\n- 操作記錄 .timeline',
         '設定': '- 一般設定：網站名稱/Logo/語言 .form-group\n- 通知設定：Email/.toggle 開關\n- 安全設定：密碼變更/兩步驟驗證 .toggle\n- API 設定：API Key 顯示+重新生成',
@@ -390,10 +394,38 @@ a.btn, button { cursor: pointer; }
         '個人設定': '- .form-group：姓名/借書證號/Email/電話\n- 通知偏好 .toggle（到期提醒/新書通知/預約到貨）\n- 借閱偏好：最愛分類 .tag 選擇\n- 變更密碼 .form-group',
       },
       news: {
-        '首頁': '- 頭條新聞 Hero .card（大圖+標題+摘要+時間）\n- 分類 .tag（政治/財經/科技/娛樂/生活/國際）\n- 最新文章 .grid-3：.card 圖+標題+摘要+日期+作者\n- 點卡 onclick="showPage(\'文章內容\')"',
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'文章內容\')" 連結\n- 頭條新聞 Hero .card（大圖+標題+摘要+時間）\n- 分類 .tag（政治/財經/科技/娛樂/生活/國際）\n- 最新文章 .grid-3：.card 圖+標題+摘要+日期+作者\n- 點卡 onclick="showPage(\'文章內容\')"',
         '文章列表': '- 分類 .tag 切換\n- 文章列表（圖左+文右）：標題+摘要(2行)+日期+作者+分類 .badge\n- 側邊欄：熱門文章排行+標籤雲\n- .pagination\n- 點文章 onclick="showPage(\'文章內容\')"',
         '文章內容': '- 文章標題(24px)+作者+日期+分類 .badge\n- 正文內容（3-4 段落+引用區塊+圖片）\n- 標籤 .tag 列表\n- 分享按鈕列\n- 相關文章 .grid-3',
         '關於我們': '- 媒體介紹段落\n- 團隊成員 .grid-4：照片+姓名+職稱\n- 聯絡 .form-group：姓名/Email/主題/訊息/送出 .btn-primary',
+      },
+      restaurant: {
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'菜單\')" 連結\n- Hero：餐廳大圖+一句標語+訂位 .btn-cta\n- 招牌菜 .grid-3：.card 有菜品圖+名稱+價格+「加入」按鈕\n- 營業資訊（地址+電話+營業時間）\n- 點擊菜品 onclick="showPage(\'菜單\')"',
+        '菜單': '- 分類 .tag（主食/前菜/甜點/飲料）\n- .grid-2 菜品卡：圖+名+描述+價格+加入購物車\n- 每張卡片 onclick="showPage(\'菜品詳情\')"',
+        '菜品詳情': '- 大圖+名稱+價格+詳細描述\n- 食材列表\n- 過敏原提醒\n- 加入購物車 .btn-cta + 數量選擇',
+        '訂位': '- .step-indicator（1.日期 2.人數 3.資料 4.確認）\n- .calendar-grid 選日期\n- 時段 .tag 選擇\n- .form-group 姓名/電話/備註\n- 確認 .btn-cta',
+        '關於我們': '- 餐廳故事段落\n- 主廚介紹 .card\n- 環境照片 .grid-3\n- 聯絡表單 .form-group',
+      },
+      portfolio: {
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'作品詳情\')" 連結\n- Hero：設計師名/標語+大圖\n- 精選作品 .grid-3：.card 有作品圖+名稱+分類 .badge\n- 點擊 onclick="showPage(\'作品詳情\')"',
+        '作品總覽': '- 分類篩選 .tag（全部/平面/網頁/UI/攝影）\n- .grid-3 作品卡：圖+名+分類+年份\n- 點擊 onclick="showPage(\'作品詳情\')"',
+        '作品詳情': '- 大圖展示區\n- 專案名稱+年份+分類 .badge\n- 設計理念段落\n- 技術細節\n- 相關作品 .grid-3',
+        '關於': '- 個人介紹+照片\n- 技能 .tag 列表\n- 經歷 .timeline\n- 聯絡方式',
+        '聯絡': '- .form-group 姓名/Email/主題/訊息\n- 送出 .btn-primary\n- 社群連結列',
+      },
+      event: {
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'報名\')" 連結\n- Hero：活動名稱+日期+地點+報名 .btn-cta\n- 活動亮點 .grid-3：.stat-card icon+數字+說明\n- 講者 .grid-4：照片+姓名+職稱\n- onclick="showPage(\'報名\')"',
+        '議程': '- .timeline 時間表（每個時段：時間+講題+講者）\n- 分日 .tag 切換（Day 1/Day 2）\n- 場地地圖（div 佔位）',
+        '講者': '- .grid-3 講者卡：照片+姓名+公司+職稱+簡介\n- 點擊展開詳細經歷',
+        '報名': '- .step-indicator（1.票種 2.資料 3.付款 4.確認）\n- 票種選擇 .card（早鳥/一般/VIP）\n- .form-group 姓名/Email/公司/職稱\n- 付款 .btn-cta',
+        '常見問題': '- .accordion FAQ 列表\n- 聯絡主辦 .form-group',
+      },
+      realestate: {
+        '首頁': '- ⚠️ 每張卡片必須有 onclick="showPage(\'物件詳情\')" 連結\n- 搜尋列（地區+類型+價格範圍+搜尋 .btn-cta）\n- 精選物件 .grid-3：.card 有物件圖+地址+坪數+價格\n- 點擊 onclick="showPage(\'物件詳情\')"',
+        '物件列表': '- .layout-sidebar（篩選：地區/類型/坪數/價格）\n- .grid-3 物件卡：圖+地址+格局+坪數+價格+刊登日 .badge\n- 排序+分頁',
+        '物件詳情': '- 大圖+更多照片 .grid-3\n- 基本資訊 .table（地址/格局/坪數/樓層/屋齡）\n- 特色描述\n- 周邊設施\n- 聯絡經紀人 .btn-cta onclick="showPage(\'聯絡\')"',
+        '聯絡': '- 經紀人卡片（照片+姓名+電話）\n- .form-group 留言表單\n- 預約看屋 .calendar-grid',
+        '收藏': '- 已收藏物件 .grid-3\n- 空狀態 onclick="showPage(\'物件列表\')"',
       },
     };
 

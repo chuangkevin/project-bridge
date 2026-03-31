@@ -1202,7 +1202,7 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
         const plan = await planAndReview(planUserMsg, (text) => {
           res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
           aiThinkingText += text;
-        }, planSkills);
+        }, planSkills, history);
         clearInterval(planHeartbeat);
 
         finalPages = plan.pages.map(p => p.name);
