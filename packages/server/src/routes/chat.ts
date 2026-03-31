@@ -1041,9 +1041,30 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
         const planSkills = getActiveSkills(projectId as string).map(s => ({
           name: s.name, description: s.description || '', content: s.content,
         }));
-        // Add design direction context to user message for planning agents
+        // Add document analysis results to user message for planning agents
         const earlyDesignRow = db.prepare('SELECT description, tokens, inherit_global FROM design_profiles WHERE project_id = ?').get(projectId) as any;
         let planUserMsg = userContent;
+
+        // Inject uploaded document analysis so agents know about design specs
+        const docsWithAnalysis = specRowsEarly.filter((r: any) => r.analysis_result);
+        if (docsWithAnalysis.length > 0) {
+          planUserMsg += '\n\n【上傳的設計文件分析】';
+          for (const doc of docsWithAnalysis) {
+            try {
+              const analysis = JSON.parse(doc.analysis_result as string);
+              const pageSummary = (analysis.pages || []).map((p: any) => {
+                const name = p.name || p;
+                const components = (p.components || []).join('、');
+                return `  • ${name}${components ? `：${components}` : ''}`;
+              }).join('\n');
+              planUserMsg += `\n文件「${doc.original_name}」(${doc.intent})：\n${pageSummary}`;
+              if (analysis.shared?.components?.length) {
+                planUserMsg += `\n  共用元件：${analysis.shared.components.join('、')}`;
+              }
+            } catch { /* skip */ }
+          }
+        }
+
         if (earlyDesignRow?.description) {
           planUserMsg += `\n\n【設計方向】${earlyDesignRow.description}`;
           try {
@@ -1149,19 +1170,27 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
     // If 2+ pages, use parallel pipeline for speed
     const hasAnalysisData = specRowsEarly.some((r: any) => r.analysis_result);
     if (isMultiPage && finalPages.length >= 2) {
-      // Find the best analysis_result, or build minimal one from pages
-      let analysisData: any = null;
+      // Build analysis data — ALWAYS use finalPages from plan as the page list
+      // (analysis_result from spec rows may have different/fewer pages than what the plan decided)
+      let analysisData: any = {
+        pages: finalPages.map(p => ({ name: p, description: p, components: [] })),
+        shared: { components: [], styles: {} },
+      };
+      // Merge supplementary data from spec analysis if available
       for (const row of specRowsEarly) {
         if (row.analysis_result) {
-          try { analysisData = JSON.parse(row.analysis_result); break; } catch { /* skip */ }
+          try {
+            const parsed = JSON.parse(row.analysis_result);
+            if (parsed.shared) analysisData.shared = parsed.shared;
+            // Merge component info for matching pages
+            for (const ap of (parsed.pages || [])) {
+              const match = analysisData.pages.find((p: any) => p.name === (ap.name || ap));
+              if (match && ap.components) match.components = ap.components;
+              if (match && ap.description) match.description = ap.description;
+            }
+            break;
+          } catch { /* skip */ }
         }
-      }
-      // If no analysis data, build minimal structure from finalPages
-      if (!analysisData) {
-        analysisData = {
-          pages: finalPages.map(p => ({ name: p, description: p, components: [] })),
-          shared: { components: [], styles: {} },
-        };
       }
 
       {
