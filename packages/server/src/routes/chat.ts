@@ -733,7 +733,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
       // Inject uploaded document analysis
       const qaSpecRows = (db.prepare(
-        'SELECT original_name, analysis_result FROM uploaded_documents WHERE project_id = ? AND analysis_result IS NOT NULL'
+        'SELECT original_name, analysis_result FROM uploaded_files WHERE project_id = ? AND analysis_result IS NOT NULL'
       ).all(projectId) as any[]);
       if (qaSpecRows.length > 0) {
         richQaPrompt += '\n\n=== 上傳的文件分析 ===\n';
