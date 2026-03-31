@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
 import AnalysisPreviewPanel from './AnalysisPreviewPanel';
 import { compressImage } from '../utils/imageCompress';
@@ -809,7 +810,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   <div style={styles.answerBubble}>
                     <span style={styles.answerLabel}>💬 回答</span>
                     <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     </div>
                   </div>
                 ) : msg.messageType === 'component' ? (
@@ -939,7 +940,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               </div>
             ) : (
               <div style={{ ...styles.assistantBubble, fontSize: '14px', lineHeight: '1.6' }}>
-                <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingContent}</ReactMarkdown>
                 <span style={styles.cursor}>|</span>
               </div>
             )}
