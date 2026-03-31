@@ -72,6 +72,9 @@ export function assemblePrototype(
     //    but they often do. Assembler provides its own.
     html = stripNavHeaderFooter(html);
 
+    // 2.5. Replace external image URLs with CSS placeholder divs
+    html = replaceExternalImages(html);
+
     // 3. Extract inner content from the page wrapper div
     //    We will re-wrap it ourselves to guarantee correct structure.
     html = extractInnerContent(html, f.name);
@@ -153,6 +156,26 @@ window.addEventListener('message', function(e) {
 </script>
 </body>
 </html>`;
+}
+
+// ── Helper: replace external image URLs with CSS placeholders ─
+function replaceExternalImages(html: string): string {
+  // Replace <img src="https://..."> with div placeholders
+  const count = (html.match(/<img[^>]*src="https?:\/\/[^"]+"/gi) || []).length;
+  if (count === 0) return html;
+
+  html = html.replace(/<img[^>]*src="https?:\/\/[^"]*"[^>]*>/gi, (match) => {
+    // Extract alt text if available
+    const altMatch = match.match(/alt="([^"]*)"/);
+    const alt = altMatch?.[1] || '';
+    // Extract height/aspect-ratio if in style
+    const styleMatch = match.match(/style="([^"]*)"/);
+    const style = styleMatch?.[1] || '';
+    const hasAspect = style.includes('aspect-ratio');
+    return `<div style="background:var(--divider, #e5e7eb);${hasAspect ? style : 'aspect-ratio:16/9;'}border-radius:var(--radius-md, 8px);display:flex;align-items:center;justify-content:center;color:var(--text-muted, #9ca3af);font-size:13px;">${alt || '📷'}</div>`;
+  });
+  console.log(`[assembler] Replaced ${count} external <img> with placeholders`);
+  return html;
 }
 
 // ── Helper: strip nav/header/footer from fragment ────────────

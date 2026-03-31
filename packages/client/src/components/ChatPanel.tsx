@@ -474,8 +474,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             }
             // Handle thinking transparency events
             if (data.type === 'thinking' && data.content) {
-              accThinking += data.content;
-              setThinkingContent(prev => prev + data.content);
+              // Format PAGES: line into a nice display
+              const formatted = data.content.replace(/^PAGES:\s*(.+)$/gm, '\n📄 **方案確定：** $1');
+              accThinking += formatted;
+              setThinkingContent(prev => prev + formatted);
             }
             if (data.type === 'skills' && Array.isArray(data.skills)) {
               setActiveSkillNames(data.skills);

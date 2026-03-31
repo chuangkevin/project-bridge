@@ -78,7 +78,9 @@ LAYOUT RULES (CRITICAL — prevents broken layouts):
 - NEVER write inline style for width, display, grid, flex — use the shared classes
 - NEVER use position:absolute/fixed for layout (only for small overlays)
 - NEVER use writing-mode: vertical or any vertical text layout
+- ⚠️ NEVER use <img src="https://..."> or ANY external image URL (no placeholder.com, no picsum.photos, no unsplash)
 - Card images: <div class="card-img" style="background:var(--divider);height:180px;"></div>
+- Hero/banner: <div style="background:var(--divider);aspect-ratio:16/9;border-radius:var(--radius-md);"></div>
 - Tables: ALWAYS use .table class
 - Tags/badges: use .tag or .badge with flex-wrap:wrap on parent
 - Forms: use .form-group > .form-label + .form-input pattern. ALL inputs must be full-width.

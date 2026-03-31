@@ -108,7 +108,7 @@ ${skillsContext}
 4. 2-3 個潛在的坑（每個 1 行）
 5. 建議頁面名稱（2-6 字，一行列完）
 
-語氣像開會：精準、不囉唆。`, pm.name, 8000);
+語氣像開會：精準、不囉唆。`, pm.name, 10000);
 
     fullDiscussion += `${pm.name}（${pm.role}）：\n${pmText}\n\n`;
   } catch {
@@ -135,7 +135,7 @@ ${pmText.slice(0, 2000)}
 
 最後一行：PAGES: 頁面1, 頁面2, 頁面3, ...
 
-精簡！不要展開每個元件的詳細說明。`, ux.name, 8000);
+精簡！不要展開每個元件的詳細說明。`, ux.name, 10000);
 
     fullDiscussion += `${ux.name}（${ux.role}）：\n${uxText}\n\n`;
   } catch {
@@ -166,7 +166,7 @@ ${skillRulesList}
 3. 導航死角？（1-2 個）
 ${skills.length > 0 ? `4. ⚠️ 業務規則衝突：比對上面的 Skill 規則，指出方案中違反或遺漏的規則（指明【Skill 名稱】和具體規則）` : ''}
 
-語氣：code review 風格，直接指出問題。`, qa.name, 6000);
+語氣：code review 風格，直接指出問題。`, qa.name, 10000);
 
     fullDiscussion += `${qa.name}（${qa.role}）：\n${qaText}\n\n`;
   } catch {
@@ -192,7 +192,7 @@ ${qa.name}（QA 審查員）：${qaText.slice(0, 1000)}
 3. 最終頁面清單（「• 頁面名：3 個核心功能」格式，每頁 1 行）
 4. 「開始製作，分配任務。」
 
-語氣果斷。`, tech.name, 6000);
+語氣果斷。`, tech.name, 10000);
 
     fullDiscussion += `${tech.name}（${tech.role}）：\n${techText}\n\n`;
   } catch {
