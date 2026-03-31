@@ -124,16 +124,46 @@ export async function generateParallel(
   }
   console.log('[parallel] Results:', fragments.filter(f => f.success).length, 'ok,', failedCount, 'failed');
 
-  // Step 2.5: QA — nav/header/footer stripping is now done in assembler
-  // (assembler strips ALL nav/header/footer aggressively, not just specific classes)
+  // Step 2.5: QA — auto-retry thin/failed pages (one round)
+  const retryTargets: number[] = [];
+  for (let fi = 0; fi < fragments.length; fi++) {
+    const frag = fragments[fi];
+    if (!frag.success) {
+      retryTargets.push(fi);
+      continue;
+    }
+    // Strip nav/header to check real content (assembler will do this too)
+    const stripped = frag.html
+      .replace(/<nav[\s>][\s\S]{0,2000}?<\/nav>/gi, '')
+      .replace(/<header[\s>][\s\S]{0,2000}?<\/header>/gi, '')
+      .replace(/<footer[\s>][\s\S]{0,2000}?<\/footer>/gi, '');
+    const textContent = stripped.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    if (textContent.length < 80) {
+      retryTargets.push(fi);
+    }
+  }
 
-  // Step 2.6: QA — check content quality, log thin pages
-  for (const frag of fragments) {
-    if (frag.success) {
-      const textContent = frag.html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-      if (textContent.length < 100) {
-        console.warn(`[parallel-qa] Page "${frag.name}" is thin: only ${textContent.length} chars of text`);
-        onProgress?.({ phase: 'generating', page: frag.name, status: 'error', message: `⚠️ ${frag.name} 內容不足，可能需要微調` });
+  if (retryTargets.length > 0) {
+    console.log(`[parallel-qa] Retrying ${retryTargets.length} thin/failed pages:`, retryTargets.map(i => fragments[i].name));
+    for (const fi of retryTargets) {
+      const page = plan.pages[fi];
+      if (!page) continue;
+      const retryKey = getGeminiApiKeyExcluding('');
+      if (!retryKey) continue;
+      const pageSkills = selectRelevantSkills(allSkills, page.name, page.spec);
+      onProgress?.({ phase: 'generating', page: page.name, status: 'started', message: `🔄 重新生成「${page.name}」...` });
+      try {
+        const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention, pageSkills);
+        if (retryResult.success) {
+          const retryText = retryResult.html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+          if (retryText.length > (fragments[fi].success ? 80 : 0)) {
+            fragments[fi] = retryResult;
+            onProgress?.({ phase: 'generating', page: page.name, status: 'done', message: `✅ 重新生成「${page.name}」成功` });
+            console.log(`[parallel-qa] Retry success: "${page.name}" now ${retryText.length} chars`);
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[parallel-qa] Retry failed for "${page.name}":`, e.message?.slice(0, 50));
       }
     }
   }
