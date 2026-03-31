@@ -1905,9 +1905,18 @@ router.get('/:id/conversations', (req: Request, res: Response) => {
 
     const conversations = db.prepare(
       'SELECT * FROM conversations WHERE project_id = ? ORDER BY created_at ASC'
-    ).all(req.params.id);
+    ).all(req.params.id) as any[];
 
-    return res.json(conversations);
+    // Don't send full HTML content for generate/micro-adjust messages (can be 50KB+)
+    // Frontend only needs to know the type to render the right card
+    const trimmed = conversations.map(c => {
+      if ((c.message_type === 'generate' || c.message_type === 'micro-adjust' || c.message_type === 'element-adjust') && c.role === 'assistant') {
+        return { ...c, content: `[${c.message_type}]` };
+      }
+      return c;
+    });
+
+    return res.json(trimmed);
   } catch (err: any) {
     console.error('Error getting conversations:', err);
     return res.status(500).json({ error: 'Failed to get conversations' });
