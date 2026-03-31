@@ -224,6 +224,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // If user is clearly requesting a new thing, DON'T downgrade.
     const trimmed = message.trim().toLowerCase();
     const hasGenerateKeywords = /我要|我想要|請做|幫我做|生成|建立|做一個|設計|create|make|build|generate|給我|產生|做出/i.test(trimmed);
+    const hasModificationKeywords = /加上|改成|調整|刪掉|拿掉|換成|移到|加個|加一個|修改|移除|替換|插入/i.test(trimmed);
     const hasTypeKeywords = /網站|網頁|頁面|系統|平台|app|應用|介面|dashboard|後台|前台|landing/i.test(trimmed);
     const isObviousGenerate = hasGenerateKeywords && hasTypeKeywords;
 
@@ -239,9 +240,17 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // Gate isObviousGenerate: only when no prototype exists OR forceRegenerate
     const gatedObviousGenerate = isObviousGenerate && (!currentPrototype || effectiveForceRegenerate);
 
+    // Direct element-adjust routing when targetBridgeId is present
+    const { targetBridgeId, targetHtml } = req.body;
+    if (targetBridgeId && currentPrototype) {
+      // will be handled by element-adjust path later
+    }
+
     // Classify intent — skip AI call if obvious generate (saves 1 API call)
     let intent: string;
-    if (isObviousGenerate) {
+    if (targetBridgeId && currentPrototype) {
+      intent = 'element-adjust';
+    } else if (isObviousGenerate) {
       intent = hasShell ? 'in-shell' : 'full-page';
     } else if (gatedObviousGenerate) {
       intent = hasShell ? 'in-shell' : 'full-page';
@@ -256,8 +265,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     if (isPageRequest) {
       intent = 'full-page';
     } else if (currentPrototype && !effectiveForceRegenerate && (intent === 'full-page' || intent === 'in-shell')) {
-      // If user sends a clear generation request (isObviousGenerate), treat as full regenerate
-      if (isObviousGenerate) {
+      // If modification keywords detected on existing prototype, force micro-adjust
+      if (hasModificationKeywords) {
+        intent = 'micro-adjust';
+      } else if (isObviousGenerate) {
         intent = 'full-page';
         // Don't downgrade — user explicitly wants to generate something new
       } else {
@@ -559,6 +570,114 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
         res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: 'micro-adjust', intent: 'micro-adjust' })}\n\n`);
       }
+      res.end();
+      return;
+    }
+
+    // ─── ELEMENT-ADJUST PATH ─────────────────────────
+    if (intent === 'element-adjust' && currentPrototype) {
+      const { findElementByBridgeId, replaceElementByBridgeId } = await import('../services/elementMatcher');
+
+      // Parse targetBridgeId and instruction from userContent
+      // Expected format from intent classifier: "[bridge-id:xxx] actual instruction"
+      const bridgeIdMatch = userContent.match(/\[bridge-id:([^\]]+)\]\s*/);
+      const targetBridgeId = bridgeIdMatch ? bridgeIdMatch[1].trim() : null;
+      const instruction = bridgeIdMatch ? userContent.replace(bridgeIdMatch[0], '').trim() : userContent;
+
+      if (!targetBridgeId) {
+        res.write(`data: ${JSON.stringify({ error: '缺少目標元素 ID (data-bridge-id)' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Find the target element in current prototype
+      const elementResult = findElementByBridgeId(currentPrototype.html, targetBridgeId);
+      if (!elementResult.found || !elementResult.outerHtml) {
+        res.write(`data: ${JSON.stringify({ error: `找不到元素: ${targetBridgeId}` })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Save user message
+      const userMsgId = uuidv4();
+      db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(userMsgId, projectId, 'user', userContent, 'user');
+
+      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '修改元素中...' })}\n\n`);
+
+      // Load and fill prompt
+      const elementPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/element-adjust.txt'), 'utf-8')
+        .replace('{targetHtml}', elementResult.outerHtml)
+        .replace('{instruction}', instruction);
+
+      // Call Gemini with auto-retry on 429
+      let eaKey = apiKey;
+      let eaRetries = 0;
+      let modifiedElement = '';
+      while (eaRetries <= 2) {
+        try {
+          const genai = new GoogleGenerativeAI(eaKey);
+          const model = genai.getGenerativeModel({
+            model: getGeminiModel(),
+            systemInstruction: elementPrompt,
+            generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
+          });
+
+          const result = await model.generateContent(instruction);
+          try { trackUsage(eaKey, getGeminiModel(), 'element-adjust', result.response.usageMetadata); } catch {}
+
+          modifiedElement = result.response.text().trim();
+          // Strip markdown fences if present
+          const fenceMatch = modifiedElement.match(/```(?:html)?\s*([\s\S]*?)```/i);
+          if (fenceMatch) modifiedElement = fenceMatch[1].trim();
+          break;
+        } catch (err: any) {
+          const msg = err?.message || '';
+          const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
+          if (isRateLimit && eaRetries < 2) {
+            const altKey = getGeminiApiKeyExcluding(eaKey);
+            if (altKey) {
+              console.warn(`[element-adjust] 429 on key ...${eaKey.slice(-4)}, retrying with ...${altKey.slice(-4)}`);
+              eaKey = altKey;
+              eaRetries++;
+              continue;
+            }
+          }
+          console.error('Element-adjust error:', err);
+          res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+          res.end();
+          return;
+        }
+      }
+
+      if (!modifiedElement) {
+        res.write(`data: ${JSON.stringify({ error: 'AI 未回傳修改結果' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Replace element in full prototype HTML
+      let newHtml = replaceElementByBridgeId(currentPrototype.html, targetBridgeId, modifiedElement);
+      newHtml = sanitizeGeneratedHtml(newHtml, newHtml.includes('data-page='));
+      { const { html: autoFixedHtml, fixes } = autoFixDesignViolations(newHtml); newHtml = autoFixedHtml; if (fixes.length > 0) console.log('[design-validator] Auto-fixes applied:', fixes); }
+      if (designConvention) newHtml = injectConventionColors(newHtml, designConvention);
+
+      // Save as new version
+      const assistantMsgId = uuidv4();
+      db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(assistantMsgId, projectId, 'assistant', `[Element-adjust: ${targetBridgeId}] ${instruction}`, 'element-adjust');
+
+      const maxVersion = db.prepare('SELECT MAX(version) as maxV FROM prototype_versions WHERE project_id = ?').get(projectId) as any;
+      const newVersion = (maxVersion?.maxV || 0) + 1;
+      db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+      const versionId = uuidv4();
+      const pageMatches = [...newHtml.matchAll(/data-page="([^"]+)"/g)].map(m => m[1]);
+      const isMulti = pageMatches.length > 1;
+      db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(versionId, projectId, assistantMsgId, newHtml, newVersion, isMulti ? 1 : 0, JSON.stringify(pageMatches));
+      db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+      triggerQualityScoring(versionId, newHtml, apiKey);
+
+      res.write(`data: ${JSON.stringify({ content: `✓ 已修改元素 (${targetBridgeId})` })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, html: newHtml, messageType: 'element-adjust', intent: 'element-adjust', isMultiPage: isMulti, pages: pageMatches })}\n\n`);
       res.end();
       return;
     }

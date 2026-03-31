@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { BRIDGE_SCRIPT } from '../utils/bridgeScript';
 
-export type InteractionMode = 'browse' | 'annotate' | 'api-binding' | 'visual-edit';
+export type InteractionMode = 'browse' | 'annotate' | 'api-binding' | 'visual-edit' | 'element-select';
 
 interface Props {
   html: string | null;
@@ -23,6 +23,9 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
   const handleMessage = useCallback((e: MessageEvent) => {
     if (!e.data || !e.data.type) return;
     if (e.data.type === 'element-click' && (effectiveMode === 'annotate' || effectiveMode === 'api-binding') && onElementClick) {
+      onElementClick(e.data);
+    }
+    if (e.data.type === 'element-selected' && effectiveMode === 'element-select' && onElementClick) {
       onElementClick(e.data);
     }
     if (e.data.type === 'indicator-click' && onIndicatorClick) {
@@ -54,6 +57,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     if (!iframe?.contentWindow) return;
     iframe.contentWindow.postMessage({ type: 'set-api-binding-mode', enabled: effectiveMode === 'api-binding' }, '*');
     iframe.contentWindow.postMessage({ type: 'set-visual-edit-mode', enabled: effectiveMode === 'visual-edit' }, '*');
+    iframe.contentWindow.postMessage({ type: 'set-element-select-mode', enabled: effectiveMode === 'element-select' }, '*');
   }, [effectiveMode]);
 
   // Send annotation indicators to iframe
@@ -90,6 +94,9 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     }
     if (effectiveMode === 'visual-edit') {
       iframe.contentWindow.postMessage({ type: 'set-visual-edit-mode', enabled: true }, '*');
+    }
+    if (effectiveMode === 'element-select') {
+      iframe.contentWindow.postMessage({ type: 'set-element-select-mode', enabled: true }, '*');
     }
   }, [annotations, apiBindings, effectiveMode]);
 

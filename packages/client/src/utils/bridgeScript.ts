@@ -4,6 +4,7 @@ export const BRIDGE_SCRIPT = `
   var annotationMode = false;
   var apiBindingMode = false;
   var visualEditMode = false;
+  var elementSelectMode = false;
   var visualHoveredEl = null;
   var indicators = [];
   var apiIndicators = [];
@@ -21,7 +22,7 @@ export const BRIDGE_SCRIPT = `
   var hoveredEl = null;
 
   document.addEventListener('mouseover', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode && !elementSelectMode) return;
     var target = findBridgeId(e.target);
     if (visualEditMode) {
       if (visualHoveredEl && visualHoveredEl !== target) {
@@ -33,6 +34,19 @@ export const BRIDGE_SCRIPT = `
         target.style.outline = '2px solid #3b82f6';
         target.style.outlineOffset = '2px';
         visualHoveredEl = target;
+      }
+      return;
+    }
+    if (elementSelectMode) {
+      if (hoveredEl && hoveredEl !== target) {
+        hoveredEl.style.outline = '';
+        hoveredEl.style.outlineOffset = '';
+        hoveredEl = null;
+      }
+      if (target) {
+        target.style.outline = '2px dashed #f59e0b';
+        target.style.outlineOffset = '2px';
+        hoveredEl = target;
       }
       return;
     }
@@ -54,7 +68,7 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('mouseout', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode && !elementSelectMode) return;
     if (visualEditMode) {
       var vTarget = findBridgeId(e.target);
       if (vTarget && vTarget === visualHoveredEl) {
@@ -73,13 +87,24 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('click', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode && !elementSelectMode) return;
     e.preventDefault();
     e.stopPropagation();
     var target = findBridgeId(e.target);
     if (!target) return;
     var bridgeId = target.getAttribute('data-bridge-id');
     var rect = target.getBoundingClientRect();
+    if (elementSelectMode) {
+      window.parent.postMessage({
+        type: 'element-selected',
+        bridgeId: bridgeId,
+        outerHTML: target.outerHTML.substring(0, 2000),
+        tagName: target.tagName.toLowerCase(),
+        textContent: (target.textContent || '').substring(0, 100),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      }, '*');
+      return;
+    }
     if (annotationMode || apiBindingMode) {
       window.parent.postMessage({
         type: 'element-click',
@@ -236,6 +261,21 @@ export const BRIDGE_SCRIPT = `
       var el = document.querySelector('[data-bridge-id="' + e.data.bridgeId + '"]');
       if (el) {
         el.outerHTML = e.data.html;
+      }
+    } else if (e.data.type === 'set-element-select-mode') {
+      elementSelectMode = !!e.data.enabled;
+      if (elementSelectMode) {
+        annotationMode = false;
+        apiBindingMode = false;
+        visualEditMode = false;
+        document.body.style.cursor = 'crosshair';
+      } else {
+        document.body.style.cursor = '';
+        if (hoveredEl) {
+          hoveredEl.style.outline = '';
+          hoveredEl.style.outlineOffset = '';
+          hoveredEl = null;
+        }
       }
     } else if (e.data.type === 'set-visual-edit-mode') {
       visualEditMode = !!e.data.enabled;

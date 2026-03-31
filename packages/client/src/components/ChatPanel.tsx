@@ -51,6 +51,8 @@ interface Props {
   pendingMessage?: string | null;
   onPendingMessageConsumed?: () => void;
   hasPrototype?: boolean;
+  selectedElement?: { bridgeId: string; html: string; tagName: string } | null;
+  onClearSelectedElement?: () => void;
 }
 
 const HISTORY_KEY = 'pb-prompt-history';
@@ -76,7 +78,7 @@ function saveHistory(history: string[]) {
   }
 }
 
-export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed, hasPrototype }: Props) {
+export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed, hasPrototype, selectedElement, onClearSelectedElement }: Props) {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -421,6 +423,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       }
       if (opts?.forceRegenerate) {
         body.forceRegenerate = true;
+      }
+      if (selectedElement) {
+        body.targetBridgeId = selectedElement.bridgeId;
+        body.targetHtml = selectedElement.html;
       }
 
       const res = await fetch(`/api/projects/${projectId}/chat`, {
@@ -1242,6 +1248,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         </div>
       )}
 
+      {selectedElement && (
+        <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '6px', margin: '0 8px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+          <span>🎯 已選取：<strong>&lt;{selectedElement.tagName}&gt;</strong> [{selectedElement.bridgeId}]</span>
+          <button type="button" onClick={() => onClearSelectedElement?.()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#92400e', padding: '0 4px' }}>✕</button>
+        </div>
+      )}
       <div style={styles.inputArea}>
         <input
           ref={fileInputRef}

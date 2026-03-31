@@ -27,7 +27,7 @@ Intents:
 
 ${shellContext}
 
-Keywords for micro-adjust: 變大, 變小, 顏色改, 改顏色, change color, add padding, 字體, 間距, 背景色, 粗體, 邊框, 圓角, margin, font size, bigger, smaller, wider, narrower, 加陰影, 移除, 隱藏, 顯示, 太大, 太小, 太寬, 太窄, 不對齊, 對齊, 微調, 調整一下, 改一下, 加上, 拿掉
+Keywords for micro-adjust: 變大, 變小, 顏色改, 改顏色, change color, add padding, 字體, 間距, 背景色, 粗體, 邊框, 圓角, margin, font size, bigger, smaller, wider, narrower, 加陰影, 移除, 隱藏, 顯示, 太大, 太小, 太寬, 太窄, 不對齊, 對齊, 微調, 調整一下, 改一下, 加上, 拿掉, 加入, 新增元件, 插入, 替換, 加一個, 把...加上
 Keywords for component: 元件, card, modal, 彈窗, 表單, form, widget, badge, tag, chip, dropdown, picker, 對話框
 Keywords for full-page: 整頁, 完整設計, 重新設計, landing page, 獨立頁面, standalone, 產生, 生成, 設計, 做出, 幫我做, 請做, 開始產生, 生成UI, 做UI, 做個, prototype, 原型, 頁面, 介面, 重做, 版面, 排版, 請重新, 依照規格書
 Keywords for in-shell: 子頁, 明細, 詳情, 詳細頁, 新增頁, 功能頁, list頁, detail頁, 列表, 管理頁

@@ -77,8 +77,11 @@ export default function WorkspacePage() {
   const [tokens, setTokens] = useState<DesignToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(false);
 
-  // Interaction mode state (browse, annotate, api-binding)
+  // Interaction mode state (browse, annotate, api-binding, element-select)
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('browse');
+
+  // Element-select state for targeted adjustments
+  const [selectedElement, setSelectedElement] = useState<{ bridgeId: string; html: string; tagName: string } | null>(null);
 
   // Annotation state
   const [annotationMode, setAnnotationMode] = useState(false);
@@ -475,8 +478,15 @@ export default function WorkspacePage() {
     bridgeId: string;
     tagName: string;
     textContent: string;
+    outerHTML?: string;
     rect: { x: number; y: number; width: number; height: number };
   }) => {
+    // In element-select mode, set the selected element for targeted adjustments
+    if (interactionMode === 'element-select' && data.bridgeId) {
+      setSelectedElement({ bridgeId: data.bridgeId, html: data.outerHTML || '', tagName: data.tagName || 'div' });
+      return;
+    }
+
     // In API binding mode, open the binding panel instead
     if (interactionMode === 'api-binding') {
       setApiBindingElement({ bridgeId: data.bridgeId, tagName: data.tagName });
@@ -1116,6 +1126,25 @@ export default function WorkspacePage() {
           </button>
           <button
             type="button"
+            style={{
+              ...styles.annotateBtn,
+              ...(interactionMode === 'element-select' ? { backgroundColor: '#fffbeb', borderColor: '#f59e0b', color: '#b45309' } : {}),
+              ...(!html ? { opacity: 0.5 } : {}),
+            }}
+            onClick={() => {
+              const isActive = interactionMode === 'element-select';
+              setInteractionMode(isActive ? 'browse' : 'element-select');
+              setAnnotationMode(false);
+              if (isActive) { setSelectedElement(null); }
+            }}
+            disabled={!html}
+            title="點選元件微調"
+            data-testid="element-select-toggle"
+          >
+            🎯 選取
+          </button>
+          <button
+            type="button"
             style={styles.historyBtn}
             onClick={() => setFocusMode(true)}
             title="專注模式 (F)"
@@ -1359,6 +1388,8 @@ export default function WorkspacePage() {
                 pendingMessage={pendingChatMessage}
                 onPendingMessageConsumed={() => setPendingChatMessage(null)}
                 hasPrototype={!!html}
+                selectedElement={selectedElement}
+                onClearSelectedElement={() => setSelectedElement(null)}
               />
             ) : leftTab === 'design' ? (
               <DesignPanel
