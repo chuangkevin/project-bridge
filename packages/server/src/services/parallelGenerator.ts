@@ -145,25 +145,38 @@ export async function generateParallel(
 
   if (retryTargets.length > 0) {
     console.log(`[parallel-qa] Retrying ${retryTargets.length} thin/failed pages:`, retryTargets.map(i => fragments[i].name));
+    // Wait 3s before retries — let 429 cooldown expire
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
     for (const fi of retryTargets) {
       const page = plan.pages[fi];
       if (!page) continue;
-      const retryKey = getGeminiApiKeyExcluding('');
-      if (!retryKey) continue;
       const pageSkills = selectRelevantSkills(allSkills, page.name, page.spec);
-      onProgress?.({ phase: 'generating', page: page.name, status: 'started', message: `🔄 重新生成「${page.name}」...` });
-      try {
-        const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention, pageSkills);
-        if (retryResult.success) {
-          const retryText = retryResult.html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-          if (retryText.length > (fragments[fi].success ? 80 : 0)) {
-            fragments[fi] = retryResult;
-            onProgress?.({ phase: 'generating', page: page.name, status: 'done', message: `✅ 重新生成「${page.name}」成功` });
-            console.log(`[parallel-qa] Retry success: "${page.name}" now ${retryText.length} chars`);
+      let retrySuccess = false;
+
+      // Try up to 2 times with different keys
+      for (let attempt = 0; attempt < 2 && !retrySuccess; attempt++) {
+        const retryKey = getGeminiApiKeyExcluding('');
+        if (!retryKey) break;
+        onProgress?.({ phase: 'generating', page: page.name, status: 'started', message: `🔄 重新生成「${page.name}」(${attempt + 1}/2)...` });
+        try {
+          const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention, pageSkills);
+          if (retryResult.success) {
+            const retryText = retryResult.html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            if (retryText.length > (fragments[fi].success ? 80 : 0)) {
+              fragments[fi] = retryResult;
+              onProgress?.({ phase: 'generating', page: page.name, status: 'done', message: `✅ 重新生成「${page.name}」成功` });
+              console.log(`[parallel-qa] Retry ${attempt + 1} success: "${page.name}" now ${retryText.length} chars`);
+              retrySuccess = true;
+            }
+          } else {
+            markKeyBad(retryKey);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // cooldown between attempts
           }
+        } catch (e: any) {
+          console.warn(`[parallel-qa] Retry ${attempt + 1} failed for "${page.name}":`, e.message?.slice(0, 50));
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
-      } catch (e: any) {
-        console.warn(`[parallel-qa] Retry failed for "${page.name}":`, e.message?.slice(0, 50));
       }
     }
   }
