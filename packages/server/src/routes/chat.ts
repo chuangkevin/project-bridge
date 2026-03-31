@@ -44,7 +44,26 @@ const systemPrompt = fs.readFileSync(
   'utf-8'
 );
 
-const qaSystemPrompt = `You are a helpful assistant for a UI prototype tool. Answer questions about uploaded specifications, design requirements, and prototype based on the conversation history. Be concise and specific.`;
+const qaSystemPromptBase = `你是一位資深產品架構師和 UI/UX 顧問，擅長分析業務邏輯、系統架構和使用者流程。
+
+角色定位：
+- 你正在協助使用者規劃和確認一個軟體產品的需求
+- 你能根據上傳的文件、設計稿和對話歷史提供深度分析
+- 你回答時要有結構（用條列、表格、流程圖描述）
+- 繁體中文回答
+
+你可以幫忙的事情：
+1. 業務邏輯確認（「這個功能的流程應該是什麼？」「使用者角色有哪些？」）
+2. 系統架構討論（「需要哪些頁面？」「資料流怎麼走？」）
+3. 需求釐清（「這個規格書裡面有哪些功能？」「有沒有矛盾的地方？」）
+4. 設計評審（「這個設計稿的 UX 問題在哪？」「有沒有遺漏的狀態？」）
+5. 技術可行性（「這個功能用什麼技術實作？」「有沒有更好的方案？」）
+
+回答風格：
+- 直接、有深度、不講廢話
+- 有不確定的地方會明確標示「⚠️ 需確認」
+- 會主動指出使用者可能沒想到的問題
+- 適時用表格比較方案優劣`;
 
 // getGeminiApiKey is now imported from ../services/geminiKeys
 
@@ -183,7 +202,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
   try {
     const projectId = req.params.id;
-    const { message, fileIds, forceRegenerate } = req.body;
+    const { message, fileIds, forceRegenerate, chatOnly } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
@@ -221,6 +240,11 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // isObviousGenerate: detect if user wants to CREATE something new (not just ask a question)
     // We rely on AI classifyIntent for the main classification, but this flag determines
     // whether to DOWNGRADE full-page→micro-adjust when prototype exists.
+    // chatOnly mode — force question intent, skip generation entirely
+    if (chatOnly) {
+      console.log('[chat] chatOnly mode — forcing question intent');
+    }
+
     // If user is clearly requesting a new thing, DON'T downgrade.
     const trimmed = message.trim().toLowerCase();
     const hasGenerateKeywords = /我要|我想要|請做|幫我做|生成|建立|做一個|設計|create|make|build|generate|給我|產生|做出/i.test(trimmed);
@@ -248,7 +272,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // Classify intent — skip AI call if obvious generate (saves 1 API call)
     let intent: string;
-    if (targetBridgeId && currentPrototype) {
+    if (chatOnly) {
+      intent = 'question';
+    } else if (targetBridgeId && currentPrototype) {
       intent = 'element-adjust';
     } else if (isObviousGenerate) {
       intent = hasShell ? 'in-shell' : 'full-page';
@@ -691,8 +717,41 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     if (intent === 'question') {
-      // Q&A path with auto-retry on 429
-      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
+      // Q&A path — rich context with skills + docs
+      res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '思考中...' })}\n\n`);
+
+      // Build rich system prompt with project context
+      let richQaPrompt = qaSystemPromptBase;
+
+      // Inject active skills as knowledge base
+      const qaSkills = getActiveSkills(projectId as string);
+      if (qaSkills.length > 0) {
+        richQaPrompt += '\n\n=== 專案知識庫 ===\n';
+        richQaPrompt += qaSkills.slice(0, 8).map(s => `【${s.name}】${s.content.slice(0, 600)}`).join('\n\n');
+        richQaPrompt += '\n===';
+      }
+
+      // Inject uploaded document analysis
+      const qaSpecRows = (db.prepare(
+        'SELECT original_name, analysis_result FROM uploaded_documents WHERE project_id = ? AND analysis_result IS NOT NULL'
+      ).all(projectId) as any[]);
+      if (qaSpecRows.length > 0) {
+        richQaPrompt += '\n\n=== 上傳的文件分析 ===\n';
+        for (const doc of qaSpecRows) {
+          try {
+            const analysis = JSON.parse(doc.analysis_result as string);
+            const pages = (analysis.pages || []).map((p: any) => p.name || p).join('、');
+            richQaPrompt += `文件「${doc.original_name}」：${pages}\n`;
+          } catch {}
+        }
+        richQaPrompt += '===';
+      }
+
+      // Inject design direction
+      if (designConvention) {
+        richQaPrompt += `\n\n=== 設計方向 ===\n${designConvention.slice(0, 500)}\n===`;
+      }
+
       let qaKey = apiKey;
       let qaRetries = 0;
       while (qaRetries <= 2) {
@@ -700,7 +759,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           const genai = new GoogleGenerativeAI(qaKey);
           const model = genai.getGenerativeModel({
             model: getGeminiModel(),
-            systemInstruction: qaSystemPrompt,
+            systemInstruction: richQaPrompt,
             generationConfig: { maxOutputTokens: 4096, temperature: generationTemperature },
           });
           const chatSession = model.startChat({

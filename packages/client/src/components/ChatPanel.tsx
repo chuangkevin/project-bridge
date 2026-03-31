@@ -107,6 +107,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [viewingFile, setViewingFile] = useState<UploadedFile | null>(null);
   const pollingIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const [editedText, setEditedText] = useState('');
+  const [chatOnlyMode, setChatOnlyMode] = useState(false);
   const [constraints, setConstraints] = useState<Constraints | null>(null);
   const [artStyle, setArtStyle] = useState<ArtStyle | null>(null);
   const [artStyleLoading, setArtStyleLoading] = useState(false);
@@ -429,6 +430,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       if (selectedElement) {
         body.targetBridgeId = selectedElement.bridgeId;
         body.targetHtml = selectedElement.html;
+      }
+      if (chatOnlyMode) {
+        body.chatOnly = true;
       }
 
       const res = await fetch(`/api/projects/${projectId}/chat`, {
@@ -1273,6 +1277,14 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           onChange={handleFileSelect}
           data-testid="file-input"
         />
+        <button
+          style={{ ...styles.attachBtn, fontSize: 11, color: chatOnlyMode ? '#3b82f6' : '#94a3b8', fontWeight: chatOnlyMode ? 700 : 400, background: chatOnlyMode ? '#eff6ff' : 'transparent', borderRadius: '6px' }}
+          onClick={() => setChatOnlyMode(prev => !prev)}
+          title={chatOnlyMode ? '對話模式（不生成 UI）' : '切換到對話模式'}
+          data-testid="chat-only-btn"
+        >
+          💬
+        </button>
         {hasPrototype && (
           <button
             style={{ ...styles.attachBtn, fontSize: 11, color: '#f59e0b', fontWeight: 600 }}
@@ -1316,7 +1328,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           }}
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
-          placeholder="描述你的 UI...（可貼上截圖）"
+          placeholder={chatOnlyMode ? "輸入問題...（對話模式，不會生成 UI）" : "描述你的 UI...（可貼上截圖）"}
           rows={2}
           disabled={streaming}
         />
