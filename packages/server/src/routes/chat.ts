@@ -307,6 +307,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       console.log('[chat] Override: component → full-page (has files + design intent)');
     }
 
+    // In design mode (not chatOnly): if classifier says 'question' but message has actionable keywords, upgrade to full-page
+    if (!effectiveChatOnly && intent === 'question') {
+      const hasActionKeywords = /流程|UI|介面|頁面|設計|畫面|功能|系統|架構|模組|版面|表單|列表|按鈕|卡片|導航/i.test(message);
+      if (hasActionKeywords) {
+        intent = currentPrototype ? 'micro-adjust' : 'full-page';
+        console.log(`[chat] Override: question → ${intent} (design mode + action keywords)`);
+      }
+    }
+
     // When user requests pages, force full-page intent regardless of existing prototype
     if (isPageRequest) {
       intent = 'full-page';
