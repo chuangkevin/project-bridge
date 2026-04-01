@@ -763,7 +763,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           const model = genai.getGenerativeModel({
             model: getGeminiModel(),
             systemInstruction: richQaPrompt,
-            generationConfig: { maxOutputTokens: 4096, temperature: generationTemperature },
+            generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
           });
           const chatSession = model.startChat({
             history: history.slice(0, -0).map(h => ({
@@ -791,6 +791,13 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             } catch {}
 
             if (finishReason === 'MAX_TOKENS') {
+              // Check if AI is just spitting garbage (dashes, empty lines)
+              const tail = fullResponse.slice(-200);
+              const garbageRatio = (tail.match(/[-\s\n]/g) || []).length / Math.max(tail.length, 1);
+              if (garbageRatio > 0.8) {
+                console.log(`[chat-qa] Auto-continue stopped — tail is ${Math.round(garbageRatio * 100)}% garbage`);
+                break; // AI has nothing left to say
+              }
               console.log(`[chat-qa] Response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
               continuePrompt = '繼續。不要加分隔線，不要重複前面的內容，直接從斷掉的地方往下寫。';
             } else {
