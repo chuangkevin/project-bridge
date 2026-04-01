@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, startTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
@@ -494,10 +494,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               // Format PAGES: line into a nice display
               const formatted = data.content.replace(/^PAGES:\s*(.+)$/gm, '\n📄 **方案確定：** $1');
               accThinking += formatted;
-              // Throttle thinking updates too — prevent UI freeze
+              // Throttle + low-priority update — don't block input
               const nowT = Date.now();
-              if (!lastStreamUpdate || nowT - lastStreamUpdate > 300 || accThinking.length < 500) {
-                setThinkingContent(accThinking);
+              if (!lastStreamUpdate || nowT - lastStreamUpdate > 500 || accThinking.length < 300) {
+                startTransition(() => setThinkingContent(accThinking));
                 lastStreamUpdate = nowT;
               }
             }
@@ -545,9 +545,11 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               fullContent += data.content;
               // Throttle React updates — only re-render every 300ms to prevent UI freeze on long responses
               const now = Date.now();
-              if (!lastStreamUpdate || now - lastStreamUpdate > 300 || fullContent.length < 500) {
-                setStreamingContent(fullContent);
-                setTokenCount(fullContent.length);
+              if (!lastStreamUpdate || now - lastStreamUpdate > 500 || fullContent.length < 300) {
+                startTransition(() => {
+                  setStreamingContent(fullContent);
+                  setTokenCount(fullContent.length);
+                });
                 lastStreamUpdate = now;
               }
             }
