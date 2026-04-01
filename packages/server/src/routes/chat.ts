@@ -1444,12 +1444,23 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
         }, 15000); // every 15 seconds
 
         try {
+          // Enrich userContent with conversation context + plan constraints for sub-agents
+          let enrichedUserContent = userContent;
+          if (supplement.trim()) {
+            enrichedUserContent += '\n\n' + supplement;
+          }
+          // Add last 3 conversation turns as context so sub-agents understand the domain
+          const recentContext = history.slice(-6).filter(h => h.role === 'user').map(h => h.content.slice(0, 150)).join('；');
+          if (recentContext) {
+            enrichedUserContent += `\n\n【對話脈絡】使用者之前提到：${recentContext}`;
+          }
+
           const parallelResult = await generateParallel(
             projectId as string,
             analysisData,
             architectureBlock || '',
             designConvention,
-            userContent,
+            enrichedUserContent,
             (event) => {
               res.write(`data: ${JSON.stringify(event)}\n\n`);
             },
