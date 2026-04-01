@@ -1,10 +1,15 @@
-import { useState, useRef, useEffect, useCallback, startTransition } from 'react';
+import { useState, useRef, useEffect, useCallback, startTransition, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
 import AnalysisPreviewPanel from './AnalysisPreviewPanel';
 import { compressImage } from '../utils/imageCompress';
 import PromptTemplateSelector from './PromptTemplateSelector';
+
+// Memoized markdown renderer — only re-renders when content changes, not on parent re-render
+const MemoMarkdown = memo(function MemoMarkdown({ content }: { content: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
+});
 
 function isHtmlContent(content: string): boolean {
   const t = content.trimStart().toLowerCase();
@@ -852,7 +857,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   <div style={styles.answerBubble}>
                     <span style={styles.answerLabel}>💬 回答</span>
                     <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      <MemoMarkdown content={msg.content} />
                     </div>
                   </div>
                 ) : msg.messageType === 'component' ? (
