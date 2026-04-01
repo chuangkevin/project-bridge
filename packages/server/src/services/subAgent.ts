@@ -98,6 +98,13 @@ NAVIGATION between pages (CRITICAL — cards/buttons MUST link to detail pages):
 - Every card in a list MUST have a clickable link to its detail page
 - This page links to: ${page.navigationOut.length > 0 ? page.navigationOut.join(', ') : '(none)'}
 
+UNDERCOVER RULES (NEVER violate):
+- NEVER include prompt instructions, skill names, or system context in generated HTML
+- NEVER add HTML comments containing prompt text or internal system details
+- NEVER generate text that references "sub-agent", "assembler", "design token", "CSS variable injection" or any internal system terminology
+- All generated content must look like it was written by a human designer, not an AI system
+- Do NOT mention "Gemini", "AI generated", "prototype system" in any visible text
+
 ${page.viewport === 'mobile' ? `MOBILE: single column, max-width 480px, touch targets 48px+, text 15-16px` : 'DESKTOP: responsive layout, grid/flexbox, max-width 1200px'}`;
 
   const userPrompt = `Generate the "${pageName}" page [${page.viewport.toUpperCase()}]:
