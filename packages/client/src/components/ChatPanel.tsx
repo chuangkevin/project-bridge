@@ -459,6 +459,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       let receivedHtml: string | null = null;
       let receivedMessageType: 'user' | 'generate' | 'answer' | undefined;
       let receivedIsMultiPage = false;
+      let lastStreamUpdate = 0; // throttle streaming React updates
       let receivedPages: string[] = [];
 
       let lineBuffer = '';
@@ -537,8 +538,13 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             }
             if (data.content && data.type !== 'thinking') {
               fullContent += data.content;
-              setStreamingContent(fullContent);
-              setTokenCount(fullContent.length);
+              // Throttle React updates — only re-render every 300ms to prevent UI freeze on long responses
+              const now = Date.now();
+              if (!lastStreamUpdate || now - lastStreamUpdate > 300 || fullContent.length < 500) {
+                setStreamingContent(fullContent);
+                setTokenCount(fullContent.length);
+                lastStreamUpdate = now;
+              }
             }
             if (data.done) {
               if (data.html) {
@@ -573,6 +579,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           if (data.pages) receivedPages = data.pages;
         } catch { /* ignore */ }
       }
+
+      // Final flush of throttled content
+      setStreamingContent(fullContent);
+      setTokenCount(fullContent.length);
 
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
