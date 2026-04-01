@@ -1963,4 +1963,69 @@ router.get('/:id/conversations', (req: Request, res: Response) => {
   }
 });
 
+// Generate variants for a specific page
+router.post('/:id/generate-variants', async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const { page: pageName } = req.body;
+    if (!pageName) return res.status(400).json({ error: 'page is required' });
+
+    const prototype = db.prepare('SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1').get(projectId) as any;
+    if (!prototype?.html) return res.status(404).json({ error: 'No prototype found' });
+
+    // Extract the page's current HTML
+    const pageRegex = new RegExp(`<div[^>]*id="page-${pageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>[\\s\\S]*?(?=<div[^>]*id="page-|</main>|<script>)`, 'i');
+    const pageMatch = prototype.html.match(pageRegex);
+
+    res.json({ status: 'generating', message: `Generating variants for "${pageName}"...` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Select a variant — replace page in prototype
+router.post('/:id/select-variant', async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const { page: pageName, variantHtml } = req.body;
+    if (!pageName || !variantHtml) return res.status(400).json({ error: 'page and variantHtml required' });
+
+    const prototype = db.prepare('SELECT id, html FROM prototype_versions WHERE project_id = ? AND is_current = 1').get(projectId) as any;
+    if (!prototype?.html) return res.status(404).json({ error: 'No prototype found' });
+
+    // Find and replace the page div
+    const escapedName = pageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pageStart = prototype.html.indexOf(`id="page-${pageName}"`);
+    if (pageStart === -1) return res.status(400).json({ error: `Page "${pageName}" not found in prototype` });
+
+    // Find the page div boundaries
+    let startIdx = prototype.html.lastIndexOf('<div', pageStart);
+    // Find the next page div or </main>
+    const nextPageIdx = prototype.html.indexOf('<div', pageStart + 10);
+    const mainEndIdx = prototype.html.indexOf('</main>', pageStart);
+    let endIdx = Math.min(
+      nextPageIdx !== -1 && prototype.html.slice(nextPageIdx, nextPageIdx + 50).includes('id="page-') ? nextPageIdx : Infinity,
+      mainEndIdx !== -1 ? mainEndIdx : Infinity,
+    );
+    if (endIdx === Infinity) endIdx = prototype.html.length;
+
+    // Replace
+    const newHtml = prototype.html.slice(0, startIdx) + variantHtml + prototype.html.slice(endIdx);
+
+    // Save as new version
+    const versionId = uuidv4();
+    db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+    db.prepare('INSERT INTO prototype_versions (id, project_id, html, is_current) VALUES (?, ?, ?, 1)').run(versionId, projectId, newHtml);
+
+    // Clear related lessons
+    db.prepare('DELETE FROM project_lessons WHERE project_id = ? AND lesson LIKE ?').run(projectId, `${pageName}%`);
+
+    console.log(`[variant] Selected variant for "${pageName}", saved version ${versionId}`);
+    res.json({ success: true, versionId });
+  } catch (err: any) {
+    console.error('[variant] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

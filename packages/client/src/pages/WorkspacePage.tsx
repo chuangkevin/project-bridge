@@ -1497,18 +1497,36 @@ export default function WorkspacePage() {
                 <div style={styles.pageSidebar}>
                   <div style={styles.pageSidebarLabel}>頁面</div>
                   {pages.map(page => (
-                    <button
-                      key={page}
-                      type="button"
-                      style={{
-                        ...styles.pageSidebarItem,
-                        ...(activePage === page ? styles.pageSidebarItemActive : {}),
-                      }}
-                      onClick={() => handleNavigatePage(page)}
-                      data-testid={`page-tab-${page}`}
-                    >
-                      {page}
-                    </button>
+                    <div key={page} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.pageSidebarItem,
+                          ...(activePage === page ? styles.pageSidebarItemActive : {}),
+                          flex: 1,
+                        }}
+                        onClick={() => handleNavigatePage(page)}
+                        data-testid={`page-tab-${page}`}
+                      >
+                        {page}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await fetch(`/api/projects/${id}/generate-variants`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ page }),
+                            });
+                          } catch {}
+                        }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
+                        title="其他方案"
+                      >
+                        🔄
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

@@ -250,6 +250,66 @@ export async function generateParallel(
     }
   }
 
+  // === VARIANT GENERATION for problematic pages ===
+  // Detect pages that need variants: QA critical issues or gate failures
+  const variantPages: string[] = [];
+  for (const issue of qaReport.issues.filter(i => i.severity === 'critical')) {
+    if (issue.page !== 'global' && !variantPages.includes(issue.page)) {
+      variantPages.push(issue.page);
+    }
+  }
+  // Limit to max 2 pages
+  const variantTargets = variantPages.slice(0, 2);
+
+  if (variantTargets.length > 0 && onProgress) {
+    console.log('[parallel] Generating variants for:', variantTargets);
+
+    for (const pageName of variantTargets) {
+      const pageIdx = plan.pages.findIndex(p => p.name === pageName);
+      if (pageIdx === -1) continue;
+      const page = plan.pages[pageIdx];
+      const pageSkills = selectRelevantSkills(allSkills, page.name, page.spec);
+
+      // Generate 2 alternatives with different strategies
+      const strategies = [
+        { id: 'b', label: '方案 B：結構導向', prompt: '重點在清晰的資訊架構，用表格和表單結構化呈現資訊，層級分明。' },
+        { id: 'c', label: '方案 C：視覺導向', prompt: '重點在視覺吸引力，用卡片網格和大圖片佔位呈現，hero section 要搶眼。' },
+      ];
+
+      const variants: { id: string; label: string; html: string }[] = [];
+
+      // Add original as variant A
+      const origFrag = fragments.find(f => f.name === pageName);
+      if (origFrag?.success && origFrag.html) {
+        variants.push({ id: 'a', label: '方案 A：原版', html: origFrag.html });
+      }
+
+      for (const strategy of strategies) {
+        const variantKey = getGeminiApiKeyExcluding('');
+        if (!variantKey) break;
+
+        try {
+          // Modify page spec with strategy
+          const variantPage = { ...page, spec: page.spec + '\n\n⚠️ 設計策略：' + strategy.prompt };
+          const result = await generatePageFragment(variantKey, variantPage, plan.cssVariables, plan.sharedCss, designConvention, pageSkills);
+          if (result.success && result.html) {
+            variants.push({ id: strategy.id, label: strategy.label, html: result.html });
+          }
+        } catch (e: any) {
+          console.warn(`[variants] Failed to generate ${strategy.id} for "${pageName}":`, e.message?.slice(0, 50));
+        }
+      }
+
+      if (variants.length >= 2) {
+        onProgress({
+          phase: 'assembling',
+          message: JSON.stringify({ type: 'variant-select', page: pageName, variants }),
+        });
+        console.log(`[variants] Sent ${variants.length} variants for "${pageName}"`);
+      }
+    }
+  }
+
   onProgress?.({ phase: 'done' });
 
   return {

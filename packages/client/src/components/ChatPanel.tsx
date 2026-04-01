@@ -126,6 +126,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [genSettingsOpen, setGenSettingsOpen] = useState(false);
   const [genTemperature, setGenTemperature] = useState(0.3);
   const [genSeedPrompt, setGenSeedPrompt] = useState('');
+  const [variantSelection, setVariantSelection] = useState<{ page: string; variants: { id: string; label: string; html: string }[] } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -521,6 +522,16 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             if (data.type === 'conflict-pause') {
               accThinking += '\n\n🛑 ' + (data.message || '發現關鍵衝突，自動繼續生成中...') + '\n';
               setThinkingContent(prev => prev + '\n\n🛑 ' + (data.message || '發現關鍵衝突，自動繼續生成中...') + '\n');
+            }
+            // Handle variant selection
+            if (data.type === 'variant-select' || (data.message && typeof data.message === 'string' && data.message.includes('"type":"variant-select"'))) {
+              let variantData = data;
+              if (data.message && typeof data.message === 'string' && data.message.includes('variant-select')) {
+                try { variantData = JSON.parse(data.message); } catch {}
+              }
+              if (variantData.type === 'variant-select' && variantData.variants) {
+                setVariantSelection({ page: variantData.page, variants: variantData.variants });
+              }
             }
             if (data.type === 'pages' && Array.isArray(data.pages)) {
               setLastGeneratedPages(data.pages);
@@ -973,6 +984,64 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   🔧 使用技能: {activeSkillNames.join(', ')}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {variantSelection && (
+          <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', margin: '8px 0' }}>
+            <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '12px', color: '#1e293b' }}>
+              📋 「{variantSelection.page}」有 {variantSelection.variants.length} 個方案，請選擇：
+            </div>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              {variantSelection.variants.map(v => (
+                <div key={v.id} style={{
+                  flex: '1 1 200px', maxWidth: '300px', border: '1px solid #e2e8f0', borderRadius: '8px',
+                  overflow: 'hidden', background: '#fff', cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(59,130,246,0.15)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
+                >
+                  <div style={{ height: '180px', overflow: 'hidden', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
+                    <iframe
+                      srcDoc={v.html}
+                      sandbox="allow-scripts"
+                      style={{
+                        width: '250%', height: '250%', border: 'none',
+                        transform: 'scale(0.4)', transformOrigin: 'top left',
+                        pointerEvents: 'none',
+                      }}
+                      title={v.label}
+                    />
+                  </div>
+                  <div style={{ padding: '10px 12px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '13px', color: '#374151' }}>{v.label}</div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await fetch(`/api/projects/${projectId}/select-variant`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ page: variantSelection.page, variantHtml: v.html }),
+                          });
+                          setVariantSelection(null);
+                          window.location.reload();
+                        } catch (err) {
+                          console.error('Failed to select variant:', err);
+                        }
+                      }}
+                      style={{
+                        marginTop: '8px', width: '100%', padding: '8px',
+                        background: '#3b82f6', color: '#fff', border: 'none',
+                        borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer',
+                      }}
+                    >
+                      選這個
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
