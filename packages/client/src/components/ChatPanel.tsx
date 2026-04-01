@@ -1311,12 +1311,13 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             padding: '4px 10px',
             border: chatOnlyMode ? 'none' : '1px solid #d1d5db',
             transition: 'all 0.15s',
+            whiteSpace: 'nowrap' as const,
           }}
           onClick={() => setChatOnlyMode(prev => !prev)}
           title={chatOnlyMode ? '顧問模式開啟中（不生成 UI）' : '切換到顧問模式（純對話）'}
           data-testid="chat-only-btn"
         >
-          💬 顧問模式
+          💬 顧問
         </button>
         {hasPrototype && (
           <button

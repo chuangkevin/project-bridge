@@ -159,6 +159,7 @@ export function buildLocalPlan(
   pageNames: string[],
   userMessage: string,
   designConvention: string,
+  lessons: string[] = [],
 ): GenerationPlan {
   // Extract design tokens from designConvention string (set by preset or project design)
   const extractColor = (label: string, fallback: string) => {
@@ -437,6 +438,12 @@ a.btn, button { cursor: pointer; }
     } else {
       // Try generic patterns
       spec += getGenericPageSpec(name, otherPages);
+    }
+
+    // Inject page-specific lessons from previous generations
+    const pageLessons = lessons.filter(l => l.includes(name));
+    if (pageLessons.length > 0) {
+      spec += `\n\n⚠️ 上次生成此頁面的問題：\n${pageLessons.map(l => `• ${l}`).join('\n')}\n請避免這些問題。`;
     }
 
     return {

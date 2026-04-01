@@ -86,6 +86,19 @@ export const BRIDGE_SCRIPT = `
     }
   }, true);
 
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && elementSelectMode) {
+      elementSelectMode = false;
+      document.body.style.cursor = '';
+      if (hoveredEl) {
+        hoveredEl.style.outline = '';
+        hoveredEl.style.outlineOffset = '';
+        hoveredEl = null;
+      }
+      window.parent.postMessage({ type: 'element-deselected' }, '*');
+    }
+  });
+
   document.addEventListener('click', function(e) {
     if (!annotationMode && !apiBindingMode && !visualEditMode && !elementSelectMode) return;
     e.preventDefault();

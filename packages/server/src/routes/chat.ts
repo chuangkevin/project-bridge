@@ -11,7 +11,7 @@ import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount,
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
-import { generateParallel } from '../services/parallelGenerator';
+import { generateParallel, getLessons } from '../services/parallelGenerator';
 import { assemblePrototype, fixNavigation } from '../services/htmlAssembler';
 import { buildLocalPlan } from '../services/masterAgent';
 import { planAndReview } from '../services/plannerAgent';
@@ -1217,6 +1217,12 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
     // Track accumulated thinking from AI analysis (for metadata)
     let aiThinkingText = '';
 
+    // Load lessons for this project (used by planAndReview + buildLocalPlan)
+    const projectLessons = getLessons(projectId as string);
+    if (projectLessons.length > 0) {
+      console.log('[chat] Loaded', projectLessons.length, 'lessons for project');
+    }
+
     // === PLAN + REVIEW (replaces keyword matching + AI analysis) ===
     console.log('[chat] Pre-analysis check: finalPages=', finalPages.length, 'intent=', intent);
     if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
@@ -1266,7 +1272,7 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
         const plan = await planAndReview(planUserMsg, (text) => {
           res.write(`data: ${JSON.stringify({ type: 'thinking', content: text })}\n\n`);
           aiThinkingText += text;
-        }, planSkills, history);
+        }, planSkills, history, projectLessons);
         clearInterval(planHeartbeat);
 
         finalPages = plan.pages.map(p => p.name);
@@ -1402,6 +1408,7 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
             (event) => {
               res.write(`data: ${JSON.stringify(event)}\n\n`);
             },
+            projectLessons,
           );
 
           // Save user message
@@ -1469,6 +1476,7 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
               projectId as string, analysisData, architectureBlock || '',
               designConvention, userContent,
               (event) => { res.write(`data: ${JSON.stringify(event)}\n\n`); },
+              projectLessons,
             );
             // Success on retry — save and return (same logic as above)
             db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(uuidv4(), projectId, 'user', userContent, 'user');
@@ -1767,7 +1775,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       if (isMultiPage && finalPages.length >= 2 && !html.includes('showPage')) {
         console.log('[chat] Single-call HTML missing showPage — wrapping with assembler');
         try {
-          const localPlan = buildLocalPlan(finalPages, userContent, designConvention);
+          const localPlan = buildLocalPlan(finalPages, userContent, designConvention, projectLessons);
           // Extract original styles from the generated HTML
           const styleMatches = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
           const originalStyles = styleMatches.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n');

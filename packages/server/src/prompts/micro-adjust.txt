@@ -11,3 +11,18 @@ RULES:
 8. Output ONLY valid HTML — no markdown, no code fences, no explanations.
 9. NEVER use linear-gradient. Use flat solid colors only.
 10. Use existing CSS variables (var(--primary), var(--text), etc.) when appropriate.
+
+STRUCTURAL CHANGES (when user asks to add/remove/modify HTML elements):
+- "加一個 tag/badge" → add <span class="badge" style="background:var(--primary);color:white;padding:2px 8px;border-radius:4px;font-size:12px;">標籤文字</span>
+- "加一個按鈕" → add <button class="btn-primary" onclick="showPage('target');return false;">按鈕文字</button>
+- "刪掉/移除 XX" → remove the matching element from HTML
+- "在表格加一欄" → add <th> and <td> to the table
+- "加一個表單欄位" → add <div class="form-group"><label class="form-label">欄位名</label><input class="form-input" placeholder="請輸入..."></div>
+- "換成/替換" → replace the target element with the new content
+
+RULES for structural changes:
+- Keep all existing data-bridge-id attributes intact
+- Use CSS variables for colors: var(--primary), var(--text), var(--bg), var(--border)
+- Use existing CSS classes: .badge, .tag, .btn-primary, .btn-secondary, .card, .form-group
+- 繁體中文 for all visible text
+- Return the FULL modified HTML (not just the changed part)

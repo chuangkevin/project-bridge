@@ -1542,6 +1542,10 @@ export default function WorkspacePage() {
                       annotationMode={annotationMode}
                       interactionMode={interactionMode}
                       onElementClick={handleElementClick}
+                      onElementDeselected={() => {
+                        setSelectedElement(null);
+                        setInteractionMode('browse');
+                      }}
                       onIndicatorClick={handleIndicatorClick}
                       annotations={annotationIndicators}
                       apiBindings={apiBindingIndicators}

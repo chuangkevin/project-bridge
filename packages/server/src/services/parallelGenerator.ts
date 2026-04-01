@@ -36,6 +36,7 @@ export async function generateParallel(
   designConvention: string,
   userMessage: string,
   onProgress?: ProgressCallback,
+  lessons: string[] = [],
 ): Promise<{ html: string; pages: string[]; isMultiPage: boolean }> {
 
   // Step 1: Build local plan — NO API call, instant
@@ -43,7 +44,7 @@ export async function generateParallel(
   onProgress?.({ phase: 'planning', message: '規劃頁面架構...' });
   const pageNamesFromAnalysis: string[] = analysisData?.pages?.map((p: any) => p.name || p) || [];
   if (pageNamesFromAnalysis.length < 2) throw new Error('No pages to generate');
-  const plan = buildLocalPlan(pageNamesFromAnalysis, userMessage, designConvention);
+  const plan = buildLocalPlan(pageNamesFromAnalysis, userMessage, designConvention, lessons);
 
   console.log('[parallel] Local plan ready:', plan.pages.length, 'pages, sharedCss:', plan.sharedCss.length, 'chars');
 
@@ -158,7 +159,7 @@ export async function generateParallel(
       .replace(/<header[\s>][\s\S]{0,2000}?<\/header>/gi, '')
       .replace(/<footer[\s>][\s\S]{0,2000}?<\/footer>/gi, '');
     const textContent = stripped.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-    if (textContent.length < 80) {
+    if (textContent.length < 30) {
       retryTargets.push(fi);
     }
   }
@@ -174,16 +175,16 @@ export async function generateParallel(
       const pageSkills = selectRelevantSkills(allSkills, page.name, page.spec);
       let retrySuccess = false;
 
-      // Try up to 2 times with different keys
-      for (let attempt = 0; attempt < 2 && !retrySuccess; attempt++) {
+      // Try up to 1 time with different key (safety net — pre-assembly gate handles most retries)
+      for (let attempt = 0; attempt < 1 && !retrySuccess; attempt++) {
         const retryKey = getGeminiApiKeyExcluding('');
         if (!retryKey) break;
-        onProgress?.({ phase: 'generating', page: page.name, status: 'started', message: `🔄 重新生成「${page.name}」(${attempt + 1}/2)...` });
+        onProgress?.({ phase: 'generating', page: page.name, status: 'started', message: `🔄 重新生成「${page.name}」(${attempt + 1}/1)...` });
         try {
           const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention, pageSkills);
           if (retryResult.success) {
             const retryText = retryResult.html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-            if (retryText.length > (fragments[fi].success ? 80 : 0)) {
+            if (retryText.length > (fragments[fi].success ? 30 : 0)) {
               fragments[fi] = retryResult;
               onProgress?.({ phase: 'generating', page: page.name, status: 'done', message: `✅ 重新生成「${page.name}」成功` });
               console.log(`[parallel-qa] Retry ${attempt + 1} success: "${page.name}" now ${retryText.length} chars`);

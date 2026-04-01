@@ -9,12 +9,13 @@ interface Props {
   annotationMode?: boolean;
   interactionMode?: InteractionMode;
   onElementClick?: (data: { bridgeId: string; tagName: string; textContent: string; rect: { x: number; y: number; width: number; height: number } }) => void;
+  onElementDeselected?: () => void;
   onIndicatorClick?: (bridgeId: string) => void;
   annotations?: { bridgeId: string; number: number }[];
   apiBindings?: { bridgeId: string }[];
 }
 
-export default function PreviewPanel({ html, deviceSize, annotationMode, interactionMode, onElementClick, onIndicatorClick, annotations, apiBindings }: Props) {
+export default function PreviewPanel({ html, deviceSize, annotationMode, interactionMode, onElementClick, onElementDeselected, onIndicatorClick, annotations, apiBindings }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Derive effective mode: interactionMode takes priority over boolean annotationMode
@@ -28,6 +29,9 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     if (e.data.type === 'element-selected' && effectiveMode === 'element-select' && onElementClick) {
       onElementClick(e.data);
     }
+    if (e.data.type === 'element-deselected' && onElementDeselected) {
+      onElementDeselected();
+    }
     if (e.data.type === 'indicator-click' && onIndicatorClick) {
       onIndicatorClick(e.data.bridgeId);
     }
@@ -37,7 +41,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
         (iframeRef.current.contentWindow as any).eval(`typeof showPage === 'function' && showPage(${JSON.stringify(name)})`);
       } catch {}
     }
-  }, [effectiveMode, onElementClick, onIndicatorClick]);
+  }, [effectiveMode, onElementClick, onElementDeselected, onIndicatorClick]);
 
   useEffect(() => {
     window.addEventListener('message', handleMessage);
