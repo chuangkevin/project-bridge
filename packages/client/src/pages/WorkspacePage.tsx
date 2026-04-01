@@ -836,6 +836,7 @@ export default function WorkspacePage() {
               hasPrototype={!!html}
               selectedElement={null}
               onClearSelectedElement={() => {}}
+              initialChatOnly={true}
             />
           </div>
         </div>

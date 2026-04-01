@@ -220,8 +220,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // Force chatOnly for consultant-mode projects (server-side, not dependent on client state)
-    const effectiveChatOnly = chatOnly || project.mode === 'consultant';
+    // chatOnly: true = force question path (from client 顧問 button or consultant tab)
+    // consultant-mode projects: only force chatOnly if client explicitly sends chatOnly=true
+    // (allows switching to design tab and generating UI)
+    const effectiveChatOnly = chatOnly === true;
 
     // Read arch_data for architecture block injection
     const archDataRaw = (project as any).arch_data;
