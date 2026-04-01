@@ -766,9 +766,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
           });
           const chatSession = model.startChat({
-            history: history.slice(0, -0).map(h => ({
+            history: history.slice(-10).map(h => ({
               role: h.role === 'assistant' ? 'model' as const : 'user' as const,
-              parts: [{ text: h.content }],
+              parts: [{ text: h.content.startsWith('<') ? '[前一次生成的原型]' : h.content.slice(0, 2000) }],
             })),
           });
           // Auto-continue loop: if response was truncated (MAX_TOKENS), keep going
