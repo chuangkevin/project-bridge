@@ -1403,6 +1403,25 @@ export default function SettingsPage() {
                   />
                 </label>
               )}
+              <button
+                type="button"
+                style={{ ...styles.primaryBtn, background: '#10b981' }}
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/skills/export', { headers: authHeaders() });
+                    const data = await res.json();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `skills-export-${new Date().toISOString().slice(0, 10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch { alert('匯出失敗'); }
+                }}
+              >
+                📦 批次匯出
+              </button>
             </div>
           )}
 

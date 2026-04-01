@@ -56,6 +56,18 @@ function recalculateReferences(): void {
   }
 }
 
+// GET /api/skills/export — batch export all skills as importable JSON
+router.get('/export', (req: Request, res: Response) => {
+  try {
+    const skills = db.prepare('SELECT name, description, content FROM agent_skills WHERE scope = ? ORDER BY order_index ASC').all('global') as { name: string; description: string; content: string }[];
+    res.setHeader('Content-Disposition', `attachment; filename="skills-export-${new Date().toISOString().slice(0, 10)}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    return res.json({ skills, exportedAt: new Date().toISOString(), count: skills.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to export skills' });
+  }
+});
+
 // GET /api/skills — list all global skills + optionally project-scoped
 router.get('/', (req: Request, res: Response) => {
   try {
