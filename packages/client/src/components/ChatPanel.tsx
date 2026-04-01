@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, startTransition, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import ConstraintsBar, { Constraints } from './ConstraintsBar';
 import AnalysisPreviewPanel from './AnalysisPreviewPanel';
 import { compressImage } from '../utils/imageCompress';
@@ -8,7 +9,7 @@ import PromptTemplateSelector from './PromptTemplateSelector';
 
 // Memoized markdown renderer — only re-renders when content changes, not on parent re-render
 const MemoMarkdown = memo(function MemoMarkdown({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{content}</ReactMarkdown>;
 });
 
 function isHtmlContent(content: string): boolean {
