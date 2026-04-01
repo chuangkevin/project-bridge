@@ -494,7 +494,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               // Format PAGES: line into a nice display
               const formatted = data.content.replace(/^PAGES:\s*(.+)$/gm, '\n📄 **方案確定：** $1');
               accThinking += formatted;
-              setThinkingContent(prev => prev + formatted);
+              // Throttle thinking updates too — prevent UI freeze
+              const nowT = Date.now();
+              if (!lastStreamUpdate || nowT - lastStreamUpdate > 300 || accThinking.length < 500) {
+                setThinkingContent(accThinking);
+                lastStreamUpdate = nowT;
+              }
             }
             if (data.type === 'skills' && Array.isArray(data.skills)) {
               setActiveSkillNames(data.skills);
