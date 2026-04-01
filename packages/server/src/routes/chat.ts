@@ -771,15 +771,32 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
               parts: [{ text: h.content }],
             })),
           });
-          const result = await chatSession.sendMessageStream(userContent);
-          for await (const chunk of result.stream) {
-            const text = chunk.text();
-            if (text) {
-              fullResponse += text;
-              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          // Auto-continue loop: if response was truncated (MAX_TOKENS), keep going
+          let continuePrompt = userContent;
+          for (let continueTurn = 0; continueTurn < 5; continueTurn++) {
+            const result = await chatSession.sendMessageStream(continuePrompt);
+            for await (const chunk of result.stream) {
+              const text = chunk.text();
+              if (text) {
+                fullResponse += text;
+                res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+              }
+            }
+            // Check if response was truncated
+            let finishReason = 'STOP';
+            try {
+              const resp = await result.response;
+              trackUsage(qaKey, getGeminiModel(), 'chat-qa', resp.usageMetadata);
+              finishReason = resp.candidates?.[0]?.finishReason || 'STOP';
+            } catch {}
+
+            if (finishReason === 'MAX_TOKENS') {
+              console.log(`[chat-qa] Response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
+              continuePrompt = '請繼續，從你剛才斷掉的地方接著說。不要重複已經說過的內容。';
+            } else {
+              break; // response complete
             }
           }
-          try { const resp = await result.response; trackUsage(qaKey, getGeminiModel(), 'chat-qa', resp.usageMetadata); } catch {}
           break;
         } catch (err: any) {
           const msg = err?.message || '';
