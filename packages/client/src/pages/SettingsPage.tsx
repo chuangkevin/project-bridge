@@ -1422,6 +1422,36 @@ export default function SettingsPage() {
               >
                 📦 批次匯出
               </button>
+              <label style={{ ...styles.primaryBtn, background: '#f59e0b', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+                📥 從 JSON 匯入
+                <input
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const text = await file.text();
+                      const data = JSON.parse(text);
+                      const skillsArr = data.skills;
+                      if (!Array.isArray(skillsArr) || skillsArr.length === 0) { alert('JSON 格式錯誤：找不到 skills 陣列'); return; }
+                      if (!confirm(`確定匯入 ${skillsArr.length} 個技能？（同名會更新）`)) return;
+                      const res = await fetch('/api/skills/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+                        body: JSON.stringify({ skills: skillsArr }),
+                      });
+                      const result = await res.json();
+                      if (res.ok) {
+                        setSkills(result.skills || []);
+                        alert(`匯入完成：新增 ${result.imported}，更新 ${result.updated}`);
+                      } else { alert(result.error || '匯入失敗'); }
+                    } catch (err: any) { alert('匯入失敗：' + (err.message || '')); }
+                    e.target.value = '';
+                  }}
+                />
+              </label>
             </div>
           )}
 
