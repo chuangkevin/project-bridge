@@ -307,19 +307,22 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       console.log('[chat] Override: component → full-page (has files + design intent)');
     }
 
-    // In design mode (not chatOnly): if classifier says 'question' but message has actionable keywords, upgrade to full-page
+    // In design mode (not chatOnly): if classifier says 'question' but message has actionable keywords, upgrade
+    let intentUpgraded = false;
     if (!effectiveChatOnly && intent === 'question') {
       const hasActionKeywords = /流程|UI|介面|頁面|設計|畫面|功能|系統|架構|模組|版面|表單|列表|按鈕|卡片|導航/i.test(message);
       if (hasActionKeywords) {
-        intent = currentPrototype ? 'micro-adjust' : 'full-page';
-        console.log(`[chat] Override: question → ${intent} (design mode + action keywords)`);
+        // Long messages (>20 chars) with action keywords = needs full planning with 4-agent discussion
+        intent = message.length > 20 ? 'full-page' : 'micro-adjust';
+        intentUpgraded = true;
+        console.log(`[chat] Override: question → ${intent} (design mode + action keywords, ${message.length} chars)`);
       }
     }
 
     // When user requests pages, force full-page intent regardless of existing prototype
     if (isPageRequest) {
       intent = 'full-page';
-    } else if (currentPrototype && !effectiveForceRegenerate && (intent === 'full-page' || intent === 'in-shell')) {
+    } else if (currentPrototype && !effectiveForceRegenerate && !intentUpgraded && (intent === 'full-page' || intent === 'in-shell')) {
       // If modification keywords detected on existing prototype, force micro-adjust
       if (hasModificationKeywords) {
         intent = 'micro-adjust';
