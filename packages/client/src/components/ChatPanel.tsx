@@ -974,8 +974,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 {tokenCount > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', marginLeft: 8 }}>約 {tokenCount.toLocaleString()} 字</span>}
               </div>
             ) : (
-              <div style={{ ...styles.assistantBubble, fontSize: '14px', lineHeight: '1.6' }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingContent}</ReactMarkdown>
+              <div style={{ ...styles.assistantBubble, fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap' as const }}>
+                {streamingContent}
                 <span style={styles.cursor}>|</span>
               </div>
             )}

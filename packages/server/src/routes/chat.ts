@@ -792,7 +792,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
             if (finishReason === 'MAX_TOKENS') {
               console.log(`[chat-qa] Response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
-              continuePrompt = '請繼續，從你剛才斷掉的地方接著說。不要重複已經說過的內容。';
+              continuePrompt = '繼續。不要加分隔線，不要重複前面的內容，直接從斷掉的地方往下寫。';
             } else {
               break; // response complete
             }
