@@ -419,6 +419,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     // Clear attached files after sending
     setAttachedFiles([]);
 
+    let fullContent = ''; // declared outside try so catch block can access partial content
+
     try {
       const body: Record<string, unknown> = { message: text };
       if (fileIds.length > 0) {
@@ -453,7 +455,6 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       if (!reader) throw new Error('No response stream');
 
       const decoder = new TextDecoder();
-      let fullContent = '';
       let accThinking = ''; // local accumulator (React state is stale in async closure)
       let receivedHtml: string | null = null;
       let receivedMessageType: 'user' | 'generate' | 'answer' | undefined;
@@ -595,7 +596,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       // Restore files on error
       setAttachedFiles(sentFiles);
       setLocalUserMsg(null);
-      onNewMessages(userMsg, { id: `err-${Date.now()}`, role: 'assistant', content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` });
+      // If we had partial streaming content, save it instead of just showing error
+      if (fullContent.length > 20) {
+        onNewMessages(userMsg, { id: `assistant-${Date.now()}`, role: 'assistant', content: fullContent, messageType: 'answer' as const });
+      } else {
+        onNewMessages(userMsg, { id: `err-${Date.now()}`, role: 'assistant', content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` });
+      }
     } finally {
       setStreaming(false);
       setGenerationPhase('idle');

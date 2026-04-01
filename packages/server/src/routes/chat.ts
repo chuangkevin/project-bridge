@@ -208,10 +208,13 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as any;
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
+
+    // Force chatOnly for consultant-mode projects (server-side, not dependent on client state)
+    const effectiveChatOnly = chatOnly || project.mode === 'consultant';
 
     // Read arch_data for architecture block injection
     const archDataRaw = (project as any).arch_data;
@@ -241,8 +244,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // We rely on AI classifyIntent for the main classification, but this flag determines
     // whether to DOWNGRADE full-page→micro-adjust when prototype exists.
     // chatOnly mode — force question intent, skip generation entirely
-    if (chatOnly) {
-      console.log('[chat] chatOnly mode — forcing question intent');
+    if (effectiveChatOnly) {
+      console.log('[chat] chatOnly mode — forcing question intent', project.mode === 'consultant' ? '(consultant project)' : '(client toggle)');
     }
 
     // If user is clearly requesting a new thing, DON'T downgrade.
@@ -272,7 +275,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     // Classify intent — skip AI call if obvious generate (saves 1 API call)
     let intent: string;
-    if (chatOnly) {
+    if (effectiveChatOnly) {
       intent = 'question';
     } else if (targetBridgeId && currentPrototype) {
       intent = 'element-adjust';
