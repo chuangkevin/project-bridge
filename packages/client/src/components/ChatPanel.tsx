@@ -56,6 +56,7 @@ interface Props {
   hasPrototype?: boolean;
   selectedElement?: { bridgeId: string; html: string; tagName: string } | null;
   onClearSelectedElement?: () => void;
+  initialChatOnly?: boolean;
 }
 
 const HISTORY_KEY = 'pb-prompt-history';
@@ -81,7 +82,7 @@ function saveHistory(history: string[]) {
   }
 }
 
-export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed, hasPrototype, selectedElement, onClearSelectedElement }: Props) {
+export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed, hasPrototype, selectedElement, onClearSelectedElement, initialChatOnly }: Props) {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -109,7 +110,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [viewingFile, setViewingFile] = useState<UploadedFile | null>(null);
   const pollingIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const [editedText, setEditedText] = useState('');
-  const [chatOnlyMode, setChatOnlyMode] = useState(false);
+  const [chatOnlyMode, setChatOnlyMode] = useState(initialChatOnly || false);
   const [constraints, setConstraints] = useState<Constraints | null>(null);
   const [artStyle, setArtStyle] = useState<ArtStyle | null>(null);
   const [artStyleLoading, setArtStyleLoading] = useState(false);
@@ -638,6 +639,24 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       <div style={styles.header}>
         <h3 style={styles.headerTitle}>對話</h3>
       </div>
+
+      {chatOnlyMode && (
+        <div style={{
+          padding: '8px 16px',
+          background: '#eff6ff',
+          borderBottom: '1px solid #bfdbfe',
+          fontSize: '13px',
+          color: '#1e40af',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <span>💬 顧問模式 — 跟 AI 架構師對話，不生成 UI</span>
+          <button onClick={() => setChatOnlyMode(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: '12px' }}>
+            切換回設計模式
+          </button>
+        </div>
+      )}
 
       {/* Generation progress bar */}
       {generationPhase !== 'idle' && (
@@ -1282,12 +1301,22 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           data-testid="file-input"
         />
         <button
-          style={{ ...styles.attachBtn, fontSize: 11, color: chatOnlyMode ? '#3b82f6' : '#94a3b8', fontWeight: chatOnlyMode ? 700 : 400, background: chatOnlyMode ? '#eff6ff' : 'transparent', borderRadius: '6px' }}
+          style={{
+            ...styles.attachBtn,
+            fontSize: '12px',
+            color: chatOnlyMode ? '#fff' : '#6b7280',
+            fontWeight: chatOnlyMode ? 600 : 400,
+            background: chatOnlyMode ? '#3b82f6' : 'transparent',
+            borderRadius: '6px',
+            padding: '4px 10px',
+            border: chatOnlyMode ? 'none' : '1px solid #d1d5db',
+            transition: 'all 0.15s',
+          }}
           onClick={() => setChatOnlyMode(prev => !prev)}
-          title={chatOnlyMode ? '對話模式（不生成 UI）' : '切換到對話模式'}
+          title={chatOnlyMode ? '顧問模式開啟中（不生成 UI）' : '切換到顧問模式（純對話）'}
           data-testid="chat-only-btn"
         >
-          💬
+          💬 顧問模式
         </button>
         {hasPrototype && (
           <button

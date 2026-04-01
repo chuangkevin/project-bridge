@@ -18,7 +18,8 @@ router.post('/', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Project name is required' });
     }
 
-    const projectMode = mode === 'design' ? 'design' : 'architecture';
+    const validModes = ['design', 'consultant', 'architecture'];
+    const projectMode = validModes.includes(mode) ? mode : 'design';
 
     const id = uuidv4();
     const share_token = generateShareToken();

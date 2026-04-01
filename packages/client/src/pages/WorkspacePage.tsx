@@ -61,7 +61,7 @@ export default function WorkspacePage() {
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
-  const [activeMode, setActiveMode] = useState<'design' | 'architecture'>('design');
+  const [activeMode, setActiveMode] = useState<'design' | 'consultant' | 'architecture'>('design');
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
   const { setArchData, targetPage, setTargetPage } = useArchStore();
   const [designActive, setDesignActive] = useState(false);
@@ -254,7 +254,10 @@ export default function WorkspacePage() {
       setArchData(projData.arch_data ?? null);
       if (!projData.arch_data && !projData.currentHtml) {
         // Brand new project: respect the mode chosen at creation time
-        setActiveMode(projData.mode === 'design' ? 'design' : 'architecture');
+        const modeMap: Record<string, 'design' | 'consultant' | 'architecture'> = {
+          design: 'design', consultant: 'consultant', architecture: 'architecture',
+        };
+        setActiveMode(modeMap[projData.mode] || 'design');
       } else if (projData.currentHtml) {
         setActiveMode('design'); // has prototype → go to design
       }
@@ -793,6 +796,15 @@ export default function WorkspacePage() {
           <button
             type="button"
             role="tab"
+            aria-selected={activeMode === 'consultant'}
+            style={tabBtnStyle(activeMode === 'consultant')}
+            onClick={() => setActiveMode('consultant')}
+          >
+            顧問
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeMode === 'architecture'}
             style={tabBtnStyle(activeMode === 'architecture')}
             onClick={() => setActiveMode('architecture')}
@@ -811,6 +823,22 @@ export default function WorkspacePage() {
             setPendingChatMessage('請依照架構生成所有頁面');
           }}
         />
+      ) : activeMode === 'consultant' ? (
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <ChatPanel
+              projectId={project?.id || id!}
+              messages={messages}
+              onNewMessages={handleNewMessages}
+              onHtmlGenerated={handleHtmlGenerated}
+              pendingMessage={pendingChatMessage}
+              onPendingMessageConsumed={() => setPendingChatMessage(null)}
+              hasPrototype={!!html}
+              selectedElement={null}
+              onClearSelectedElement={() => {}}
+            />
+          </div>
+        </div>
       ) : (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
     <div style={styles.container}>

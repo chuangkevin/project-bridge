@@ -90,8 +90,28 @@ export async function generateParallel(
         plan.sharedCss,
         designConvention,
         pageSkills,
-      ).then(async (result) => {
+      ).then(async (origResult) => {
+        let result = origResult;
         if (result.success) {
+          // Pre-assembly gate: validate HTML structure immediately
+          const gateResult = validateFragment(result.html, page.name);
+          if (!gateResult.valid) {
+            console.log(`[pre-gate] "${page.name}" FAILED: ${gateResult.reason}`);
+            // Immediate retry with different key
+            const gateRetryKey = getGeminiApiKeyExcluding(key);
+            if (gateRetryKey) {
+              const retryResult = await generatePageFragment(gateRetryKey, page, plan.cssVariables, plan.sharedCss, designConvention, pageSkills);
+              if (retryResult.success) {
+                const retryGate = validateFragment(retryResult.html, page.name);
+                if (retryGate.valid) {
+                  result = retryResult; // use retry result
+                  console.log(`[pre-gate] "${page.name}" retry PASS: ${retryGate.textLen} chars`);
+                }
+              }
+            }
+          } else {
+            console.log(`[pre-gate] "${page.name}" PASS: ${gateResult.textLen} chars, balance ${gateResult.divBalance}`);
+          }
           onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}`, message: `${devName} 完成了「${page.name}」✓` });
           return result;
         }
@@ -214,6 +234,21 @@ export async function generateParallel(
     }
   }
 
+  // Store QA lessons for next generation
+  if (qaReport.issues.filter(i => i.severity === 'critical').length > 0) {
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      for (const issue of qaReport.issues.filter(i => i.severity === 'critical').slice(0, 5)) {
+        db.prepare('INSERT INTO project_lessons (id, project_id, lesson, source) VALUES (?, ?, ?, ?)').run(
+          uuidv4(), projectId, `${issue.page}: ${issue.message}`, 'qa-report'
+        );
+      }
+      console.log(`[lessons] Stored ${qaReport.issues.filter(i => i.severity === 'critical').length} lessons`);
+    } catch (e: any) {
+      console.warn('[lessons] Failed to store:', e.message?.slice(0, 50));
+    }
+  }
+
   onProgress?.({ phase: 'done' });
 
   return {
@@ -250,4 +285,53 @@ function selectRelevantSkills(
     name: s.skill.name,
     content: s.skill.content.slice(0, 500) + (s.skill.content.length > 500 ? '...' : ''),
   }));
+}
+
+function validateFragment(html: string, pageName: string): { valid: boolean; reason?: string; textLen: number; divBalance: number } {
+  // Strip nav/header/footer first (assembler will do this too)
+  const stripped = html
+    .replace(/<nav[\s>][\s\S]{0,2000}?<\/nav>/gi, '')
+    .replace(/<header[\s>][\s\S]{0,2000}?<\/header>/gi, '')
+    .replace(/<footer[\s>][\s\S]{0,2000}?<\/footer>/gi, '');
+
+  const textContent = stripped.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  const textLen = textContent.length;
+
+  const openDivs = (stripped.match(/<div[\s>]/gi) || []).length;
+  const closeDivs = (stripped.match(/<\/div>/gi) || []).length;
+  const divBalance = openDivs - closeDivs;
+
+  // Check 1: Has page wrapper
+  if (!html.includes('class="page"') && !html.includes('data-page=')) {
+    return { valid: false, reason: 'no page wrapper', textLen, divBalance };
+  }
+
+  // Check 2: Text content > 50 chars
+  if (textLen < 50) {
+    return { valid: false, reason: `text too short (${textLen} chars)`, textLen, divBalance };
+  }
+
+  // Check 3: Div balance within ±2
+  if (Math.abs(divBalance) > 2) {
+    return { valid: false, reason: `div imbalance (${openDivs} open, ${closeDivs} close)`, textLen, divBalance };
+  }
+
+  // Check 4: No full HTML document
+  if (html.toLowerCase().includes('<!doctype') || html.toLowerCase().includes('<html')) {
+    return { valid: false, reason: 'contains full HTML document', textLen, divBalance };
+  }
+
+  return { valid: true, textLen, divBalance };
+}
+
+export function getLessons(projectId: string): string[] {
+  try {
+    // Clean up expired lessons (>30 days)
+    db.prepare("DELETE FROM project_lessons WHERE created_at < datetime('now', '-30 days')").run();
+    // Get recent lessons
+    const rows = db.prepare('SELECT lesson FROM project_lessons WHERE project_id = ? ORDER BY created_at DESC LIMIT 10').all(projectId) as { lesson: string }[];
+    return rows.map(r => r.lesson);
+  } catch {
+    return [];
+  }
 }

@@ -6,11 +6,11 @@ interface Props {
   onCreated: (project: { id: string; name: string; share_token: string; created_at: string; updated_at: string }) => void;
 }
 
-type ProjectMode = 'architecture' | 'design';
+type ProjectMode = 'design' | 'consultant' | 'architecture';
 
 export default function NewProjectDialog({ onClose, onCreated }: Props) {
   const [name, setName] = useState('');
-  const [mode, setMode] = useState<ProjectMode>('architecture');
+  const [mode, setMode] = useState<ProjectMode>('design');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,29 +68,26 @@ export default function NewProjectDialog({ onClose, onCreated }: Props) {
         <form onSubmit={handleSubmit}>
           <label style={styles.label}>建立模式</label>
           <div style={styles.modeRow}>
-            <button
-              type="button"
-              style={modeCardStyle(mode === 'architecture')}
-              onClick={() => setMode('architecture')}
-              data-testid="mode-architecture"
-            >
-              <div style={styles.modeTitle}>
-                <span style={styles.modeIcon}>🏗️</span> 架構設計
-              </div>
-              <div style={styles.modeDesc}>先定義頁面結構，AI 生成時更精準</div>
-            </button>
-            <button
-              type="button"
-              style={modeCardStyle(mode === 'design')}
-              onClick={() => setMode('design')}
-              data-testid="mode-design"
-            >
-              <div style={styles.modeTitle}>
-                <span style={styles.modeIcon}>💬</span> 直接設計
-              </div>
-              <div style={styles.modeDesc}>跳過架構，直接開始聊天生成</div>
-            </button>
+            {([
+              { id: 'design' as const, icon: '🎨', label: '設計', desc: '描述你想要的 UI，AI 團隊討論後自動生成互動原型' },
+              { id: 'consultant' as const, icon: '💬', label: '顧問', desc: '跟 AI 架構師對話，釐清需求、分析業務邏輯、評估技術方案' },
+              { id: 'architecture' as const, icon: '🔗', label: '架構', desc: '視覺化規劃頁面結構與導航流程，完成後可直接生成原型' },
+            ]).map(m => (
+              <button
+                key={m.id}
+                type="button"
+                style={modeCardStyle(mode === m.id)}
+                onClick={() => setMode(m.id)}
+                data-testid={`mode-${m.id}`}
+              >
+                <div style={{ fontSize: '24px', textAlign: 'center' as const }}>{m.icon}</div>
+                <div style={{ ...styles.modeTitle, textAlign: 'center' as const, marginTop: '4px' }}>{m.label}</div>
+              </button>
+            ))}
           </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', minHeight: '36px', margin: '4px 0 0' }}>
+            {({ design: '描述你想要的 UI，AI 團隊討論後自動生成互動原型', consultant: '跟 AI 架構師對話，釐清需求、分析業務邏輯、評估技術方案', architecture: '視覺化規劃頁面結構與導航流程，完成後可直接生成原型' })[mode]}
+          </p>
 
           {presets.length > 0 && (
             <div style={{ marginBottom: 16, marginTop: 12 }}>
