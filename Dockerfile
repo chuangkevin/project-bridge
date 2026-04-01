@@ -2,13 +2,13 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Native build tools for better-sqlite3
+# Native build tools for better-sqlite3 (cached layer — only rebuilds if base image changes)
 RUN apk add --no-cache python3 make g++
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy workspace config
+# Copy ONLY dependency files first (maximizes Docker cache — won't rebuild on source changes)
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
@@ -16,8 +16,8 @@ COPY packages/client/package.json packages/client/
 # Tell node-gyp to use bundled headers instead of downloading from internet
 ENV npm_config_nodedir=/usr/local
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies (cached unless package.json or lockfile changes)
+RUN pnpm install --frozen-lockfile --prefer-offline
 
 # Copy source
 COPY packages/server/ packages/server/
