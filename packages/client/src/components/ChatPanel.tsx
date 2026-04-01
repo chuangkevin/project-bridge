@@ -867,7 +867,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 ) : msg.messageType === 'answer' ? (
                   <div style={styles.answerBubble}>
                     <span style={styles.answerLabel}>💬 回答</span>
-                    <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+                    <div className="markdown-body" style={{ fontSize: '14px', lineHeight: '1.6' }}>
                       <MemoMarkdown content={msg.content} />
                     </div>
                   </div>
