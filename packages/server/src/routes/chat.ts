@@ -1626,7 +1626,7 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
             return;
           } catch (retryErr: any) {
             console.error('[parallel] Retry also failed:', retryErr.message);
-            res.write(`data: ${JSON.stringify({ error: '多頁面生成失敗，請稍後重試: ' + retryErr.message?.slice(0, 100) })}\n\n`);
+            res.write(`data: ${JSON.stringify({ error: formatGeminiError(retryErr) })}\n\n`);
             res.end();
             return;
           }
