@@ -1448,45 +1448,45 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           rows={2}
           disabled={streaming}
         />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignSelf: 'stretch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignSelf: 'stretch', minWidth: '44px' }}>
           <button
             style={{
+              ...styles.sendBtn,
               flex: 1,
-              padding: '0 12px',
-              fontSize: '12px',
-              fontWeight: chatOnlyMode ? 700 : 500,
+              width: '100%',
+              height: 'auto',
+              minHeight: '32px',
+              opacity: (!input.trim() || streaming) ? 0.5 : 1,
+            }}
+            onClick={handleSend}
+            disabled={!input.trim() || streaming || hasUnreadyFiles}
+            title={hasUnreadyFiles ? '等待檔案分析完成...' : '送出'}
+            data-testid="send-btn"
+          >
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+              <path d="M2 9l6-6v4h8v4H8v4L2 9z" fill="white" />
+            </svg>
+          </button>
+          <button
+            style={{
+              padding: '4px 0',
+              fontSize: '11px',
+              fontWeight: chatOnlyMode ? 700 : 400,
               color: chatOnlyMode ? '#fff' : '#6b7280',
               background: chatOnlyMode ? '#3b82f6' : 'var(--bg-hover, #f1f5f9)',
               border: chatOnlyMode ? 'none' : '1px solid var(--border-primary, #e2e8f0)',
-              borderRadius: '8px',
+              borderRadius: '6px',
               cursor: 'pointer',
               transition: 'all 0.15s',
-              whiteSpace: 'nowrap' as const,
-              minWidth: '50px',
+              width: '100%',
             }}
             onClick={() => setChatOnlyMode(prev => !prev)}
             title={chatOnlyMode ? '顧問模式開啟中（不生成 UI）' : '切換到顧問模式（純對話）'}
             data-testid="chat-only-btn"
           >
-            💬<br/>顧問
+            💬顧問
           </button>
         </div>
-        <button
-          style={{
-            ...styles.sendBtn,
-            alignSelf: 'stretch',
-            height: 'auto',
-            opacity: (!input.trim() || streaming) ? 0.5 : 1,
-          }}
-          onClick={handleSend}
-          disabled={!input.trim() || streaming || hasUnreadyFiles}
-          title={hasUnreadyFiles ? '等待檔案分析完成...' : attachedFiles.some(f => f.analysisStatus === 'error') ? '部分檔案分析失敗，仍可送出' : ''}
-          data-testid="send-btn"
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M2 9l6-6v4h8v4H8v4L2 9z" fill="white" />
-          </svg>
-        </button>
       </div>
       </div>{/* end resizable input area wrapper */}
 
