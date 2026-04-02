@@ -615,6 +615,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         messageType: receivedMessageType,
       };
 
+      // Final flush — ensure throttled thinking content is fully displayed
+      setThinkingContent(accThinking);
       // Save thinking summary — use accumulated local var since React state is stale in closure
       setLastThinkingSummary(accThinking);
 

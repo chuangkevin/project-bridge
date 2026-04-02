@@ -1964,9 +1964,9 @@ ${html.slice(0, 3000)}`;
       if (!generationSummary && finalPages.length > 0) {
         const userReq = userContent.slice(0, 50);
         const intro = `我已經為您建立了「${userReq}」的原型，包含 ${finalPages.length} 個頁面。`;
-        const tech = `此原型採用 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換，並整合了專案設計風格。`;
+        const tech = `此原型採用 HTML、CSS 與 JavaScript 構建，支持頁面間導覽切換。`;
         const features = finalPages.map(p => `• ${p}`).join('\n');
-        generationSummary = `${intro}\n${tech}\n\n包含頁面：\n${features}`;
+        generationSummary = `${intro}\n${tech}\n\n主要功能包括：\n${features}`;
       }
 
       // Save summary + pages to conversation metadata for persistence
