@@ -93,8 +93,9 @@ async function extractPptx(filePath: string): Promise<string> {
 async function extractImage(filePath: string): Promise<string> {
   try {
     const { createWorker } = await import('tesseract.js');
-    // Load both Chinese Traditional + English for mixed UI screenshots
-    const worker = await createWorker('chi_tra+eng');
+    // Use local tessdata if available (baked into Docker), fallback to CDN
+    const workerOpts = process.env.TESSDATA_PREFIX ? { langPath: process.env.TESSDATA_PREFIX } : {};
+    const worker = await createWorker('chi_tra+eng', 1, workerOpts);
 
     try {
       // Set a 60-second timeout (chi_tra model is larger, needs more time)
