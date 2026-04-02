@@ -776,6 +776,23 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         richQaPrompt += `\n\n=== 設計方向 ===\n${designConvention.slice(0, 500)}\n===`;
       }
 
+      // Check for image attachments — enable vision mode in Q&A
+      let qaImageParts: { inlineData: { mimeType: string; data: string } }[] = [];
+      if (Array.isArray(fileIds) && fileIds.length > 0) {
+        const imgFiles = db.prepare(
+          `SELECT storage_path, mime_type FROM uploaded_files WHERE id IN (${fileIds.map(() => '?').join(',')}) AND mime_type LIKE 'image/%'`
+        ).all(...fileIds) as { storage_path: string; mime_type: string }[];
+        for (const img of imgFiles.slice(0, 3)) { // max 3 images
+          try {
+            const buf = fs.readFileSync(img.storage_path);
+            qaImageParts.push({ inlineData: { mimeType: img.mime_type, data: buf.toString('base64') } });
+          } catch {}
+        }
+        if (qaImageParts.length > 0) {
+          console.log(`[chat-qa] Vision mode: ${qaImageParts.length} image(s) attached`);
+        }
+      }
+
       let qaKey = apiKey;
       let qaRetries = 0;
       while (qaRetries <= 4) {
@@ -793,9 +810,13 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             })),
           });
           // Auto-continue loop: if response was truncated (MAX_TOKENS), keep going
-          let continuePrompt = userContent;
+          // First turn: include images if any (vision multimodal)
+          const firstTurnParts: any[] = [{ text: userContent }, ...qaImageParts];
+          let continuePrompt: string | any[] = qaImageParts.length > 0 ? firstTurnParts : userContent;
           for (let continueTurn = 0; continueTurn < 5; continueTurn++) {
-            const result = await chatSession.sendMessageStream(continuePrompt);
+            const result = await chatSession.sendMessageStream(continuePrompt as any);
+            // Subsequent turns are text-only
+            if (continueTurn === 0) continuePrompt = '' as any;
             for await (const chunk of result.stream) {
               const text = chunk.text();
               if (text) {
