@@ -1355,9 +1355,16 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
         finalPages = plan.pages.map(p => p.name);
         isMultiPage = finalPages.length >= 2;
 
-        // Store plan constraints in supplement for sub-agents
+        // Store plan details in supplement for sub-agents
         if (plan.constraints.length > 0) {
           supplement += '\n\n=== 設計約束 ===\n' + plan.constraints.join('\n');
+        }
+        // Store page descriptions so sub-agents know what each page should contain
+        if (plan.pages.length > 0) {
+          const pageDescs = plan.pages.map(p =>
+            `• ${p.name}：${p.description || ''}${p.keyFeatures?.length ? '（' + p.keyFeatures.join('、') + '）' : ''}`
+          ).join('\n');
+          supplement += '\n\n=== 頁面規劃 ===\n' + pageDescs;
         }
 
         // Store navigation map for sub-agents
@@ -1476,12 +1483,12 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
         }, 15000); // every 15 seconds
 
         try {
-          // Enrich userContent with conversation context + plan constraints for sub-agents
+          // Enrich userContent with plan details + conversation context for sub-agents
           let enrichedUserContent = userContent;
           if (supplement.trim()) {
             enrichedUserContent += '\n\n' + supplement;
           }
-          // Add last 3 conversation turns as context so sub-agents understand the domain
+          // Add last 3 conversation turns as context
           const recentContext = history.slice(-6).filter(h => h.role === 'user').map(h => h.content.slice(0, 150)).join('；');
           if (recentContext) {
             enrichedUserContent += `\n\n【對話脈絡】使用者之前提到：${recentContext}`;
