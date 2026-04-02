@@ -2090,4 +2090,101 @@ router.post('/:id/select-variant', async (req: Request, res: Response) => {
   }
 });
 
+// Regenerate a single page in the prototype
+router.post('/:id/regenerate-page', async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const { page: pageName } = req.body;
+    if (!pageName) return res.status(400).json({ error: 'page is required' });
+
+    const prototype = db.prepare('SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1').get(projectId) as any;
+    if (!prototype?.html) return res.status(404).json({ error: 'No prototype found' });
+
+    // Extract all page names from prototype for navigation context
+    const allPages: string[] = [];
+    const pageMatch = prototype.html.matchAll(/data-page="([^"]+)"/g);
+    for (const m of pageMatch) allPages.push(m[1]);
+
+    // Get design convention
+    const projectRow = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as any;
+    let designConvention = '';
+    if (projectRow?.design_preset_id) {
+      const preset = db.prepare('SELECT * FROM design_presets WHERE id = ?').get(projectRow.design_preset_id) as any;
+      if (preset?.tokens) {
+        try {
+          const tokens = JSON.parse(preset.tokens);
+          designConvention = `Primary Color: ${tokens.primaryColor || '#3b82f6'}\nBackground Color: ${tokens.backgroundColor || '#f9fafb'}`;
+        } catch {}
+      }
+    }
+
+    // Build page spec
+    const { buildLocalPlan } = require('../services/masterAgent');
+    const { getLessons } = require('../services/parallelGenerator');
+    const lessons = getLessons(projectId);
+    const plan = buildLocalPlan(allPages, `重新生成「${pageName}」頁面`, designConvention, lessons);
+    const pageAssignment = plan.pages.find((p: any) => p.name === pageName);
+    if (!pageAssignment) return res.status(400).json({ error: `Page "${pageName}" not in plan` });
+
+    // Generate with sub-agent
+    const { generatePageFragment } = require('../services/subAgent');
+    const { getGeminiApiKey } = require('../services/geminiKeys');
+    const { getActiveSkills } = require('./skills');
+
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) return res.status(503).json({ error: 'No API key available' });
+
+    // Get relevant skills
+    const skills = getActiveSkills(projectId).slice(0, 3).map((s: any) => ({
+      name: s.name, content: s.content.slice(0, 500),
+    }));
+
+    const result = await generatePageFragment(apiKey, pageAssignment, plan.cssVariables, plan.sharedCss, designConvention, skills);
+
+    if (!result.success) {
+      return res.status(500).json({ error: `Failed to regenerate: ${result.error}` });
+    }
+
+    // Replace the page in prototype HTML
+    const escapedName = pageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Find page div boundaries
+    const pageStartRegex = new RegExp(`<div[^>]*id="page-${escapedName}"[^>]*>`);
+    const startMatch = prototype.html.match(pageStartRegex);
+    if (!startMatch) return res.status(400).json({ error: `Page div not found for "${pageName}"` });
+
+    const startIdx = prototype.html.indexOf(startMatch[0]);
+
+    // Find end: next page div or </main>
+    const afterStart = prototype.html.slice(startIdx + startMatch[0].length);
+    const nextPageMatch = afterStart.match(/<div[^>]*id="page-[^"]+"/);
+    const mainEnd = afterStart.indexOf('</main>');
+    let endOffset: number;
+    if (nextPageMatch && afterStart.indexOf(nextPageMatch[0]) < mainEnd) {
+      endOffset = afterStart.indexOf(nextPageMatch[0]);
+    } else {
+      endOffset = mainEnd;
+    }
+    const endIdx = startIdx + startMatch[0].length + endOffset;
+
+    // Build new HTML
+    const newHtml = prototype.html.slice(0, startIdx) + result.html + prototype.html.slice(endIdx);
+
+    // Save as new version
+    const { v4: uuidv4 } = require('uuid');
+    const versionId = uuidv4();
+    db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+    db.prepare('INSERT INTO prototype_versions (id, project_id, html, is_current) VALUES (?, ?, ?, 1)').run(versionId, projectId, newHtml);
+
+    // Clear related lessons
+    db.prepare('DELETE FROM project_lessons WHERE project_id = ? AND lesson LIKE ?').run(projectId, `${pageName}%`);
+
+    console.log(`[regen] Regenerated page "${pageName}" for project ${projectId}, version ${versionId}`);
+    return res.json({ success: true, versionId, pageName });
+  } catch (err: any) {
+    console.error('[regen] Error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

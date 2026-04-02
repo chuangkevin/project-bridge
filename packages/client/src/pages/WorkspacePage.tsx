@@ -1527,6 +1527,29 @@ export default function WorkspacePage() {
                       >
                         🔄
                       </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm(`重新生成「${page}」頁面？`)) return;
+                          try {
+                            const res = await fetch(`/api/projects/${id}/regenerate-page`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ page }),
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              window.location.reload();
+                            } else {
+                              alert(data.error || '重新生成失敗');
+                            }
+                          } catch { alert('重新生成失敗'); }
+                        }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
+                        title="重新生成此頁面"
+                      >
+                        ↻
+                      </button>
                     </div>
                   ))}
                 </div>
