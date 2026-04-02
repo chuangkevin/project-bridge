@@ -57,6 +57,40 @@ export function replaceElementByBridgeId(html: string, bridgeId: string, newHtml
 }
 
 /**
+ * Extract a lightweight index of all pages and their key elements.
+ * Used by vision-micro-adjust to help AI identify which element to modify.
+ */
+export function extractElementIndex(html: string): string {
+  const lines: string[] = [];
+
+  // Find all pages
+  const pageRegex = /<div[^>]*data-page="([^"]+)"[^>]*>/g;
+  let pageMatch;
+  while ((pageMatch = pageRegex.exec(html)) !== null) {
+    const pageName = pageMatch[1];
+    lines.push(`\n## Page: ${pageName}`);
+
+    // Find all bridge-id elements within this page section
+    const pageStart = pageMatch.index;
+    const nextPageIdx = html.indexOf('<div', pageStart + pageMatch[0].length);
+    const pageEnd = html.indexOf('data-page=', nextPageIdx) !== -1
+      ? html.lastIndexOf('<div', html.indexOf('data-page=', nextPageIdx))
+      : html.indexOf('</main>', pageStart);
+    const pageHtml = html.slice(pageStart, pageEnd !== -1 ? pageEnd : undefined);
+
+    const bridgeRegex = /data-bridge-id="([^"]+)"[^>]*>([^<]{0,100})/g;
+    let bridgeMatch;
+    while ((bridgeMatch = bridgeRegex.exec(pageHtml)) !== null) {
+      const id = bridgeMatch[1];
+      const textPreview = bridgeMatch[2].trim().slice(0, 50);
+      lines.push(`  - [${id}] ${textPreview || '(container)'}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Fuzzy match: find the best matching data-bridge-id element based on hints.
  */
 export function fuzzyMatchElement(

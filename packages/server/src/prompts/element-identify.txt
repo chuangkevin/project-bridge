@@ -1,0 +1,24 @@
+You are analyzing a prototype HTML to find which element the user wants to modify.
+
+USER MESSAGE: {userMessage}
+
+The user has also attached a screenshot showing the STYLE they want to apply.
+
+PROTOTYPE PAGES AND ELEMENTS:
+{elementIndex}
+
+Based on the user's message, identify:
+1. Which PAGE contains the element they're referring to
+2. Which ELEMENT (by data-bridge-id) they want to modify
+3. What kind of modification they want
+
+Return ONLY valid JSON:
+{
+  "page": "page name",
+  "bridgeId": "the data-bridge-id of the target element",
+  "elementDescription": "brief description of what element this is",
+  "modification": "brief description of what to change"
+}
+
+If you cannot identify the element, return:
+{ "page": null, "bridgeId": null, "elementDescription": null, "modification": "description of what user wants" }

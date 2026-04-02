@@ -250,51 +250,31 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     const shellHtml = shellRow?.shell_html || null;
     const hasShell = !!shellHtml;
 
-    // isObviousGenerate: detect if user wants to CREATE something new (not just ask a question)
-    // We rely on AI classifyIntent for the main classification, but this flag determines
-    // whether to DOWNGRADE full-page→micro-adjust when prototype exists.
-    // chatOnly mode — force question intent, skip generation entirely
-    if (effectiveChatOnly) {
-      console.log('[chat] chatOnly mode — forcing question intent', project.mode === 'consultant' ? '(consultant project)' : '(client toggle)');
-    }
-
-    // If user is clearly requesting a new thing, DON'T downgrade.
-    const trimmed = message.trim().toLowerCase();
-    const hasGenerateKeywords = /我要|我想要|請做|幫我做|生成|建立|做一個|設計|create|make|build|generate|給我|產生|做出/i.test(trimmed);
-    const hasModificationKeywords = /加上|改成|調整|刪掉|拿掉|換成|移到|加個|加一個|修改|移除|替換|插入/i.test(trimmed);
-    const hasTypeKeywords = /網站|網頁|頁面|系統|平台|app|應用|介面|dashboard|後台|前台|landing/i.test(trimmed);
-    const isObviousGenerate = hasGenerateKeywords && hasTypeKeywords;
-
     // Check if prototype already exists
     const currentPrototype = db.prepare(
       'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
     ).get(projectId) as { html: string } | undefined;
 
-    // Server-side forceRegenerate detection: explicit redesign intent in message
-    const impliedForceRegenerate = /重新設計|完全重做|全部重做|請重新生成|重新生成|redesign|rebuild|start over/i.test(message);
-    const effectiveForceRegenerate = forceRegenerate || impliedForceRegenerate;
+    const effectiveForceRegenerate = !!forceRegenerate;
 
-    // Gate isObviousGenerate: only when no prototype exists OR forceRegenerate
-    const gatedObviousGenerate = isObviousGenerate && (!currentPrototype || effectiveForceRegenerate);
-
-    // Direct element-adjust routing when targetBridgeId is present
     const { targetBridgeId, targetHtml } = req.body;
-    if (targetBridgeId && currentPrototype) {
-      // will be handled by element-adjust path later
-    }
 
-    // Classify intent — skip AI call if obvious generate (saves 1 API call)
+    // Classify intent — trust AI vision classifier, only override for explicit user actions
     let intent: string;
+    // 1. User explicitly toggled consultant mode
     if (effectiveChatOnly) {
       intent = 'question';
-    } else if (targetBridgeId && currentPrototype) {
+    }
+    // 2. User explicitly selected an element
+    else if (targetBridgeId && currentPrototype) {
       intent = 'element-adjust';
-    } else if (isObviousGenerate) {
-      intent = hasShell ? 'in-shell' : 'full-page';
-    } else if (gatedObviousGenerate) {
-      intent = hasShell ? 'in-shell' : 'full-page';
-    } else {
-      // Load first image for vision-based intent classification
+    }
+    // 3. User explicitly clicked force regenerate
+    else if (forceRegenerate) {
+      intent = 'full-page';
+    }
+    // 4. AI decides everything else (with vision if image attached)
+    else {
       let intentImage: { mimeType: string; base64: string } | null = null;
       if (Array.isArray(fileIds) && fileIds.length > 0) {
         try {
@@ -309,43 +289,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       intent = await classifyIntent(message.trim(), apiKey, hasShell, intentImage);
     }
 
-    // Detect requests for missing/new pages — force full-page generation
-    const isPageRequest = /沒有.*頁|缺少.*頁|加入.*頁|新增.*頁|多.*頁面|少了.*頁|要有.*頁|要.*頁面|需要.*頁|增加.*頁|missing.*page|add.*page|need.*page|請生成.*多|生成.*頁面/i.test(message);
-
-    // Override: attached files with design/redesign intent → full-page (not component)
-    const hasFiles = fileIds && fileIds.length > 0;
-    const hasDesignIntent = /設計|redesign|重新|重做|做出|產生|生成/i.test(message);
-    if (hasFiles && hasDesignIntent && intent === 'component') {
-      intent = 'full-page';
-      console.log('[chat] Override: component → full-page (has files + design intent)');
-    }
-
-    // In design mode (not chatOnly): if classifier says 'question' but message has actionable keywords, upgrade
-    let intentUpgraded = false;
-    if (!effectiveChatOnly && intent === 'question') {
-      const hasActionKeywords = /流程|UI|介面|頁面|設計|畫面|功能|系統|架構|模組|版面|表單|列表|按鈕|卡片|導航/i.test(message);
-      if (hasActionKeywords) {
-        // Long messages (>20 chars) with action keywords = needs full planning with 4-agent discussion
-        intent = message.length > 20 ? 'full-page' : 'micro-adjust';
-        intentUpgraded = true;
-        console.log(`[chat] Override: question → ${intent} (design mode + action keywords, ${message.length} chars)`);
-      }
-    }
-
-    // When user requests pages, force full-page intent regardless of existing prototype
-    if (isPageRequest) {
-      intent = 'full-page';
-    } else if (currentPrototype && !effectiveForceRegenerate && !intentUpgraded && (intent === 'full-page' || intent === 'in-shell')) {
-      // If modification keywords detected on existing prototype, force micro-adjust
-      if (hasModificationKeywords) {
-        intent = 'micro-adjust';
-      } else if (isObviousGenerate) {
-        intent = 'full-page';
-        // Don't downgrade — user explicitly wants to generate something new
-      } else {
-        intent = 'micro-adjust';
-      }
-    }
+    console.log('[chat] Intent:', intent, effectiveChatOnly ? '(chatOnly)' : '', forceRegenerate ? '(forceRegen)' : '');
 
     // Load conversation history (last 20 messages)
     const history = db.prepare(
@@ -455,19 +399,109 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       const userMsgId = uuidv4();
       db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(userMsgId, projectId, 'user', userContent, 'user');
 
-      // ─── VISION MICRO-ADJUST (image + text) ─────
+      // ─── VISION MICRO-ADJUST (image + text) — Two-pass element targeting ─────
       if (hasImageAttachment && imageFilePath) {
-        const { findElementByBridgeId, replaceElementByBridgeId, fuzzyMatchElement } = await import('../services/elementMatcher');
-        const visionPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/vision-micro-adjust.txt'), 'utf-8');
+        const { findElementByBridgeId, replaceElementByBridgeId, fuzzyMatchElement, extractElementIndex } = await import('../services/elementMatcher');
 
         try {
           const imageBuffer = fs.readFileSync(imageFilePath);
           const imageBase64 = imageBuffer.toString('base64');
 
+          // ── Pass 1: Identify which element to modify ──
+          const elementIndex = extractElementIndex(currentPrototype.html);
+          const identifyPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/element-identify.txt'), 'utf-8')
+            .replace('{userMessage}', userContent)
+            .replace('{elementIndex}', elementIndex.slice(0, 3000));
+
+          let targetBridgeIdFromAI: string | null = null;
+          let targetPage: string | null = null;
+          let modification: string = userContent;
+
+          try {
+            const genai = new GoogleGenerativeAI(apiKey);
+            const identifyModel = genai.getGenerativeModel({
+              model: getGeminiModel(),
+              generationConfig: { maxOutputTokens: 500, temperature: 0, responseMimeType: 'application/json' },
+            });
+            const identifyResult = await identifyModel.generateContent([
+              { text: identifyPrompt },
+              { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
+            ]);
+            try { trackUsage(apiKey, getGeminiModel(), 'vision-identify', identifyResult.response.usageMetadata); } catch {}
+            const identified = JSON.parse(identifyResult.response.text());
+            targetBridgeIdFromAI = identified.bridgeId;
+            targetPage = identified.page;
+            modification = identified.modification || userContent;
+            console.log('[vision] Pass 1 — Identified:', identified);
+          } catch (e: any) {
+            console.warn('[vision] Element identification failed:', e.message?.slice(0, 80));
+          }
+
+          // ── Pass 2: Targeted modification (or fallback to full-page) ──
+          if (targetBridgeIdFromAI) {
+            // Verify bridgeId exists, fuzzy fallback if not
+            let targetId = targetBridgeIdFromAI;
+            const exactMatch = findElementByBridgeId(currentPrototype.html, targetId);
+            if (!exactMatch.found) {
+              const fuzzyId = fuzzyMatchElement(currentPrototype.html, { textContent: modification });
+              if (fuzzyId) targetId = fuzzyId;
+            }
+
+            const elementResult = findElementByBridgeId(currentPrototype.html, targetId);
+            if (elementResult.found && elementResult.outerHtml) {
+              // Targeted modification — only send this element to AI
+              const elementPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/element-adjust.txt'), 'utf-8')
+                .replace('{targetHtml}', elementResult.outerHtml)
+                .replace('{instruction}', modification);
+
+              const modifyModel = new GoogleGenerativeAI(apiKey).getGenerativeModel({
+                model: getGeminiModel(),
+                generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
+              });
+              const modifyResult = await modifyModel.generateContent([
+                { text: elementPrompt },
+                { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
+              ]);
+              try { trackUsage(apiKey, getGeminiModel(), 'vision-element-adjust', modifyResult.response.usageMetadata); } catch {}
+
+              let newElementHtml = modifyResult.response.text().trim();
+              // Strip markdown fences if present
+              const fenceMatch2 = newElementHtml.match(/```(?:html)?\s*([\s\S]*?)```/);
+              if (fenceMatch2) newElementHtml = fenceMatch2[1].trim();
+
+              // Replace in prototype
+              let newHtml = replaceElementByBridgeId(currentPrototype.html, targetId, newElementHtml);
+              newHtml = sanitizeGeneratedHtml(newHtml, newHtml.includes('data-page='));
+              { const { html: autoFixedHtml, fixes } = autoFixDesignViolations(newHtml); newHtml = autoFixedHtml; if (fixes.length > 0) console.log('[design-validator] Auto-fixes applied:', fixes); }
+              if (designConvention) newHtml = injectConventionColors(newHtml, designConvention);
+
+              // Save version
+              const assistantMsgId = uuidv4();
+              db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(assistantMsgId, projectId, 'assistant', `[Vision element-adjust: ${targetId} — ${modification}]`, 'element-adjust');
+
+              const maxVersion = db.prepare('SELECT MAX(version) as maxV FROM prototype_versions WHERE project_id = ?').get(projectId) as any;
+              const newVersion = (maxVersion?.maxV || 0) + 1;
+              db.prepare('UPDATE prototype_versions SET is_current = 0 WHERE project_id = ?').run(projectId);
+              const versionId = uuidv4();
+              const pageMatches = [...newHtml.matchAll(/data-page="([^"]+)"/g)].map(m => m[1]);
+              db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(versionId, projectId, assistantMsgId, newHtml, newVersion, pageMatches.length > 1 ? 1 : 0, JSON.stringify(pageMatches));
+              db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
+              triggerQualityScoring(versionId, newHtml, apiKey);
+
+              res.write(`data: ${JSON.stringify({ content: `✓ 已精準修改元件 (${targetId}): ${modification}` })}\n\n`);
+              res.write(`data: ${JSON.stringify({ done: true, html: newHtml, messageType: 'element-adjust', intent: 'micro-adjust', isMultiPage: pageMatches.length > 1, pages: pageMatches })}\n\n`);
+              res.end();
+              return;
+            }
+          }
+
+          // ── Fallback: full-page vision micro-adjust (original single-pass) ──
+          console.log('[vision] Fallback to full-page micro-adjust');
+          const visionPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/vision-micro-adjust.txt'), 'utf-8');
+
           // Truncate HTML for vision context (keep under 20K chars)
           let truncatedHtml = currentPrototype.html;
           if (truncatedHtml.length > 20000) {
-            // Strip large style blocks first
             truncatedHtml = truncatedHtml.replace(/<style[^>]*>[\s\S]{500,}<\/style>/gi, '<style>/* truncated */</style>');
             if (truncatedHtml.length > 20000) truncatedHtml = truncatedHtml.slice(0, 20000) + '\n<!-- truncated -->';
           }
@@ -487,38 +521,30 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           try { trackUsage(apiKey, getGeminiModel(), 'vision-micro-adjust', result.response.usageMetadata); } catch {}
 
           let responseText = result.response.text().trim();
-          // Strip markdown fences
-          const fenceMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-          if (fenceMatch) responseText = fenceMatch[1].trim();
+          const fallbackFenceMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (fallbackFenceMatch) responseText = fallbackFenceMatch[1].trim();
 
           let visionResult: { bridgeId: string | null; reasoning: string; componentHtml: string | null };
           try {
             visionResult = JSON.parse(responseText);
           } catch {
-            // Failed to parse — fall through to text-only micro-adjust
             visionResult = { bridgeId: null, reasoning: 'JSON parse failed', componentHtml: null };
           }
 
           if (visionResult.bridgeId && visionResult.componentHtml) {
-            // Verify bridgeId exists
             let targetId = visionResult.bridgeId;
             const exactMatch = findElementByBridgeId(currentPrototype.html, targetId);
             if (!exactMatch.found) {
-              // Fuzzy fallback
-              const fuzzyId = fuzzyMatchElement(currentPrototype.html, {
-                textContent: visionResult.reasoning,
-              });
+              const fuzzyId = fuzzyMatchElement(currentPrototype.html, { textContent: visionResult.reasoning });
               if (fuzzyId) targetId = fuzzyId;
             }
 
             if (findElementByBridgeId(currentPrototype.html, targetId).found) {
-              // Replace component
               let newHtml = replaceElementByBridgeId(currentPrototype.html, targetId, visionResult.componentHtml);
               newHtml = sanitizeGeneratedHtml(newHtml, newHtml.includes('data-page='));
               { const { html: autoFixedHtml, fixes } = autoFixDesignViolations(newHtml); newHtml = autoFixedHtml; if (fixes.length > 0) console.log('[design-validator] Auto-fixes applied:', fixes); }
               if (designConvention) newHtml = injectConventionColors(newHtml, designConvention);
 
-              // Save version
               const assistantMsgId = uuidv4();
               db.prepare('INSERT INTO conversations (id, project_id, role, content, message_type) VALUES (?, ?, ?, ?, ?)').run(assistantMsgId, projectId, 'assistant', `[Vision micro-adjust: ${visionResult.reasoning}]`, 'micro-adjust');
 
@@ -1294,7 +1320,7 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
     } else if (intent === 'component') {
       finalPages = [];
       isMultiPage = false;
-    } else if (existingPages.length > 1 && !isPageRequest && !effectiveForceRegenerate) {
+    } else if (existingPages.length > 1 && !effectiveForceRegenerate) {
       finalPages = existingPages;
       isMultiPage = true;
     } else {
