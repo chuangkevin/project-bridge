@@ -1398,25 +1398,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           onChange={handleFileSelect}
           data-testid="file-input"
         />
-        <button
-          style={{
-            ...styles.attachBtn,
-            fontSize: '12px',
-            color: chatOnlyMode ? '#fff' : '#6b7280',
-            fontWeight: chatOnlyMode ? 600 : 400,
-            background: chatOnlyMode ? '#3b82f6' : 'transparent',
-            borderRadius: '6px',
-            padding: '4px 10px',
-            border: chatOnlyMode ? 'none' : '1px solid #d1d5db',
-            transition: 'all 0.15s',
-            whiteSpace: 'nowrap' as const,
-          }}
-          onClick={() => setChatOnlyMode(prev => !prev)}
-          title={chatOnlyMode ? '顧問模式開啟中（不生成 UI）' : '切換到顧問模式（純對話）'}
-          data-testid="chat-only-btn"
-        >
-          💬 顧問
-        </button>
+        {/* 顧問 button moved next to send button */}
         {hasPrototype && (
           <button
             style={{ ...styles.attachBtn, fontSize: 11, color: '#f59e0b', fontWeight: 600 }}
@@ -1464,9 +1446,34 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           rows={2}
           disabled={streaming}
         />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignSelf: 'stretch' }}>
+          <button
+            style={{
+              flex: 1,
+              padding: '0 12px',
+              fontSize: '12px',
+              fontWeight: chatOnlyMode ? 700 : 500,
+              color: chatOnlyMode ? '#fff' : '#6b7280',
+              background: chatOnlyMode ? '#3b82f6' : 'var(--bg-hover, #f1f5f9)',
+              border: chatOnlyMode ? 'none' : '1px solid var(--border-primary, #e2e8f0)',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              whiteSpace: 'nowrap' as const,
+              minWidth: '50px',
+            }}
+            onClick={() => setChatOnlyMode(prev => !prev)}
+            title={chatOnlyMode ? '顧問模式開啟中（不生成 UI）' : '切換到顧問模式（純對話）'}
+            data-testid="chat-only-btn"
+          >
+            💬<br/>顧問
+          </button>
+        </div>
         <button
           style={{
             ...styles.sendBtn,
+            alignSelf: 'stretch',
+            height: 'auto',
             opacity: (!input.trim() || streaming) ? 0.5 : 1,
           }}
           onClick={handleSend}
