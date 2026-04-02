@@ -294,7 +294,19 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     } else if (gatedObviousGenerate) {
       intent = hasShell ? 'in-shell' : 'full-page';
     } else {
-      intent = await classifyIntent(message.trim(), apiKey, hasShell);
+      // Load first image for vision-based intent classification
+      let intentImage: { mimeType: string; base64: string } | null = null;
+      if (Array.isArray(fileIds) && fileIds.length > 0) {
+        try {
+          const imgFile = db.prepare(
+            `SELECT storage_path, mime_type FROM uploaded_files WHERE id IN (${fileIds.map(() => '?').join(',')}) AND mime_type LIKE 'image/%' LIMIT 1`
+          ).get(...fileIds) as any;
+          if (imgFile) {
+            intentImage = { mimeType: imgFile.mime_type, base64: fs.readFileSync(imgFile.storage_path).toString('base64') };
+          }
+        } catch {}
+      }
+      intent = await classifyIntent(message.trim(), apiKey, hasShell, intentImage);
     }
 
     // Detect requests for missing/new pages — force full-page generation

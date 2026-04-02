@@ -9,10 +9,11 @@ export type Intent = 'full-page' | 'in-shell' | 'component' | 'question' | 'micr
 export async function classifyIntent(
   message: string,
   apiKey: string,
-  hasShell: boolean = false
+  hasShell: boolean = false,
+  imageData?: { mimeType: string; base64: string } | null,
 ): Promise<Intent> {
-  // Cache key: first 100 chars of message + context flags
-  const cacheKey = `${message.slice(0, 100)}|${hasShell}`;
+  // Cache key: first 100 chars of message + context flags + has image
+  const cacheKey = `${message.slice(0, 100)}|${hasShell}|${imageData ? 'img' : ''}`;
   const cached = intentCache.get(cacheKey);
   if (cached) {
     console.log(`[intent] Cache HIT: "${message.slice(0, 30)}..." → ${cached}`);
@@ -57,7 +58,12 @@ Reply ONLY with: question, component, micro-adjust, full-page, or in-shell`,
       generationConfig: { maxOutputTokens: 5, temperature: 0 },
     });
 
-    const result = await model.generateContent(message);
+    // Use vision multimodal when image is attached — AI sees the screenshot to judge intent
+    const parts: any[] = [{ text: message }];
+    if (imageData) {
+      parts.push({ inlineData: { mimeType: imageData.mimeType, data: imageData.base64 } });
+    }
+    const result = await model.generateContent(parts);
     try { trackUsage(apiKey, getGeminiModel(), 'intent-classify', result.response.usageMetadata); } catch {}
     const text = result.response.text().trim().toLowerCase();
 
