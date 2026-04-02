@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:22-alpine AS builder
 
 WORKDIR /app
@@ -16,8 +17,9 @@ COPY packages/client/package.json packages/client/
 # Tell node-gyp to use bundled headers instead of downloading from internet
 ENV npm_config_nodedir=/usr/local
 
-# Install dependencies (cached unless package.json or lockfile changes)
-RUN pnpm install --frozen-lockfile --prefer-offline
+# Install dependencies with BuildKit cache mount (survives across builds)
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prefer-offline
 
 # Copy source
 COPY packages/server/ packages/server/
