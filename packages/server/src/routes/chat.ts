@@ -19,6 +19,7 @@ import { checkSkillConflicts } from '../services/skillConflictChecker';
 import { getActiveSkills } from './skills';
 import { scorePrototype } from '../services/qualityScorer';
 import { generationQueue } from '../services/generationQueue';
+import { observePreference, getPreferences, formatPreferencesForPrompt } from '../services/preferenceTracker';
 
 const router = Router();
 
@@ -776,6 +777,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         richQaPrompt += `\n\n=== 設計方向 ===\n${designConvention.slice(0, 500)}\n===`;
       }
 
+      // Inject user preferences
+      const userPrefs = getPreferences(null);
+      if (userPrefs.length > 0) {
+        richQaPrompt += formatPreferencesForPrompt(userPrefs);
+      }
+
       // Check for image attachments — enable vision mode in Q&A
       let qaImageParts: { inlineData: { mimeType: string; data: string } }[] = [];
       if (Array.isArray(fileIds) && fileIds.length > 0) {
@@ -880,6 +887,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       ).run(assistantMsgId, projectId, 'assistant', fullResponse, 'answer');
 
       res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: 'answer' })}\n\n`);
+      observePreference(null, 'pref:mode', 'consultant');
       res.end();
       return;
     }
@@ -1970,6 +1978,7 @@ ${html.slice(0, 3000)}`;
       }
 
       res.write(`data: ${JSON.stringify({ done: true, html, messageType: generateMessageType, intent, isMultiPage, pages: finalPages, summary: generationSummary, pageCount: finalPages.length })}\n\n`);
+      observePreference(null, 'pref:mode', 'design');
     } else {
       res.write(`data: ${JSON.stringify({ done: true, html: null, messageType: generateMessageType, intent })}\n\n`);
     }

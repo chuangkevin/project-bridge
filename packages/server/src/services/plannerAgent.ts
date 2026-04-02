@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { assignBatchKeys, getGeminiModel, markKeyBad, trackUsage } from './geminiKeys';
+import { getPreferences, formatPreferencesForPrompt } from './preferenceTracker';
 
 export interface GenerationPlan {
   pages: { name: string; description: string; keyFeatures: string[] }[];
@@ -140,6 +141,10 @@ export async function planAndReview(
     ? `\n\n【上次生成教訓】\n${lessons.map(l => `• ${l}`).join('\n')}\n`
     : '';
 
+  // Load user preferences
+  const userPrefs = getPreferences(null);
+  const prefsContext = formatPreferencesForPrompt(userPrefs);
+
   // Build per-agent context (replaces flat skillsContext)
   function buildAgentContext(role: string): string {
     let ctx = '';
@@ -151,6 +156,8 @@ export async function planAndReview(
     }
     // Layer 3: lessons
     ctx += lessonsContext;
+    // Layer 4: user preferences
+    ctx += prefsContext;
     return ctx;
   }
 

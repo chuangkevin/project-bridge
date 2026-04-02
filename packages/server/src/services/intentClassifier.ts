@@ -1,5 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getGeminiModel, trackUsage } from './geminiKeys';
+import { TtlCache } from '../utils/cache';
+
+const intentCache = new TtlCache<string>('intent', 5 * 60 * 1000); // 5 min
 
 export type Intent = 'full-page' | 'in-shell' | 'component' | 'question' | 'micro-adjust';
 
@@ -8,6 +11,14 @@ export async function classifyIntent(
   apiKey: string,
   hasShell: boolean = false
 ): Promise<Intent> {
+  // Cache key: first 100 chars of message + context flags
+  const cacheKey = `${message.slice(0, 100)}|${hasShell}`;
+  const cached = intentCache.get(cacheKey);
+  if (cached) {
+    console.log(`[intent] Cache HIT: "${message.slice(0, 30)}..." → ${cached}`);
+    return cached as Intent;
+  }
+
   const shellContext = hasShell
     ? `This project has a platform shell (existing nav/sidebar/header). When the user asks to add a page, sub-page, detail page, list page, or feature, prefer "in-shell". Only use "full-page" if the user explicitly asks for a complete standalone page.`
     : `This project has NO platform shell, so "in-shell" is not available.`;
@@ -50,13 +61,16 @@ Reply ONLY with: question, component, micro-adjust, full-page, or in-shell`,
     try { trackUsage(apiKey, getGeminiModel(), 'intent-classify', result.response.usageMetadata); } catch {}
     const text = result.response.text().trim().toLowerCase();
 
-    if (text === 'question') return 'question';
-    if (text === 'component') return 'component';
-    if (text === 'micro-adjust') return 'micro-adjust';
-    if (text === 'in-shell' && hasShell) return 'in-shell';
-    if (text === 'full-page') return 'full-page';
+    let intent: Intent;
+    if (text === 'question') intent = 'question';
+    else if (text === 'component') intent = 'component';
+    else if (text === 'micro-adjust') intent = 'micro-adjust';
+    else if (text === 'in-shell' && hasShell) intent = 'in-shell';
+    else if (text === 'full-page') intent = 'full-page';
+    else intent = hasShell ? 'in-shell' : 'full-page';
 
-    return hasShell ? 'in-shell' : 'full-page';
+    intentCache.set(cacheKey, intent);
+    return intent;
   } catch {
     return hasShell ? 'in-shell' : 'full-page';
   }
