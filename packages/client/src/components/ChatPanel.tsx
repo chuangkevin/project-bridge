@@ -1007,7 +1007,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 >
                   <div style={{ height: '180px', overflow: 'hidden', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
                     <iframe
-                      srcDoc={v.html}
+                      srcDoc={`<!DOCTYPE html><html><head><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:14px;color:#1f2937;background:#f9fafb;padding:16px}.container{max-width:100%}.card{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px}.btn-primary{background:#3b82f6;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px}.badge{display:inline-block;padding:2px 8px;font-size:11px;border-radius:4px;background:#eff6ff;color:#3b82f6}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:13px}th{background:#f9fafb;font-weight:600}</style></head><body>${v.html}</body></html>`}
                       sandbox="allow-scripts"
                       style={{
                         width: '250%', height: '250%', border: 'none',
