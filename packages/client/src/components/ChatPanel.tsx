@@ -410,6 +410,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setError(null);
     setLastGenerationSummary('');
     setLastGeneratedPages([]);
+    setVariantSelection(null);
 
     const fileIds = attachedFiles.map(f => f.id);
     const sentFiles = [...attachedFiles];
