@@ -118,4 +118,12 @@ server.timeout = 0;
 server.keepAliveTimeout = 120_000; // 2 min keep-alive
 server.headersTimeout = 125_000;
 
+// Prevent unhandled errors from crashing the server (e.g. Tesseract CDN failure)
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[server] Unhandled rejection (caught, not crashing):', reason?.message || reason);
+});
+process.on('uncaughtException', (err: Error) => {
+  console.error('[server] Uncaught exception (caught, not crashing):', err.message);
+});
+
 export default app;

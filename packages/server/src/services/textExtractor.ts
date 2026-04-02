@@ -91,20 +91,25 @@ async function extractPptx(filePath: string): Promise<string> {
 }
 
 async function extractImage(filePath: string): Promise<string> {
-  const { createWorker } = await import('tesseract.js');
-  // Load both Chinese Traditional + English for mixed UI screenshots
-  const worker = await createWorker('chi_tra+eng');
-
   try {
-    // Set a 60-second timeout (chi_tra model is larger, needs more time)
-    const result = await Promise.race([
-      worker.recognize(filePath),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('OCR timeout after 60 seconds')), 60000)
-      ),
-    ]);
-    return (result as any).data.text;
-  } finally {
-    await worker.terminate();
+    const { createWorker } = await import('tesseract.js');
+    // Load both Chinese Traditional + English for mixed UI screenshots
+    const worker = await createWorker('chi_tra+eng');
+
+    try {
+      // Set a 60-second timeout (chi_tra model is larger, needs more time)
+      const result = await Promise.race([
+        worker.recognize(filePath),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('OCR timeout after 60 seconds')), 60000)
+        ),
+      ]);
+      return (result as any).data.text;
+    } finally {
+      await worker.terminate();
+    }
+  } catch (err: any) {
+    console.warn('[ocr] Tesseract failed (CDN unreachable or model missing):', err.message?.slice(0, 100));
+    return '[Image: OCR unavailable]';
   }
 }
