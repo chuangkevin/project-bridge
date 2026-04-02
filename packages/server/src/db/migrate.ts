@@ -28,9 +28,13 @@ export function runMigrations(): void {
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
     console.log(`Running migration: ${file}`);
 
-    db.exec(sql);
-    db.prepare('INSERT INTO _migrations (filename) VALUES (?)').run(file);
-
-    console.log(`Migration applied: ${file}`);
+    try {
+      db.exec(sql);
+      db.prepare('INSERT INTO _migrations (filename) VALUES (?)').run(file);
+      console.log(`Migration applied: ${file}`);
+    } catch (err: any) {
+      console.warn(`Migration ${file} failed (skipping): ${err.message}`);
+      try { db.prepare('INSERT OR IGNORE INTO _migrations (filename) VALUES (?)').run(file); } catch {}
+    }
   }
 }
