@@ -17,6 +17,16 @@ RULES:
 - Do NOT change the root element's tag name or data-bridge-id
 - Return ONLY the HTML — no markdown, no explanation, no code fences
 
+LAYOUT RULES (CRITICAL — prevents broken layouts):
+- NEVER use columns narrower than 120px for text content — Chinese characters need width
+- Use `display: flex; flex-wrap: wrap; gap: 8px` for tag/filter groups, NOT rigid grid
+- Filter bars: use `display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start`
+- Each filter group: `min-width: 150px; flex: 1`
+- All text must be `white-space: normal` — NEVER let text stack vertically
+- Buttons in a row: `display: flex; flex-wrap: wrap; gap: 8px`
+- Select/input elements: `min-width: 100px; width: auto`
+- Tags/chips: `display: inline-flex; padding: 4px 12px; white-space: nowrap`
+
 EXAMPLES:
 - "加一個紅色 tag" → add <span class="badge" style="background:var(--error);color:white;">標籤</span> inside the element
 - "改成藍色" → change color/background to var(--primary)

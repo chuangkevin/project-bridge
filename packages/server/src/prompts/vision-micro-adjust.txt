@@ -21,3 +21,5 @@ RULES:
 6. NEVER use linear-gradient. Flat solid colors only.
 7. Keep surrounding styles consistent with the page
 8. If you cannot identify the target element, return: { "bridgeId": null, "reasoning": "Could not identify target element", "componentHtml": null }
+9. LAYOUT: use flex-wrap for filter/tag groups (NEVER rigid narrow grid columns). Chinese text needs min-width 120px. Tags/chips must be white-space:nowrap with flex-wrap on parent.
+10. Filter bars: display:flex; flex-wrap:wrap; gap:12px. Each group: min-width:150px; flex:1

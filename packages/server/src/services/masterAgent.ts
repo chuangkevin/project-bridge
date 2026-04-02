@@ -278,6 +278,13 @@ textarea { width: 100%; min-height: 80px; padding: 8px 16px; border: 1px solid v
 /* Generic link/button that sub-agents might generate */
 a.btn, button { cursor: pointer; }
 
+/* Filter/search bar layout */
+.filter-bar, .search-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; padding: 16px; background: var(--surface); border-radius: var(--radius-md); border: 1px solid var(--border); }
+.filter-group { min-width: 150px; flex: 1; }
+.filter-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text); white-space: nowrap; }
+.filter-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter-tags .tag { white-space: nowrap; }
+
 /* Responsive */
 @media (max-width: 992px) { .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 640px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } /* responsive nav handled by assembler */ }
