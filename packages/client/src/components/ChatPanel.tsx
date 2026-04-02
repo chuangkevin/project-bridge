@@ -7,9 +7,14 @@ import AnalysisPreviewPanel from './AnalysisPreviewPanel';
 import { compressImage } from '../utils/imageCompress';
 import PromptTemplateSelector from './PromptTemplateSelector';
 
+// Fix markdown tables inside blockquotes (> | col | col |) — remove > prefix so table parses
+function fixBlockquoteTables(md: string): string {
+  return md.replace(/^(>\s*\|.+\|)\s*$/gm, (line) => line.replace(/^>\s*/, ''));
+}
+
 // Memoized markdown renderer — only re-renders when content changes, not on parent re-render
 const MemoMarkdown = memo(function MemoMarkdown({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{content}</ReactMarkdown>;
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{fixBlockquoteTables(content)}</ReactMarkdown>;
 });
 
 function isHtmlContent(content: string): boolean {
