@@ -1473,7 +1473,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
             ...styles.sendBtn,
             alignSelf: 'stretch',
             height: 'auto',
-            opacity: (!input.trim() || streaming) ? 0.5 : 1,
+            opacity: (!input.trim() || streaming || hasUnreadyFiles) ? 0.5 : 1,
           }}
           onClick={handleSend}
           disabled={!input.trim() || streaming || hasUnreadyFiles}
