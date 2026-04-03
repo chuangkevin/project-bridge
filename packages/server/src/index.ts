@@ -2,6 +2,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
+import { createServer } from 'http';
+import { Server as SocketServer } from 'socket.io';
 import path from 'path';
 import cors from 'cors';
 import { runMigrations } from './db/migrate';
@@ -37,8 +39,15 @@ import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
 import { HOUSEPRICE_DESIGN_SYSTEM_V2 } from './services/designSystemV2';
 import db from './db/connection';
+import { setupSocket } from './socket';
 
 const app = express();
+const httpServer = createServer(app);
+const io = new SocketServer(httpServer, {
+  cors: { origin: '*' },
+  transports: ['websocket', 'polling'],
+});
+setupSocket(io);
 const PORT = process.env.PORT || 3003;
 
 // Middleware
@@ -112,13 +121,13 @@ if (process.env.SKILLS_DIR) {
   syncSkillsFromDirectory(process.env.SKILLS_DIR);
 }
 
-const server = app.listen(Number(PORT), '0.0.0.0', () => {
+httpServer.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
 
 // Disable socket timeout for SSE / long-running AI generation
-server.timeout = 0;
-server.keepAliveTimeout = 120_000; // 2 min keep-alive
-server.headersTimeout = 125_000;
+httpServer.timeout = 0;
+httpServer.keepAliveTimeout = 120_000; // 2 min keep-alive
+httpServer.headersTimeout = 125_000;
 
 export default app;

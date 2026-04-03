@@ -1,6 +1,6 @@
 {
   "name": "server",
-  "version": "0.5.1",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
@@ -27,6 +27,7 @@
     "playwright": "^1.58.2",
     "sharp": "^0.34.5",
     "tesseract.js": "^5.1.1",
+    "socket.io": "^4.8.0",
     "uuid": "^10.0.0",
     "yauzl": "^3.2.0",
     "yazl": "^2.5.1"

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import db from '../db/connection';
 import { exportToFramework, Framework } from '../services/codeExporter';
+import { parseHtmlToFigma } from '../services/figmaExport';
 
 const router = Router();
 
@@ -214,6 +215,27 @@ ${componentBlocks}
   } catch (err: any) {
     console.error('Figma component export error:', err);
     return res.status(500).json({ error: 'Failed to call code.to.design API' });
+  }
+});
+
+// POST /api/projects/:id/export-figma — generate Figma Plugin API compatible JSON from prototype HTML
+router.post('/:id/export-figma', async (req: Request, res: Response) => {
+  const projectId = req.params.id as string;
+
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId) as any;
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const version = db.prepare(
+    'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
+  ).get(projectId) as { html: string } | undefined;
+  if (!version?.html) return res.status(400).json({ error: 'No prototype found for this project' });
+
+  try {
+    const figmaDoc = parseHtmlToFigma(version.html);
+    return res.json(figmaDoc);
+  } catch (err: any) {
+    console.error('Figma JSON export error:', err);
+    return res.status(500).json({ error: 'Failed to generate Figma JSON: ' + (err.message || '').slice(0, 200) });
   }
 });
 

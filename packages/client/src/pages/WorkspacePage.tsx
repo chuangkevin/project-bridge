@@ -23,6 +23,10 @@ import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
 import ComponentPicker from '../components/ComponentPicker';
+import { SocketProvider, useSocket } from '../contexts/SocketContext';
+import { CollaborationProvider } from '../contexts/CollaborationContext';
+import PresenceBar from '../components/PresenceBar';
+import CursorLayer from '../components/CursorLayer';
 // import FigmaExportDialog from '../components/FigmaExportDialog'; // disabled: internal URLs not supported
 
 // Strip [Attached files] block from user message display content
@@ -52,6 +56,17 @@ interface Project {
 }
 
 export default function WorkspacePage() {
+  const { user } = useAuth();
+  return (
+    <SocketProvider userId={user?.id} userName={user?.name}>
+      <CollaborationProvider>
+        <WorkspacePageInner />
+      </CollaborationProvider>
+    </SocketProvider>
+  );
+}
+
+function WorkspacePageInner() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -126,6 +141,20 @@ export default function WorkspacePage() {
   const [savingSpec, setSavingSpec] = useState(false);
 
   const iframeContainerRef = useRef<HTMLDivElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const lastCursorEmit = useRef<number>(0);
+
+  // Throttled cursor-move emitter (50ms)
+  const handlePreviewMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!socket || !id) return;
+    const now = Date.now();
+    if (now - lastCursorEmit.current < 50) return;
+    lastCursorEmit.current = now;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    socket.emit('cursor-move', { projectId: id, x, y });
+  }, [socket, id]);
 
   // Device frame state
 
@@ -299,6 +328,35 @@ export default function WorkspacePage() {
     checkDesignActive();
     checkDesignSpec();
   }, [fetchProject, fetchAnnotations, checkDesignActive, checkDesignSpec]);
+
+  // Socket room management — join on mount, leave on unmount
+  const { socket, joinRoom, leaveRoom } = useSocket();
+  useEffect(() => {
+    if (!id) return;
+    joinRoom(id);
+    return () => { leaveRoom(id); };
+  }, [id, joinRoom, leaveRoom]);
+
+  // Listen for real-time annotation changes from other collaborators
+  useEffect(() => {
+    if (!socket || !id) return;
+    const handler = (data: { userId: string; userName: string; action: 'create' | 'update' | 'delete'; annotation: any }) => {
+      if (data.action === 'create') {
+        setAnnotations(prev => {
+          if (prev.some(a => a.id === data.annotation.id)) return prev;
+          return [...prev, data.annotation];
+        });
+      } else if (data.action === 'update') {
+        setAnnotations(prev => prev.map(a => a.id === data.annotation.id ? data.annotation : a));
+        setSelectedAnnotation(prev => prev?.id === data.annotation.id ? data.annotation : prev);
+      } else if (data.action === 'delete') {
+        setAnnotations(prev => prev.filter(a => a.id !== data.annotation.id));
+        setSelectedAnnotation(prev => prev?.id === data.annotation.id ? null : prev);
+      }
+    };
+    socket.on('annotation-change', handler);
+    return () => { socket.off('annotation-change', handler); };
+  }, [socket, id]);
 
   // Watch targetPage from arch store — switch to design mode and navigate to the page
   useEffect(() => {
@@ -544,12 +602,15 @@ export default function WorkspacePage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to save annotation');
+      const newAnnotation = await res.json();
       setEditingAnnotation(null);
       fetchAnnotations();
+      // Broadcast to collaborators
+      socket?.emit('annotation-change', { projectId: id, action: 'create', annotation: newAnnotation });
     } catch {
       setToastMsg('Failed to save annotation');
     }
-  }, [editingAnnotation, id, fetchAnnotations]);
+  }, [editingAnnotation, id, fetchAnnotations, socket]);
 
   const handleHighlightElement = useCallback((bridgeId: string) => {
     // Post message to iframe to highlight element
@@ -573,12 +634,14 @@ export default function WorkspacePage() {
       setAnnotations(prev => prev.map(a => a.id === annotationId ? updated : a));
       setSelectedAnnotation(prev => prev?.id === annotationId ? updated : prev);
       setToastMsg('Spec saved');
+      // Broadcast to collaborators
+      socket?.emit('annotation-change', { projectId: id, action: 'update', annotation: updated });
     } catch {
       setToastMsg('Failed to save spec');
     } finally {
       setSavingSpec(false);
     }
-  }, [id]);
+  }, [id, socket]);
 
   // Build annotation indicators for the iframe
   const annotationIndicators = annotations.map((ann, i) => ({
@@ -1311,6 +1374,7 @@ export default function WorkspacePage() {
               {forking ? '⟳ Fork 中...' : '⑂ Fork 專案'}
             </button>
           )}
+          <PresenceBar />
           {user && (
             <div style={styles.userWidget}>
               <span
@@ -1509,7 +1573,12 @@ export default function WorkspacePage() {
                   ))}
                 </div>
               )}
-              <div style={deviceSize === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
+              <div
+                ref={previewContainerRef}
+                onMouseMove={handlePreviewMouseMove}
+                style={{ ...(deviceSize === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll), position: 'relative' as const }}
+              >
+                <CursorLayer containerRef={previewContainerRef} />
                 {!html ? (
                   <div style={styles.emptyStateContainer}>
                     <div style={styles.emptyStateCard}>

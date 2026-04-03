@@ -3,6 +3,9 @@ import ConstraintsBar, { Constraints } from './ConstraintsBar';
 import AnalysisPreviewPanel from './AnalysisPreviewPanel';
 import { compressImage } from '../utils/imageCompress';
 import PromptTemplateSelector from './PromptTemplateSelector';
+import { useSocket } from '../contexts/SocketContext';
+import { useCollaboration } from '../contexts/CollaborationContext';
+import { useAuth } from '../contexts/AuthContext';
 
 function isHtmlContent(content: string): boolean {
   const t = content.trimStart().toLowerCase();
@@ -77,6 +80,11 @@ function saveHistory(history: string[]) {
 }
 
 export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGenerated, pendingMessage, onPendingMessageConsumed, hasPrototype }: Props) {
+  const { socket } = useSocket();
+  const { generationLock } = useCollaboration();
+  const { user: authUser } = useAuth();
+  const isLockedByOther = !!(generationLock && authUser && generationLock.userId !== authUser.id);
+  const [lockRejected, setLockRejected] = useState<string | null>(null); // holder name when rejected
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -377,6 +385,24 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const sendMessage = async (text: string, opts?: { forceRegenerate?: boolean }) => {
     if (!text || streaming) return;
 
+    // Try to acquire generation lock
+    if (socket) {
+      const lockResult = await new Promise<{ success: boolean; holder?: { userId: string; userName: string } }>((resolve) => {
+        const timeout = setTimeout(() => resolve({ success: true }), 2000); // fallback if no response
+        socket.once('generation-lock-result', (result) => {
+          clearTimeout(timeout);
+          resolve(result);
+        });
+        socket.emit('generation-lock', { projectId, action: 'acquire' });
+      });
+
+      if (!lockResult.success) {
+        setLockRejected(lockResult.holder?.userName || '其他使用者');
+        setTimeout(() => setLockRejected(null), 3000);
+        return;
+      }
+    }
+
     // Update prompt history
     setPromptHistory(prev => {
       const deduped = [text, ...prev.filter(p => p !== text)].slice(0, MAX_HISTORY);
@@ -573,6 +599,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setPageDevNames({});
       setParallelMessage('');
       setTokenCount(0);
+      // Release generation lock
+      if (socket) {
+        socket.emit('generation-lock', { projectId, action: 'release' });
+      }
     }
   };
 
@@ -1239,8 +1269,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           <button
             style={{ ...styles.attachBtn, fontSize: 11, color: '#f59e0b', fontWeight: 600 }}
             onClick={() => sendMessage(input.trim() || '請依照設計規範重新生成所有頁面', { forceRegenerate: true })}
-            title="強制重新生成（忽略微調模式）"
-            disabled={streaming}
+            title={isLockedByOther ? `${generationLock!.userName} 正在生成中...` : '強制重新生成（忽略微調模式）'}
+            disabled={streaming || isLockedByOther}
             data-testid="regenerate-btn"
           >
             🔄
@@ -1278,18 +1308,18 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           }}
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
-          placeholder="描述你的 UI...（可貼上截圖）"
+          placeholder={isLockedByOther ? `${generationLock!.userName} 正在生成中...` : '描述你的 UI...（可貼上截圖）'}
           rows={2}
-          disabled={streaming}
+          disabled={streaming || isLockedByOther}
         />
         <button
           style={{
             ...styles.sendBtn,
-            opacity: (!input.trim() || streaming) ? 0.5 : 1,
+            opacity: (!input.trim() || streaming || isLockedByOther) ? 0.5 : 1,
           }}
           onClick={handleSend}
-          disabled={!input.trim() || streaming || hasUnreadyFiles}
-          title={hasUnreadyFiles ? '等待檔案分析完成...' : attachedFiles.some(f => f.analysisStatus === 'error') ? '部分檔案分析失敗，仍可送出' : ''}
+          disabled={!input.trim() || streaming || hasUnreadyFiles || isLockedByOther}
+          title={isLockedByOther ? `${generationLock!.userName} 正在生成中...` : hasUnreadyFiles ? '等待檔案分析完成...' : attachedFiles.some(f => f.analysisStatus === 'error') ? '部分檔案分析失敗，仍可送出' : ''}
           data-testid="send-btn"
         >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -1298,6 +1328,20 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         </button>
       </div>
       </div>{/* end resizable input area wrapper */}
+
+      {/* Generation lock rejected toast */}
+      {lockRejected && (
+        <div style={{ ...styles.uploadToast, background: '#f59e0b', color: '#000' }} data-testid="lock-rejected-toast">
+          {lockRejected} 正在生成中，請稍候...
+        </div>
+      )}
+
+      {/* Lock indicator bar */}
+      {isLockedByOther && (
+        <div style={{ padding: '6px 12px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: 12, textAlign: 'center', borderTop: '1px solid rgba(245,158,11,0.3)' }}>
+          {generationLock!.userName} 正在生成中...
+        </div>
+      )}
 
       {/* Upload success toast */}
       {uploadToast && (
