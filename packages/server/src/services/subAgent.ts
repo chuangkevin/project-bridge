@@ -97,7 +97,9 @@ This page links to: ${page.navigationOut.length > 0 ? page.navigationOut.join(',
 
 ${page.viewport === 'mobile' ? `MOBILE: single column, max-width 480px, touch targets 48px+, text 15-16px` : 'DESKTOP: responsive layout, grid/flexbox, max-width 1200px'}
 
-${componentLibraryRef ? `COMPONENT LIBRARY (use these verified components as reference — match their structure and style):\n${componentLibraryRef}` : ''}`;
+${componentLibraryRef ? `COMPONENT LIBRARY (use these verified components as reference — match their structure and style):
+IMPORTANT: When you use a component from the library, add data-component-ref="componentName" on the root element of that component instance. For example: <div class="card" data-component-ref="Product Card">...</div>
+${componentLibraryRef}` : ''}`;
 
   const userPrompt = `Generate the "${pageName}" page [${page.viewport.toUpperCase()}]:
 

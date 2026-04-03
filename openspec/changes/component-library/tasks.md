@@ -7,7 +7,7 @@
 - [x] 1.4 實作 `POST /api/components/extract` — 接收 HTML/CSS，sanitize，生成截圖，儲存
 - [x] 1.5 實作 Playwright 截圖服務（renderComponentThumbnail）
 - [x] 1.6 註冊路由到 `index.ts`
-- [ ] 1.7 E2E 測試：CRUD + extract + version history
+- [x] 1.7 E2E 測試：CRUD + extract + version history
 
 ## Phase 2: 元件庫 UI
 - [x] 2.1 新增 `ComponentLibraryPage.tsx` — 卡片瀏覽 + 分類 tab + 搜尋
@@ -28,16 +28,16 @@
 - [x] 4.1 實作 `componentInjector.ts` — 根據專案綁定 + 頁面架構匹配元件
 - [x] 4.2 修改 `parallelGenerator.ts` sub-agent prompt — 注入元件 reference
 - [x] 4.3 Token budget 管理 — 注入不超過 4000 tokens
-- [ ] 4.4 生成後標記 `data-component-ref` 屬性
+- [x] 4.4 生成後標記 `data-component-ref` 屬性
 - [x] 4.5 專案工作區加入 `ComponentPicker.tsx` — 綁定/解綁元件
-- [ ] 4.6 E2E 測試：綁定元件後生成，驗證 prompt 包含元件 reference
+- [x] 4.6 E2E 測試：綁定元件後生成，驗證 prompt 包含元件 reference
 
 ## Phase 5: Crawler 元件擷取
 - [x] 5.1 實作 `POST /api/components/crawl-extract` — Playwright 開頁面 + 語義選擇器擷取
 - [x] 5.2 結構去重邏輯 — 同類型多個元素只保留代表性的一個
 - [ ] 5.3 擷取預覽 UI — 使用者選擇要儲存哪些元件
 - [ ] 5.4 批次 URL 爬取 + 跨頁去重
-- [ ] 5.5 E2E 測試：爬取 URL → 擷取元件 → 儲存
+- [x] 5.5 E2E 測試：爬取 URL → 擷取元件 → 儲存
 
 ## Phase 6: Figma 匯出整合
 - [x] 6.1 匯出時識別 `data-component-ref` 屬性，標記為 Figma Component

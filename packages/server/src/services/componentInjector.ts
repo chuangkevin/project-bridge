@@ -115,3 +115,15 @@ export function getComponentInjection(projectId: string, pageElementTypes?: stri
 
   return output;
 }
+
+/**
+ * Get the list of components bound to a project (for post-processing reference tagging).
+ */
+export function getBoundComponents(projectId: string): InjectedComponent[] {
+  return db.prepare(`
+    SELECT c.id, c.name, c.category, c.html, c.css
+    FROM components c
+    JOIN project_component_bindings pcb ON pcb.component_id = c.id
+    WHERE pcb.project_id = ?
+  `).all(projectId) as InjectedComponent[];
+}
