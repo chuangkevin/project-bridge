@@ -1556,7 +1556,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
         }
       }
 
-      triggerQualityScoring(versionId, html, currentKey);
+      triggerQualityScoring(versionId, html, apiKey);
 
       // Send page list as separate event before done
       if (finalPages.length > 0) {
@@ -1566,7 +1566,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       // Quick summary call (after generation completes)
       let generationSummary = '';
       try {
-        const summaryGenai = new GoogleGenerativeAI(currentKey);
+        const summaryGenai = new GoogleGenerativeAI(apiKey);
         const summaryModel = summaryGenai.getGenerativeModel({
           model: getGeminiModel(),
           generationConfig: { maxOutputTokens: 800, temperature: 0.3 },
