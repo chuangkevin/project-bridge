@@ -96,6 +96,56 @@ export function createBatchCaller(count: number): {
   };
 }
 
+/**
+ * Streaming retry wrapper for SSE endpoints.
+ * Retries on 429/auth errors with key rotation, but lets the caller handle streaming.
+ * Returns the key that succeeded (or throws after all retries).
+ *
+ * Usage:
+ *   await withStreamRetry(async (apiKey) => {
+ *     const model = genai.getGenerativeModel({ ... });
+ *     const result = await model.generateContentStream(prompt);
+ *     for await (const chunk of result.stream) { res.write(...) }
+ *   }, { maxRetries: 2 });
+ */
+export async function withStreamRetry(
+  fn: (apiKey: string) => Promise<void>,
+  options?: RetryOptions
+): Promise<void> {
+  const maxRetries = options?.maxRetries ?? 2;
+  let currentKey = getGeminiApiKey();
+  if (!currentKey) throw new Error('No Gemini API key available');
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await fn(currentKey);
+      return;
+    } catch (err: any) {
+      const msg = (err?.message || '').toLowerCase();
+      const is429 = msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('rate');
+      const isAuth = msg.includes('401') || msg.includes('403') || msg.includes('api_key_invalid');
+
+      if (attempt === maxRetries) throw err;
+
+      if (is429 || isAuth) {
+        const reason = is429 ? '429' : isAuth ? '403' : 'server_error';
+        markKeyBad(currentKey, reason);
+        const nextKey = getGeminiApiKeyExcluding(currentKey);
+        if (nextKey) {
+          console.warn(`[stream-retry] ${reason} on ...${currentKey.slice(-4)}, rotating (attempt ${attempt + 1})`);
+          currentKey = nextKey;
+        } else if (is429) {
+          await sleep(2000);
+        } else {
+          throw err;
+        }
+      } else {
+        throw err; // Unknown error, don't retry
+      }
+    }
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }

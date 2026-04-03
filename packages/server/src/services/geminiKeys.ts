@@ -124,8 +124,19 @@ function getAvailableKeys(): string[] {
     if (now >= until) badKeys.delete(k);
   }
   const available = keys.filter(k => !badKeys.has(k));
-  // If ALL keys are bad, return all (better than nothing)
-  return available.length > 0 ? available : keys;
+  if (available.length > 0) return available;
+  // All keys on cooldown — clear the oldest cooldown to force one usable key
+  let oldestKey = '';
+  let oldestUntil = Infinity;
+  for (const [k, until] of badKeys) {
+    if (until < oldestUntil) { oldestUntil = until; oldestKey = k; }
+  }
+  if (oldestKey) {
+    badKeys.delete(oldestKey);
+    try { db.prepare('DELETE FROM api_key_cooldowns WHERE api_key_suffix = ?').run(oldestKey.slice(-4)); } catch {}
+    console.warn(`[keys] All keys on cooldown — force-cleared oldest: ...${oldestKey.slice(-4)}`);
+  }
+  return keys;
 }
 
 /** Assign N unique keys for parallel sub-agents — shuffled to avoid hot-spotting */

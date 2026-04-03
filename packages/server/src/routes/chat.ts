@@ -7,7 +7,8 @@ import db from '../db/connection';
 import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
-import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
+import { getGeminiApiKey, getGeminiModel, getKeyCount, trackUsage } from '../services/geminiKeys';
+import { withStreamRetry } from '../services/geminiRetry';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
@@ -466,10 +467,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       const microPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/micro-adjust.txt'), 'utf-8');
 
       // Micro-adjust with auto-retry on 429
-      let maKey = apiKey;
-      let maRetries = 0;
-      while (maRetries <= 2) {
-        try {
+      try {
+        await withStreamRetry(async (maKey) => {
           const genai = new GoogleGenerativeAI(maKey);
           const model = genai.getGenerativeModel({
             model: getGeminiModel(),
@@ -477,7 +476,6 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             generationConfig: { maxOutputTokens: 32768, temperature: generationTemperature },
           });
 
-          // Truncate HTML if too large (>200K chars) to avoid API limits
           const protoHtml = currentPrototype.html.length > 200000
             ? currentPrototype.html.slice(0, 200000) + '\n<!-- [truncated] -->'
             : currentPrototype.html;
@@ -494,24 +492,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             }
           }
           try { const resp = await result.response; trackUsage(maKey, getGeminiModel(), 'micro-adjust', resp.usageMetadata); } catch {}
-          break;
-        } catch (err: any) {
-          const msg = err?.message || '';
-          const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-          if (isRateLimit && maRetries < 2) {
-            const altKey = getGeminiApiKeyExcluding(maKey);
-            if (altKey) {
-              console.warn(`[micro-adjust] 429 on key ...${maKey.slice(-4)}, retrying with ...${altKey.slice(-4)}`);
-              maKey = altKey;
-              maRetries++;
-              continue;
-            }
-          }
-          console.error('Micro-adjust error:', err);
-          res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-          res.end();
-          return;
-        }
+        }, { maxRetries: 2 });
+      } catch (err: any) {
+        console.error('Micro-adjust error:', err);
+        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+        res.end();
+        return;
       }
 
       // Extract HTML
@@ -565,10 +551,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     if (intent === 'question') {
       // Q&A path with auto-retry on 429
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
-      let qaKey = apiKey;
-      let qaRetries = 0;
-      while (qaRetries <= 2) {
-        try {
+      try {
+        await withStreamRetry(async (qaKey) => {
           const genai = new GoogleGenerativeAI(qaKey);
           const model = genai.getGenerativeModel({
             model: getGeminiModel(),
@@ -590,19 +574,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             }
           }
           try { const resp = await result.response; trackUsage(qaKey, getGeminiModel(), 'chat-qa', resp.usageMetadata); } catch {}
-          break;
-        } catch (err: any) {
-          const msg = err?.message || '';
-          const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-          if (isRateLimit && qaRetries < 2) {
-            const altKey = getGeminiApiKeyExcluding(qaKey);
-            if (altKey) { qaKey = altKey; qaRetries++; continue; }
-          }
-          console.error('Gemini QA error:', err);
-          res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-          res.end();
-          return;
-        }
+        }, { maxRetries: 2 });
+      } catch (err: any) {
+        console.error('Gemini QA error:', err);
+        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+        res.end();
+        return;
       }
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
 
@@ -1336,11 +1313,8 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
     // ── Phase 2: Actual generation ──
     res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'generating', message: '生成程式碼...' })}\n\n`);
 
-    let currentKey = apiKey;
-    let retries = 0;
-    const maxRetries = 2;
-    while (retries <= maxRetries) {
-      try {
+    try {
+      await withStreamRetry(async (currentKey) => {
         const genai = new GoogleGenerativeAI(currentKey);
         const model = genai.getGenerativeModel({
           model: getGeminiModel(),
@@ -1358,24 +1332,12 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
           }
         }
         try { const resp = await result.response; trackUsage(currentKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
-        break; // success
-      } catch (err: any) {
-        const msg = err?.message || '';
-        const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-        if (isRateLimit && retries < maxRetries) {
-          const altKey = getGeminiApiKeyExcluding(currentKey);
-          if (altKey) {
-            console.warn(`[chat] 429 on key ...${currentKey.slice(-4)}, retrying with ...${altKey.slice(-4)} (attempt ${retries + 1})`);
-            currentKey = altKey;
-            retries++;
-            continue;
-          }
-        }
-        console.error('Gemini API error:', err);
-        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-        res.end();
-        return;
-      }
+      }, { maxRetries: 2 });
+    } catch (err: any) {
+      console.error('Gemini API error:', err);
+      res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+      res.end();
+      return;
     }
 
     // Emit done phase before the done event
