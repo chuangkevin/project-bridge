@@ -1,22 +1,15 @@
-FROM node:22-alpine AS builder
+# ── Stage 1: Build ──────────────────────────────────────────
+# node:24 (non-slim) has python3, make, g++ built-in for native modules
+# Must match Node version in playwright image (v1.58.2 uses Node 24)
+FROM node:24 AS builder
 
 WORKDIR /app
-
-# Native build tools for better-sqlite3
-RUN apk add --no-cache python3 make g++
-
-# Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy workspace config
+# Copy workspace config + install dependencies (layer cache)
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
-
-# Tell node-gyp to use bundled headers instead of downloading from internet
-ENV npm_config_nodedir=/usr/local
-
-# Install dependencies
 RUN pnpm install --frozen-lockfile
 
 # Copy source
@@ -29,12 +22,11 @@ RUN pnpm --filter server build
 # Build client (Vite → dist/)
 RUN pnpm --filter client build
 
-# --- Production stage ---
-FROM node:22-alpine
+# ── Stage 2: Production ────────────────────────────────────
+# Playwright official image — Chromium + all system deps pre-installed
+FROM mcr.microsoft.com/playwright:v1.58.2-noble
 
 WORKDIR /app
-
-RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy server build + deps
 COPY --from=builder /app/packages/server/dist packages/server/dist
@@ -45,10 +37,10 @@ COPY --from=builder /app/packages/server/data packages/server/data
 COPY --from=builder /app/node_modules node_modules
 COPY --from=builder /app/packages/server/node_modules packages/server/node_modules
 
-# Copy client build (served by Express static or separate)
+# Copy client build
 COPY --from=builder /app/packages/client/dist packages/client/dist
 
-# Copy workspace config for pnpm
+# Copy workspace config
 COPY package.json pnpm-workspace.yaml ./
 
 ENV NODE_ENV=production
@@ -57,5 +49,4 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-# Start server (serves API; client build can be served via nginx or same Express)
 CMD ["node", "packages/server/dist/index.js"]
