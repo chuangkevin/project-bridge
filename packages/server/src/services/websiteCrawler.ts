@@ -40,7 +40,7 @@ export interface AggregatedDesignSystem {
 
 let browserInstance: Browser | null = null;
 
-async function getBrowser(): Promise<Browser> {
+export async function getBrowser(): Promise<Browser> {
   if (!browserInstance || !browserInstance.isConnected()) {
     browserInstance = await chromium.launch({ headless: true });
   }

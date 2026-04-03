@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { crawlWebsite, aggregateStyles, CrawledStyles } from '../services/websiteCrawler';
+import { crawlWebsite, aggregateStyles, CrawledStyles, getBrowser } from '../services/websiteCrawler';
 import { compileDesignTokens } from '../services/designTokenCompiler';
 import db from '../db/connection';
 
@@ -111,6 +111,184 @@ router.post('/:projectId/crawl-website/batch', async (req: Request, res: Respons
     failed: results.filter(r => !r.success).length,
     aggregated,
   });
+});
+
+// POST /api/projects/:projectId/crawl-full-page
+router.post('/:projectId/crawl-full-page', async (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const { url } = req.body;
+
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+
+  // Verify project exists
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  try {
+    const browser = await getBrowser();
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
+
+    const origin = parsedUrl.origin;
+
+    // 1. Inline external CSS stylesheets
+    await page.evaluate(async () => {
+      const linkEls = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+      for (const link of linkEls) {
+        const href = (link as HTMLLinkElement).href;
+        if (!href) continue;
+        try {
+          const resp = await fetch(href);
+          if (resp.ok) {
+            const cssText = await resp.text();
+            const style = document.createElement('style');
+            style.textContent = cssText;
+            link.parentNode?.replaceChild(style, link);
+          }
+        } catch {
+          // Skip stylesheets that fail to fetch
+        }
+      }
+    });
+
+    // 2. Remove all <script> tags and <noscript> tags
+    await page.evaluate(() => {
+      document.querySelectorAll('script, noscript').forEach(el => el.remove());
+    });
+
+    // 3. Remove inline event handlers
+    await page.evaluate(() => {
+      const eventAttrs = [
+        'onclick', 'ondblclick', 'onmousedown', 'onmouseup', 'onmouseover', 'onmouseout', 'onmousemove',
+        'onkeydown', 'onkeyup', 'onkeypress', 'onfocus', 'onblur', 'onchange', 'onsubmit', 'onreset',
+        'onload', 'onunload', 'onerror', 'onresize', 'onscroll', 'oninput', 'oncontextmenu',
+        'ontouchstart', 'ontouchmove', 'ontouchend', 'onanimationend', 'ontransitionend',
+      ];
+      const allElements = document.querySelectorAll('*');
+      allElements.forEach(el => {
+        eventAttrs.forEach(attr => el.removeAttribute(attr));
+      });
+    });
+
+    // 4. Convert relative URLs to absolute for images/assets and CSS url() references
+    await page.evaluate((baseOrigin: string) => {
+      // Helper: resolve relative URL
+      function toAbsolute(relative: string): string {
+        try {
+          return new URL(relative, baseOrigin).href;
+        } catch {
+          return relative;
+        }
+      }
+
+      // Fix src attributes (img, source, video, audio, iframe)
+      document.querySelectorAll('[src]').forEach(el => {
+        const src = el.getAttribute('src');
+        if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
+          el.setAttribute('src', toAbsolute(src));
+        }
+      });
+
+      // Fix href attributes on non-stylesheet links (a, area)
+      document.querySelectorAll('a[href], area[href]').forEach(el => {
+        const href = el.getAttribute('href');
+        if (href && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('data:')) {
+          el.setAttribute('href', toAbsolute(href));
+        }
+      });
+
+      // Fix srcset attributes
+      document.querySelectorAll('[srcset]').forEach(el => {
+        const srcset = el.getAttribute('srcset');
+        if (srcset) {
+          const updated = srcset.split(',').map(entry => {
+            const parts = entry.trim().split(/\s+/);
+            if (parts[0] && !parts[0].startsWith('data:')) {
+              parts[0] = toAbsolute(parts[0]);
+            }
+            return parts.join(' ');
+          }).join(', ');
+          el.setAttribute('srcset', updated);
+        }
+      });
+
+      // Fix url() in inline styles
+      document.querySelectorAll('[style]').forEach(el => {
+        const style = el.getAttribute('style');
+        if (style && style.includes('url(')) {
+          const updated = style.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (_match, quote, urlVal) => {
+            if (urlVal.startsWith('data:') || urlVal.startsWith('blob:')) return _match;
+            return `url(${quote}${toAbsolute(urlVal)}${quote})`;
+          });
+          el.setAttribute('style', updated);
+        }
+      });
+
+      // Fix url() in <style> blocks
+      document.querySelectorAll('style').forEach(el => {
+        if (el.textContent && el.textContent.includes('url(')) {
+          el.textContent = el.textContent.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (_match, quote, urlVal) => {
+            if (urlVal.startsWith('data:') || urlVal.startsWith('blob:')) return _match;
+            return `url(${quote}${toAbsolute(urlVal)}${quote})`;
+          });
+        }
+      });
+
+      // Fix poster attribute on video elements
+      document.querySelectorAll('video[poster]').forEach(el => {
+        const poster = el.getAttribute('poster');
+        if (poster) el.setAttribute('poster', toAbsolute(poster));
+      });
+    }, origin);
+
+    // 5. Get cleaned HTML
+    const html = await page.content();
+
+    // 6. Take screenshot (jpeg, quality 60)
+    const screenshotBuffer = await page.screenshot({
+      fullPage: false,
+      type: 'jpeg',
+      quality: 60,
+    });
+    const screenshot = `data:image/jpeg;base64,${screenshotBuffer.toString('base64')}`;
+
+    await context.close();
+
+    // 7. Also crawl for design tokens using existing function
+    const tokenResult = await crawlWebsite(url);
+    const tokens = tokenResult.success ? {
+      colors: tokenResult.colors,
+      typography: tokenResult.typography,
+      buttons: tokenResult.buttons,
+      inputs: tokenResult.inputs,
+      backgrounds: tokenResult.backgrounds,
+      borderRadii: tokenResult.borderRadii,
+      shadows: tokenResult.shadows,
+    } : null;
+
+    return res.json({
+      url,
+      html,
+      tokens,
+      screenshot,
+    });
+  } catch (err: any) {
+    console.error('Full-page crawl error:', err);
+    return res.status(500).json({ error: 'Failed to crawl full page' });
+  }
 });
 
 // POST /api/projects/:projectId/compile-tokens
