@@ -7,6 +7,13 @@ interface Props {
   onClose: () => void;
 }
 
+interface BoundComponent {
+  id: string;
+  name: string;
+  category: string;
+  thumbnail?: string;
+}
+
 type Viewport = 'desktop' | 'tablet' | 'mobile';
 type ExportState = 'idle' | 'exporting' | 'success' | 'error';
 
@@ -18,7 +25,35 @@ export default function FigmaExportDialog({ projectId, shareToken, onClose }: Pr
   const [exportState, setExportState] = useState<ExportState>('idle');
   const [exportError, setExportError] = useState('');
 
+  // Component library export state
+  const [boundComponents, setBoundComponents] = useState<BoundComponent[]>([]);
+  const [selectedComponentIds, setSelectedComponentIds] = useState<Set<string>>(new Set());
+  const [compExportState, setCompExportState] = useState<ExportState>('idle');
+  const [compExportError, setCompExportError] = useState('');
+  const [compViewport, setCompViewport] = useState<Viewport>('desktop');
+
   const shareUrl = `${window.location.origin}/share/${shareToken}`;
+
+  // Fetch bound components for this project
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/components`, { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          const comps: BoundComponent[] = (Array.isArray(data) ? data : []).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            category: c.category,
+            thumbnail: c.thumbnail,
+          }));
+          setBoundComponents(comps);
+        }
+      } catch {
+        // ignore — no components
+      }
+    })();
+  }, [projectId]);
 
   // Check if code_to_design_api_key is configured
   useEffect(() => {
@@ -55,6 +90,50 @@ export default function FigmaExportDialog({ projectId, shareToken, onClose }: Pr
       document.body.removeChild(textarea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const toggleComponent = (id: string) => {
+    setSelectedComponentIds((prev: Set<string>) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllComponents = () => {
+    if (selectedComponentIds.size === boundComponents.length) {
+      setSelectedComponentIds(new Set());
+    } else {
+      setSelectedComponentIds(new Set(boundComponents.map(c => c.id)));
+    }
+  };
+
+  const handleExportComponents = async () => {
+    if (selectedComponentIds.size === 0) return;
+    setCompExportState('exporting');
+    setCompExportError('');
+    try {
+      const res = await fetch(`/api/projects/${projectId}/export/figma-components`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          componentIds: [...selectedComponentIds],
+          viewport: compViewport,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Export failed' }));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      await navigator.clipboard.writeText(JSON.stringify(data.clipboardData));
+      setCompExportState('success');
+      setTimeout(() => setCompExportState('idle'), 4000);
+    } catch (err: any) {
+      setCompExportError(err.message || 'Export failed');
+      setCompExportState('error');
     }
   };
 
@@ -219,6 +298,120 @@ export default function FigmaExportDialog({ projectId, shareToken, onClose }: Pr
             </>
           )}
         </div>
+
+        {/* Component Library Export Section */}
+        {boundComponents.length > 0 && (
+          <>
+            {/* Divider */}
+            <div style={styles.divider}>
+              <span style={styles.dividerLine} />
+              <span style={styles.dividerText}>或</span>
+              <span style={styles.dividerLine} />
+            </div>
+
+            <div style={{
+              ...styles.section,
+              ...(!apiKeyConfigured && !checkingKey ? styles.disabledSection : {}),
+            }}>
+              <div style={styles.sectionHeader}>
+                <span style={styles.sectionIcon}>&#x1F9E9;</span>
+                <span style={styles.sectionTitle}>元件庫匯出</span>
+              </div>
+              <p style={styles.sectionDesc}>
+                選擇已綁定的元件，匯出為 Figma Components
+              </p>
+
+              {checkingKey ? (
+                <div style={styles.comingSoonNote}>檢查 API Key 設定中...</div>
+              ) : !apiKeyConfigured ? (
+                <div style={styles.comingSoonNote}>
+                  請在<a href="/settings" style={styles.link}>設定頁</a>配置 code.to.design API Key
+                </div>
+              ) : (
+                <>
+                  {/* Select all / deselect all */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <label style={{ ...styles.label, margin: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedComponentIds.size === boundComponents.length}
+                        onChange={toggleAllComponents}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      全選 ({selectedComponentIds.size}/{boundComponents.length})
+                    </label>
+                  </div>
+
+                  {/* Component checkbox list */}
+                  <div style={styles.compList}>
+                    {boundComponents.map(comp => (
+                      <label key={comp.id} style={styles.compItem}>
+                        <input
+                          type="checkbox"
+                          checked={selectedComponentIds.has(comp.id)}
+                          onChange={() => toggleComponent(comp.id)}
+                          style={{ cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        {comp.thumbnail && (
+                          <img
+                            src={`data:image/png;base64,${comp.thumbnail}`}
+                            alt={comp.name}
+                            style={styles.compThumb}
+                          />
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={styles.compName}>{comp.name}</div>
+                          <div style={styles.compCategory}>{comp.category}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Viewport + Export button */}
+                  <div style={{ ...styles.urlRow, marginTop: '12px' }}>
+                    <select
+                      style={styles.selectInput}
+                      value={compViewport}
+                      onChange={e => setCompViewport(e.target.value as Viewport)}
+                      disabled={compExportState === 'exporting'}
+                      title="選擇 Viewport 大小"
+                    >
+                      <option value="desktop">Desktop (1440px)</option>
+                      <option value="tablet">Tablet (768px)</option>
+                      <option value="mobile">Mobile (390px)</option>
+                    </select>
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.exportBtn,
+                        ...(compExportState === 'exporting' || selectedComponentIds.size === 0 ? styles.btnDisabled : {}),
+                      }}
+                      onClick={handleExportComponents}
+                      disabled={compExportState === 'exporting' || selectedComponentIds.size === 0}
+                      data-testid="figma-comp-export-btn"
+                    >
+                      {compExportState === 'exporting' && (
+                        <span style={styles.spinner} />
+                      )}
+                      {compExportState === 'exporting' ? '匯出中...' : '匯出元件'}
+                    </button>
+                  </div>
+
+                  {compExportState === 'success' && (
+                    <div style={styles.successNote}>
+                      已複製！在 Figma 中按 Ctrl+V 貼上元件
+                    </div>
+                  )}
+                  {compExportState === 'error' && (
+                    <div style={styles.errorNote}>
+                      {compExportError}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -433,5 +626,40 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '6px',
     padding: '10px 12px',
     lineHeight: '1.5',
+  },
+  compList: {
+    maxHeight: '200px',
+    overflowY: 'auto',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    backgroundColor: '#f8fafc',
+  },
+  compItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 10px',
+    borderBottom: '1px solid #e2e8f0',
+    cursor: 'pointer',
+    fontSize: '13px',
+  },
+  compThumb: {
+    width: '36px',
+    height: '28px',
+    objectFit: 'cover' as const,
+    borderRadius: '3px',
+    border: '1px solid #e2e8f0',
+    flexShrink: 0,
+  },
+  compName: {
+    fontWeight: 500,
+    color: '#334155',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  compCategory: {
+    fontSize: '11px',
+    color: '#94a3b8',
   },
 };

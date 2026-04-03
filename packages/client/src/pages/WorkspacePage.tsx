@@ -16,11 +16,13 @@ import ApiBindingPanel from '../components/ApiBindingPanel';
 import PageApiBindingPanel from '../components/PageApiBindingPanel';
 import ConstraintPanel from '../components/ConstraintPanel';
 import VisualEditor from '../components/VisualEditor';
+import SaveComponentDialog from '../components/SaveComponentDialog';
 import CodePanel from '../components/CodePanel';
 import CodeFileTree from '../components/CodeFileTree';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
+import ComponentPicker from '../components/ComponentPicker';
 // import FigmaExportDialog from '../components/FigmaExportDialog'; // disabled: internal URLs not supported
 
 // Strip [Attached files] block from user message display content
@@ -93,6 +95,10 @@ export default function WorkspacePage() {
   const [apiBindingsFull, setApiBindingsFull] = useState<{ id: string; bridgeId: string; method: string; url: string }[]>([]);
   const [showConstraintPanel, setShowConstraintPanel] = useState(false);
   const [showPageApiPanel, setShowPageApiPanel] = useState(false);
+  const [showComponentPicker, setShowComponentPicker] = useState(false);
+
+  // Component extract state
+  const [extractedComponent, setExtractedComponent] = useState<{ html: string; css: string } | null>(null);
   const [editingAnnotation, setEditingAnnotation] = useState<{
     bridgeId: string;
     tagName: string;
@@ -477,6 +483,11 @@ export default function WorkspacePage() {
     textContent: string;
     rect: { x: number; y: number; width: number; height: number };
   }) => {
+    // In component-extract mode, we just highlight — the actual extraction comes via onComponentExtract
+    if (interactionMode === 'component-extract') {
+      return;
+    }
+
     // In API binding mode, open the binding panel instead
     if (interactionMode === 'api-binding') {
       setApiBindingElement({ bridgeId: data.bridgeId, tagName: data.tagName });
@@ -591,6 +602,7 @@ export default function WorkspacePage() {
         if (quickRegen) { setQuickRegen(null); setEditingAnnotation(null); }
         if (showVersionHistory) setShowVersionHistory(false);
         if (showShortcuts) setShowShortcuts(false);
+        if (interactionMode === 'component-extract') { setInteractionMode('browse'); setExtractedComponent(null); }
       }
       // A: toggle annotation mode (when not typing in an input)
       if (e.key === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -623,7 +635,7 @@ export default function WorkspacePage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [quickRegen, showVersionHistory, showShortcuts, html]);
+  }, [quickRegen, showVersionHistory, showShortcuts, html, interactionMode]);
 
   // Onboarding: start tour for first-time users when there is no prototype yet
   useEffect(() => {
@@ -1116,6 +1128,31 @@ export default function WorkspacePage() {
           </button>
           <button
             type="button"
+            style={{
+              ...styles.annotateBtn,
+              ...(interactionMode === 'component-extract' ? { backgroundColor: '#ecfdf5', borderColor: '#10b981', color: '#10b981' } : {}),
+              ...(!html ? { opacity: 0.5 } : {}),
+            }}
+            onClick={() => {
+              const isActive = interactionMode === 'component-extract';
+              setInteractionMode(isActive ? 'browse' : 'component-extract');
+              setAnnotationMode(false);
+              if (isActive) { setExtractedComponent(null); }
+            }}
+            disabled={!html}
+            title="從原型中擷取元件並儲存到元件庫"
+            data-testid="component-extract-toggle"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <rect x="1" y="1" width="5" height="5" rx="1" />
+              <path d="M9 3h4M11 1v4" />
+              <rect x="1" y="8" width="5" height="5" rx="1" />
+              <rect x="8" y="8" width="5" height="5" rx="1" />
+            </svg>
+            擷取元件
+          </button>
+          <button
+            type="button"
             style={styles.historyBtn}
             onClick={() => setFocusMode(true)}
             title="專注模式 (F)"
@@ -1317,6 +1354,12 @@ export default function WorkspacePage() {
           </button>
         </div>
       )}
+      {/* Component extract mode banner */}
+      {interactionMode === 'component-extract' && (
+        <div style={{ ...styles.annotationBanner, background: '#ecfdf5', color: '#065f46', borderBottom: '2px solid #10b981' }}>
+          📦 擷取元件模式 — 點擊任一元素將其儲存為可重用元件 · 按 <kbd style={styles.kbd}>Esc</kbd> 退出
+        </div>
+      )}
 
       {/* Main content */}
       <div style={styles.body}>
@@ -1347,6 +1390,19 @@ export default function WorkspacePage() {
               title={!html ? '請先生成原型' : undefined}
             >
               🎨 樣式
+            </button>
+            <div style={{ flex: 1 }} />
+            <button
+              style={{ ...styles.tabBtn, padding: '8px 10px', fontSize: 13 }}
+              onClick={() => setShowComponentPicker(true)}
+              data-testid="btn-component-picker"
+              title="綁定元件庫"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4, verticalAlign: 'middle' }}>
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+              元件庫
             </button>
           </div>
           <div style={styles.tabContent}>
@@ -1483,6 +1539,7 @@ export default function WorkspacePage() {
                       annotationMode={annotationMode}
                       interactionMode={interactionMode}
                       onElementClick={handleElementClick}
+                      onComponentExtract={(data) => setExtractedComponent(data)}
                       onIndicatorClick={handleIndicatorClick}
                       annotations={annotationIndicators}
                       apiBindings={apiBindingIndicators}
@@ -1650,6 +1707,28 @@ export default function WorkspacePage() {
           loading={tokensLoading}
           onClose={() => setShowTokens(false)}
           projectId={id}
+        />
+      )}
+
+      {/* Save Component Dialog */}
+      {extractedComponent && project && (
+        <SaveComponentDialog
+          html={extractedComponent.html}
+          css={extractedComponent.css}
+          projectId={project.id}
+          onClose={() => setExtractedComponent(null)}
+          onSaved={() => {
+            setExtractedComponent(null);
+            setToastMsg('元件已儲存到元件庫');
+            setInteractionMode('browse');
+          }}
+        />
+      )}
+
+      {showComponentPicker && project && (
+        <ComponentPicker
+          projectId={project.id}
+          onClose={() => setShowComponentPicker(false)}
         />
       )}
 

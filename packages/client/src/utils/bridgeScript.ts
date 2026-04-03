@@ -4,6 +4,8 @@ export const BRIDGE_SCRIPT = `
   var annotationMode = false;
   var apiBindingMode = false;
   var visualEditMode = false;
+  var componentExtractMode = false;
+  var componentExtractHoveredEl = null;
   var visualHoveredEl = null;
   var indicators = [];
   var apiIndicators = [];
@@ -21,8 +23,21 @@ export const BRIDGE_SCRIPT = `
   var hoveredEl = null;
 
   document.addEventListener('mouseover', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode && !componentExtractMode) return;
     var target = findBridgeId(e.target);
+    if (componentExtractMode) {
+      if (componentExtractHoveredEl && componentExtractHoveredEl !== target) {
+        componentExtractHoveredEl.style.outline = '';
+        componentExtractHoveredEl.style.outlineOffset = '';
+        componentExtractHoveredEl = null;
+      }
+      if (target) {
+        target.style.outline = '2px solid #10b981';
+        target.style.outlineOffset = '2px';
+        componentExtractHoveredEl = target;
+      }
+      return;
+    }
     if (visualEditMode) {
       if (visualHoveredEl && visualHoveredEl !== target) {
         visualHoveredEl.style.outline = '';
@@ -54,7 +69,16 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('mouseout', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode && !componentExtractMode) return;
+    if (componentExtractMode) {
+      var ceTarget = findBridgeId(e.target);
+      if (ceTarget && ceTarget === componentExtractHoveredEl) {
+        ceTarget.style.outline = '';
+        ceTarget.style.outlineOffset = '';
+        componentExtractHoveredEl = null;
+      }
+      return;
+    }
     if (visualEditMode) {
       var vTarget = findBridgeId(e.target);
       if (vTarget && vTarget === visualHoveredEl) {
@@ -73,13 +97,40 @@ export const BRIDGE_SCRIPT = `
   }, true);
 
   document.addEventListener('click', function(e) {
-    if (!annotationMode && !apiBindingMode && !visualEditMode) return;
+    if (!annotationMode && !apiBindingMode && !visualEditMode && !componentExtractMode) return;
     e.preventDefault();
     e.stopPropagation();
     var target = findBridgeId(e.target);
     if (!target) return;
     var bridgeId = target.getAttribute('data-bridge-id');
     var rect = target.getBoundingClientRect();
+    if (componentExtractMode) {
+      var extractHtml = target.outerHTML;
+      var cs = window.getComputedStyle(target);
+      var cssProps = ['backgroundColor','color','fontSize','fontFamily','fontWeight','padding','margin','borderRadius','border','display','flexDirection','alignItems','justifyContent','gap','width','height','maxWidth','minHeight','lineHeight','letterSpacing','textAlign','boxShadow','opacity','overflow','position','textDecoration','textTransform'];
+      var cssLines = [];
+      cssProps.forEach(function(prop) {
+        var val = cs.getPropertyValue(prop.replace(/[A-Z]/g, function(m) { return '-' + m.toLowerCase(); }));
+        if (val && val !== '' && val !== 'none' && val !== 'normal' && val !== '0px' && val !== 'rgba(0, 0, 0, 0)' && val !== 'auto' && val !== 'visible') {
+          cssLines.push(prop.replace(/[A-Z]/g, function(m) { return '-' + m.toLowerCase(); }) + ': ' + val + ';');
+        }
+      });
+      var extractedCss = cssLines.join(' ');
+      window.parent.postMessage({
+        type: 'element-click',
+        bridgeId: bridgeId,
+        tagName: target.tagName,
+        textContent: (target.textContent || '').substring(0, 50),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      }, '*');
+      window.parent.postMessage({
+        type: 'component-extracted',
+        bridgeId: bridgeId,
+        html: extractHtml,
+        css: extractedCss
+      }, '*');
+      return;
+    }
     if (annotationMode || apiBindingMode) {
       window.parent.postMessage({
         type: 'element-click',
@@ -232,11 +283,27 @@ export const BRIDGE_SCRIPT = `
       if (el) {
         el.outerHTML = e.data.html;
       }
+    } else if (e.data.type === 'set-component-extract-mode') {
+      componentExtractMode = !!e.data.enabled;
+      if (componentExtractMode) {
+        annotationMode = false;
+        apiBindingMode = false;
+        visualEditMode = false;
+        document.body.style.cursor = 'crosshair';
+      } else {
+        document.body.style.cursor = '';
+        if (componentExtractHoveredEl) {
+          componentExtractHoveredEl.style.outline = '';
+          componentExtractHoveredEl.style.outlineOffset = '';
+          componentExtractHoveredEl = null;
+        }
+      }
     } else if (e.data.type === 'set-visual-edit-mode') {
       visualEditMode = !!e.data.enabled;
       if (visualEditMode) {
         annotationMode = false;
         apiBindingMode = false;
+        componentExtractMode = false;
         document.body.style.cursor = 'default';
       } else {
         document.body.style.cursor = '';

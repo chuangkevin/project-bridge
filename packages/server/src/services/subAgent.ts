@@ -13,6 +13,7 @@ export async function generatePageFragment(
   cssVariables: string,
   sharedCss: string,
   designConvention: string,
+  componentLibraryRef?: string,
 ): Promise<{ name: string; html: string; success: boolean; error?: string }> {
   const pageName = page.name;
 
@@ -94,7 +95,9 @@ NAVIGATION between pages:
 onclick="showPage('targetPageName');return false;"
 This page links to: ${page.navigationOut.length > 0 ? page.navigationOut.join(', ') : '(none)'}
 
-${page.viewport === 'mobile' ? `MOBILE: single column, max-width 480px, touch targets 48px+, text 15-16px` : 'DESKTOP: responsive layout, grid/flexbox, max-width 1200px'}`;
+${page.viewport === 'mobile' ? `MOBILE: single column, max-width 480px, touch targets 48px+, text 15-16px` : 'DESKTOP: responsive layout, grid/flexbox, max-width 1200px'}
+
+${componentLibraryRef ? `COMPONENT LIBRARY (use these verified components as reference — match their structure and style):\n${componentLibraryRef}` : ''}`;
 
   const userPrompt = `Generate the "${pageName}" page [${page.viewport.toUpperCase()}]:
 

@@ -7,6 +7,7 @@ import { assignBatchKeys, getGeminiApiKeyExcluding, markKeyBad } from './geminiK
 import { sanitizeGeneratedHtml, injectConventionColors } from './htmlSanitizer';
 import { autoFixDesignViolations } from './designSystemValidator';
 import db from '../db/connection';
+import { getComponentInjection } from './componentInjector';
 
 export interface GenerationProgress {
   phase: 'planning' | 'tokens' | 'generating' | 'assembling' | 'done' | 'error';
@@ -63,6 +64,17 @@ export async function generateParallel(
 
   console.log('[parallel] Local plan ready:', plan.pages.length, 'pages, sharedCss:', plan.sharedCss.length, 'chars');
 
+  // Component library injection (opt-in: only if project has bound components)
+  let componentLibraryRef = '';
+  try {
+    componentLibraryRef = getComponentInjection(projectId);
+    if (componentLibraryRef) {
+      console.log('[parallel] Component library injection:', componentLibraryRef.length, 'chars');
+    }
+  } catch (e) {
+    console.warn('[parallel] Component injection failed, skipping:', e);
+  }
+
   const totalPages = plan.pages.length;
   const pageNames = plan.pages.map(p => p.name);
 
@@ -96,6 +108,7 @@ export async function generateParallel(
         plan.cssVariables,
         plan.sharedCss,
         designConvention,
+        componentLibraryRef || undefined,
       ).then(async (result) => {
         if (result.success) {
           onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}`, message: `${devName} 完成了「${page.name}」✓` });
@@ -107,7 +120,7 @@ export async function generateParallel(
           const retryKey = getGeminiApiKeyExcluding(key);
           if (!retryKey) break;
           onProgress?.({ phase: 'generating', page: page.name, status: 'started', progress: `${pageIdx + 1}/${totalPages}`, message: `重試 ${retry + 1}` });
-          const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention);
+          const retryResult = await generatePageFragment(retryKey, page, plan.cssVariables, plan.sharedCss, designConvention, componentLibraryRef || undefined);
           if (retryResult.success) {
             onProgress?.({ phase: 'generating', page: page.name, status: 'done', progress: `${pageIdx + 1}/${totalPages}` });
             return retryResult;

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { BRIDGE_SCRIPT } from '../utils/bridgeScript';
 
-export type InteractionMode = 'browse' | 'annotate' | 'api-binding' | 'visual-edit';
+export type InteractionMode = 'browse' | 'annotate' | 'api-binding' | 'visual-edit' | 'component-extract';
 
 interface Props {
   html: string | null;
@@ -9,12 +9,13 @@ interface Props {
   annotationMode?: boolean;
   interactionMode?: InteractionMode;
   onElementClick?: (data: { bridgeId: string; tagName: string; textContent: string; rect: { x: number; y: number; width: number; height: number } }) => void;
+  onComponentExtract?: (data: { html: string; css: string }) => void;
   onIndicatorClick?: (bridgeId: string) => void;
   annotations?: { bridgeId: string; number: number }[];
   apiBindings?: { bridgeId: string }[];
 }
 
-export default function PreviewPanel({ html, deviceSize, annotationMode, interactionMode, onElementClick, onIndicatorClick, annotations, apiBindings }: Props) {
+export default function PreviewPanel({ html, deviceSize, annotationMode, interactionMode, onElementClick, onComponentExtract, onIndicatorClick, annotations, apiBindings }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Derive effective mode: interactionMode takes priority over boolean annotationMode
@@ -25,6 +26,12 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     if (e.data.type === 'element-click' && (effectiveMode === 'annotate' || effectiveMode === 'api-binding') && onElementClick) {
       onElementClick(e.data);
     }
+    if (e.data.type === 'element-click' && effectiveMode === 'component-extract' && onElementClick) {
+      onElementClick(e.data);
+    }
+    if (e.data.type === 'component-extracted' && effectiveMode === 'component-extract' && onComponentExtract) {
+      onComponentExtract({ html: e.data.html, css: e.data.css });
+    }
     if (e.data.type === 'indicator-click' && onIndicatorClick) {
       onIndicatorClick(e.data.bridgeId);
     }
@@ -34,7 +41,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
         (iframeRef.current.contentWindow as any).eval(`typeof showPage === 'function' && showPage(${JSON.stringify(name)})`);
       } catch {}
     }
-  }, [effectiveMode, onElementClick, onIndicatorClick]);
+  }, [effectiveMode, onElementClick, onComponentExtract, onIndicatorClick]);
 
   useEffect(() => {
     window.addEventListener('message', handleMessage);
@@ -54,6 +61,7 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     if (!iframe?.contentWindow) return;
     iframe.contentWindow.postMessage({ type: 'set-api-binding-mode', enabled: effectiveMode === 'api-binding' }, '*');
     iframe.contentWindow.postMessage({ type: 'set-visual-edit-mode', enabled: effectiveMode === 'visual-edit' }, '*');
+    iframe.contentWindow.postMessage({ type: 'set-component-extract-mode', enabled: effectiveMode === 'component-extract' }, '*');
   }, [effectiveMode]);
 
   // Send annotation indicators to iframe
@@ -90,6 +98,9 @@ export default function PreviewPanel({ html, deviceSize, annotationMode, interac
     }
     if (effectiveMode === 'visual-edit') {
       iframe.contentWindow.postMessage({ type: 'set-visual-edit-mode', enabled: true }, '*');
+    }
+    if (effectiveMode === 'component-extract') {
+      iframe.contentWindow.postMessage({ type: 'set-component-extract-mode', enabled: true }, '*');
     }
   }, [annotations, apiBindings, effectiveMode]);
 
