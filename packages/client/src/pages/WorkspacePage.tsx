@@ -144,6 +144,9 @@ function WorkspacePageInner() {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const lastCursorEmit = useRef<number>(0);
 
+  // Socket room management — join on mount, leave on unmount
+  const { socket, joinRoom, leaveRoom } = useSocket();
+
   // Throttled cursor-move emitter (50ms)
   const handlePreviewMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!socket || !id) return;
@@ -330,7 +333,6 @@ function WorkspacePageInner() {
   }, [fetchProject, fetchAnnotations, checkDesignActive, checkDesignSpec]);
 
   // Socket room management — join on mount, leave on unmount
-  const { socket, joinRoom, leaveRoom } = useSocket();
   useEffect(() => {
     if (!id) return;
     joinRoom(id);
