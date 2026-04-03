@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage, getGeminiApiKeyExcluding } from './geminiKeys';
+import { getGeminiModel, trackUsage } from './geminiKeys';
+import { withGeminiRetry } from './geminiRetry';
 
 export interface PageStructure {
   multiPage: boolean;
@@ -7,13 +8,12 @@ export interface PageStructure {
 }
 
 export async function analyzePageStructure(message: string, apiKey: string): Promise<PageStructure> {
-  let currentKey = apiKey;
-  for (let attempt = 0; attempt < 3; attempt++) {
   try {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      systemInstruction: `You are analyzing a UI generation request to detect if it describes multiple pages/screens.
+    return await withGeminiRetry(async (currentKey) => {
+      const genai = new GoogleGenerativeAI(currentKey);
+      const model = genai.getGenerativeModel({
+        model: getGeminiModel(),
+        systemInstruction: `You are analyzing a UI generation request to detect if it describes multiple pages/screens.
 
 Return JSON only: {"multiPage": boolean, "pages": string[]}
 
@@ -36,31 +36,25 @@ Examples:
 - "購物網站 包含購物車、結帳頁面 要多頁面" → {"multiPage": true, "pages": ["商品列表", "商品詳情", "購物車", "結帳"]}
 - "部落格系統 要有文章管理" → {"multiPage": true, "pages": ["文章列表", "文章詳情", "新增文章"]}
 - "create a dashboard with analytics and settings" → {"multiPage": true, "pages": ["Dashboard", "Analytics", "Settings"]}`,
-      generationConfig: {
-        maxOutputTokens: 200,
-        temperature: 0,
-        responseMimeType: 'application/json',
-      },
-    });
+        generationConfig: {
+          maxOutputTokens: 200,
+          temperature: 0,
+          responseMimeType: 'application/json',
+        },
+      });
 
-    const result = await model.generateContent(message.slice(0, 8000));
-    try { trackUsage(currentKey, getGeminiModel(), 'page-structure', result.response.usageMetadata); } catch {}
-    const content = result.response.text();
-    console.log('[pageStructure] Raw response:', content);
-    const parsed = JSON.parse(content);
-    return {
-      multiPage: !!parsed.multiPage,
-      pages: Array.isArray(parsed.pages) ? parsed.pages : [],
-    };
+      const result = await model.generateContent(message.slice(0, 8000));
+      try { trackUsage(currentKey, getGeminiModel(), 'page-structure', result.response.usageMetadata); } catch {}
+      const content = result.response.text();
+      console.log('[pageStructure] Raw response:', content);
+      const parsed = JSON.parse(content);
+      return {
+        multiPage: !!parsed.multiPage,
+        pages: Array.isArray(parsed.pages) ? parsed.pages : [],
+      };
+    }, { callType: 'page-structure', maxRetries: 3 });
   } catch (err: any) {
-    const msg = err?.message || '';
-    if ((msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) && attempt < 2) {
-      const altKey = getGeminiApiKeyExcluding(currentKey);
-      if (altKey) { currentKey = altKey; console.warn(`[pageStructure] 429, retry with different key (attempt ${attempt + 1})`); continue; }
-    }
-    console.error('[pageStructure] Failed:', msg.slice(0, 100));
+    console.error('[pageStructure] Failed:', (err?.message || '').slice(0, 100));
     return { multiPage: false, pages: [] };
   }
-  }
-  return { multiPage: false, pages: [] };
 }

@@ -66,23 +66,62 @@ export function invalidateKeyCache(): void {
   cachedKeys = [];
 }
 
-// Temporary bad key tracking — keys that 429'd or errored recently
-const badKeys = new Map<string, number>(); // key → timestamp when marked bad
-const BAD_KEY_COOLDOWN = 120_000; // 2 minutes cooldown
+// Cooldown durations by reason
+const COOLDOWN_MS: Record<string, number> = {
+  '429': 120_000,       // 2 min for rate limit
+  '401': 1_800_000,     // 30 min for auth error
+  '403': 1_800_000,     // 30 min for permission error
+  'server_error': 30_000, // 30 sec for 500/503
+};
 
-/** Mark a key as temporarily bad (429, quota, auth error) */
-export function markKeyBad(key: string): void {
-  badKeys.set(key, Date.now());
-  console.warn('[keys] Marked bad:', '...' + key.slice(-4), '(cooldown 2min)');
+// In-memory cache of cooldowns (synced with DB)
+const badKeys = new Map<string, number>(); // key → cooldown_until timestamp
+let cooldownsLoaded = false;
+
+/** Load cooldowns from DB on first access */
+function loadCooldownsFromDb(): void {
+  if (cooldownsLoaded) return;
+  try {
+    const rows = db.prepare('SELECT api_key_suffix, cooldown_until FROM api_key_cooldowns').all() as any[];
+    const now = Date.now();
+    for (const row of rows) {
+      if (row.cooldown_until > now) {
+        // Find full key by suffix
+        const keys = loadKeys();
+        const fullKey = keys.find(k => k.slice(-4) === row.api_key_suffix);
+        if (fullKey) badKeys.set(fullKey, row.cooldown_until);
+      }
+    }
+    // Clean expired rows
+    db.prepare('DELETE FROM api_key_cooldowns WHERE cooldown_until < ?').run(now);
+  } catch { /* table may not exist yet during migration */ }
+  cooldownsLoaded = true;
+}
+
+/** Mark a key as temporarily bad with reason-based cooldown */
+export function markKeyBad(key: string, reason: string = '429'): void {
+  const cooldownMs = COOLDOWN_MS[reason] || COOLDOWN_MS['429'];
+  const cooldownUntil = Date.now() + cooldownMs;
+  badKeys.set(key, cooldownUntil);
+  const suffix = key.slice(-4);
+  console.warn(`[keys] Marked bad: ...${suffix} (${reason}, cooldown ${cooldownMs / 1000}s)`);
+  // Persist to DB
+  try {
+    db.prepare(
+      `INSERT INTO api_key_cooldowns (api_key_suffix, cooldown_until, reason) VALUES (?, ?, ?)
+       ON CONFLICT(api_key_suffix) DO UPDATE SET cooldown_until = excluded.cooldown_until, reason = excluded.reason`
+    ).run(suffix, cooldownUntil, reason);
+  } catch { /* non-fatal */ }
 }
 
 /** Get available keys excluding temporarily bad ones */
 function getAvailableKeys(): string[] {
+  loadCooldownsFromDb();
   const now = Date.now();
   const keys = loadKeys();
   // Clean up expired cooldowns
-  for (const [k, ts] of badKeys) {
-    if (now - ts > BAD_KEY_COOLDOWN) badKeys.delete(k);
+  for (const [k, until] of badKeys) {
+    if (now >= until) badKeys.delete(k);
   }
   const available = keys.filter(k => !badKeys.has(k));
   // If ALL keys are bad, return all (better than nothing)

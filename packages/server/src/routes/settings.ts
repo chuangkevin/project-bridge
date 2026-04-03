@@ -208,6 +208,79 @@ router.delete('/api-keys/:suffix', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/settings/validate-key — test if a key works without saving it
+router.post('/validate-key', async (req: Request, res: Response) => {
+  const { apiKey } = req.body;
+  if (!apiKey || typeof apiKey !== 'string') {
+    return res.status(400).json({ valid: false, error: 'Missing apiKey' });
+  }
+  try {
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: getGeminiModel(),
+      generationConfig: { maxOutputTokens: 1 },
+    });
+    await model.generateContent('Hi');
+    return res.json({ valid: true });
+  } catch (err: any) {
+    const msg = err?.message || '';
+    if (msg.includes('429')) {
+      return res.json({ valid: true, warning: 'Key is valid but currently rate-limited' });
+    }
+    if (msg.includes('401') || msg.includes('API_KEY_INVALID')) {
+      return res.json({ valid: false, error: 'Invalid API key' });
+    }
+    if (msg.includes('403')) {
+      return res.json({ valid: false, error: 'No permission — check if Generative Language API is enabled' });
+    }
+    return res.json({ valid: false, error: msg.slice(0, 150) });
+  }
+});
+
+// POST /api/settings/api-keys/batch-validate — validate multiple keys without saving
+router.post('/api-keys/batch-validate', async (req: Request, res: Response) => {
+  const { keys } = req.body;
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return res.status(400).json({ error: 'Missing keys array' });
+  }
+  if (keys.length > 20) {
+    return res.status(400).json({ error: 'Maximum 20 keys per batch' });
+  }
+
+  const results: { suffix: string; valid: boolean; error?: string; warning?: string }[] = [];
+
+  for (const key of keys) {
+    if (typeof key !== 'string' || !key.trim()) {
+      results.push({ suffix: '????', valid: false, error: 'Empty or invalid key' });
+      continue;
+    }
+    const suffix = key.slice(-4);
+    try {
+      const genai = new GoogleGenerativeAI(key);
+      const model = genai.getGenerativeModel({
+        model: getGeminiModel(),
+        generationConfig: { maxOutputTokens: 1 },
+      });
+      await model.generateContent('Hi');
+      results.push({ suffix, valid: true });
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('429')) {
+        results.push({ suffix, valid: true, warning: 'Key is valid but currently rate-limited' });
+      } else if (msg.includes('401') || msg.includes('API_KEY_INVALID')) {
+        results.push({ suffix, valid: false, error: 'Invalid API key' });
+      } else if (msg.includes('403')) {
+        results.push({ suffix, valid: false, error: 'No permission — check if Generative Language API is enabled' });
+      } else {
+        results.push({ suffix, valid: false, error: msg.slice(0, 150) });
+      }
+    }
+  }
+
+  const validCount = results.filter(r => r.valid).length;
+  return res.json({ results, total: results.length, valid: validCount, invalid: results.length - validCount });
+});
+
 // ─── Token Usage Stats ──────────────────────────────
 
 // GET /api/settings/token-usage — aggregated usage stats
