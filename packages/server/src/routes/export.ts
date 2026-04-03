@@ -228,7 +228,7 @@ router.post('/:id/export-figma', async (req: Request, res: Response) => {
   const version = db.prepare(
     'SELECT html FROM prototype_versions WHERE project_id = ? AND is_current = 1'
   ).get(projectId) as { html: string } | undefined;
-  if (!version?.html) return res.status(400).json({ error: 'No prototype found for this project' });
+  if (!version?.html) return res.status(404).json({ error: 'No prototype found for this project' });
 
   try {
     const figmaDoc = parseHtmlToFigma(version.html);

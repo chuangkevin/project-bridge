@@ -135,9 +135,10 @@ router.post('/:projectId/crawl-full-page', async (req: Request, res: Response) =
     return res.status(404).json({ error: 'Project not found' });
   }
 
+  let context: any = null;
   try {
     const browser = await getBrowser();
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
@@ -286,6 +287,8 @@ router.post('/:projectId/crawl-full-page', async (req: Request, res: Response) =
       screenshot,
     });
   } catch (err: any) {
+    // Ensure browser context is cleaned up on error
+    try { await context.close(); } catch {}
     console.error('Full-page crawl error:', err);
     return res.status(500).json({ error: 'Failed to crawl full page' });
   }

@@ -388,7 +388,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     // Try to acquire generation lock
     if (socket) {
       const lockResult = await new Promise<{ success: boolean; holder?: { userId: string; userName: string } }>((resolve) => {
-        const timeout = setTimeout(() => resolve({ success: true }), 2000); // fallback if no response
+        const timeout = setTimeout(() => resolve({ success: false, holder: { userId: '', userName: '連線逾時' } }), 2000); // fail-safe on timeout
         socket.once('generation-lock-result', (result) => {
           clearTimeout(timeout);
           resolve(result);

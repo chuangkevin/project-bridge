@@ -40,11 +40,12 @@ export default function CrawlPreview({ html, zoom, extractMode, onExtract, onZoo
     const rawHtml: string = e.data.html || '';
     const rawCss: string = e.data.css || '';
 
-    // Scope the CSS with a unique hash prefix
+    // Scope the CSS with a unique hash prefix and wrap HTML
     const hash = 'crawled-' + Math.random().toString(36).slice(2, 8);
     const scopedCss = rawCss ? `.${hash} { ${rawCss} }` : '';
+    const scopedHtml = `<div class="${hash}">${rawHtml}</div>`;
 
-    onExtract({ html: rawHtml, css: scopedCss });
+    onExtract({ html: scopedHtml, css: scopedCss });
   }, [extractMode, onExtract]);
 
   useEffect(() => {
