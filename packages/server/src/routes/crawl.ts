@@ -268,8 +268,11 @@ router.post('/:projectId/crawl-full-page', async (req: Request, res: Response) =
 
     await context.close();
 
-    // 7. Also crawl for design tokens using existing function
-    const tokenResult = await crawlWebsite(url);
+    // 7. Also crawl for design tokens using existing function (with 15s timeout)
+    const tokenResult = await Promise.race([
+      crawlWebsite(url),
+      new Promise<{ success: false }>((resolve) => setTimeout(() => resolve({ success: false } as any), 15000)),
+    ]);
     const tokens = tokenResult.success ? {
       colors: tokenResult.colors,
       typography: tokenResult.typography,

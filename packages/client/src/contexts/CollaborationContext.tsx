@@ -42,33 +42,39 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [cursors, setCursors] = useState<Map<string, CursorInfo>>(new Map());
   const [generationLock, setGenerationLock] = useState<GenerationLock | null>(null);
 
-  const handlePresenceUpdate = useCallback((data: { members: CollaborationMember[] }) => {
-    setMembers(data.members || []);
-    // Remove cursors for users who left
-    setCursors(prev => {
-      const memberIds = new Set((data.members || []).map(m => m.userId));
-      const next = new Map(prev);
-      let changed = false;
-      for (const key of next.keys()) {
-        if (!memberIds.has(key)) {
-          next.delete(key);
-          changed = true;
+  const handlePresenceUpdate = useCallback((data: any) => {
+    try {
+      setMembers(data?.members || []);
+      setCursors(prev => {
+        const memberIds = new Set((data?.members || []).map((m: any) => m.userId));
+        const next = new Map(prev);
+        let changed = false;
+        for (const key of next.keys()) {
+          if (!memberIds.has(key)) {
+            next.delete(key);
+            changed = true;
+          }
         }
-      }
-      return changed ? next : prev;
-    });
+        return changed ? next : prev;
+      });
+    } catch (e) { console.warn('[collab] Bad presence-update:', e); }
   }, []);
 
-  const handleCursorMove = useCallback((data: CursorInfo) => {
-    setCursors(prev => {
-      const next = new Map(prev);
-      next.set(data.userId, data);
-      return next;
-    });
+  const handleCursorMove = useCallback((data: any) => {
+    try {
+      if (!data?.userId) return;
+      setCursors(prev => {
+        const next = new Map(prev);
+        next.set(data.userId, data as CursorInfo);
+        return next;
+      });
+    } catch (e) { console.warn('[collab] Bad cursor-move:', e); }
   }, []);
 
-  const handleGenerationLockUpdate = useCallback((data: { locked: boolean; holder: GenerationLock | null }) => {
-    setGenerationLock(data.locked ? data.holder : null);
+  const handleGenerationLockUpdate = useCallback((data: any) => {
+    try {
+      setGenerationLock(data?.locked ? data.holder : null);
+    } catch (e) { console.warn('[collab] Bad lock-update:', e); }
   }, []);
 
   useEffect(() => {

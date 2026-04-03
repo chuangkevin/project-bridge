@@ -32,13 +32,14 @@ export default function CursorLayer({ containerRef }: Props) {
   }, [containerRef]);
 
   // Manage fade-out timers: reset when cursor moves, fade after 5s
+  const mountedRef = useRef(true);
+  useEffect(() => { return () => { mountedRef.current = false; }; }, []);
+
   useEffect(() => {
     cursors.forEach((_info, cursorUserId) => {
-      // Clear existing timer
       const existing = fadeTimers.current.get(cursorUserId);
       if (existing) window.clearTimeout(existing);
 
-      // Remove from faded-out set (cursor just moved)
       setFadedOut(prev => {
         if (!prev.has(cursorUserId)) return prev;
         const next = new Set(prev);
@@ -46,8 +47,8 @@ export default function CursorLayer({ containerRef }: Props) {
         return next;
       });
 
-      // Set new fade timer
       const timer = window.setTimeout(() => {
+        if (!mountedRef.current) return;
         setFadedOut(prev => {
           const next = new Set(prev);
           next.add(cursorUserId);
