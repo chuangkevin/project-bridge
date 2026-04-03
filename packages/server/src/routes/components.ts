@@ -363,6 +363,261 @@ componentsRouter.post('/crawl-extract', async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/components/crawl-extract/batch ────────────────
+// Batch crawl multiple URLs with cross-page deduplication
+componentsRouter.post('/crawl-extract/batch', async (req: Request, res: Response) => {
+  try {
+    const { urls } = req.body;
+    if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({ error: 'urls array is required' });
+    }
+    if (urls.length > 5) {
+      return res.status(400).json({ error: 'Maximum 5 URLs per batch' });
+    }
+
+    // Validate all URLs upfront
+    for (const url of urls) {
+      try { new URL(url); } catch {
+        return res.status(400).json({ error: `Invalid URL: ${url}` });
+      }
+    }
+
+    const browser = await getCrawlBrowser();
+
+    // Category selectors mapping (same as single crawl)
+    const categorySelectors: Record<string, string[]> = {
+      navigation: ['nav', '[role="navigation"]', '.navbar', 'header nav'],
+      card: ['.card', 'article', '.listing-item'],
+      button: ['button', '.btn', '[role="button"]'],
+      form: ['form', '.search-bar'],
+      hero: ['.hero', '.banner'],
+      footer: ['footer'],
+      modal: ['.modal', '[role="dialog"]'],
+      table: ['table', '[role="grid"]'],
+    };
+
+    const extractionScript = `((catSelectors) => {
+      const results = [];
+      const seen = new Set();
+
+      function getStructureKey(el) {
+        const children = Array.from(el.children).map(c => c.tagName.toLowerCase()).join(',');
+        return el.tagName.toLowerCase() + '[' + children + ']';
+      }
+
+      function getRelevantStyles(el) {
+        const cs = getComputedStyle(el);
+        const props = [
+          'display', 'position', 'width', 'height', 'max-width', 'min-height',
+          'padding', 'margin', 'background-color', 'color', 'font-family', 'font-size',
+          'font-weight', 'line-height', 'border', 'border-radius', 'box-shadow',
+          'flex-direction', 'align-items', 'justify-content', 'gap', 'grid-template-columns',
+          'text-align', 'text-decoration', 'overflow'
+        ];
+        const styles = {};
+        for (const p of props) {
+          const val = cs.getPropertyValue(p);
+          if (val && val !== 'none' && val !== 'normal' && val !== 'auto' && val !== '0px') {
+            styles[p] = val;
+          }
+        }
+        return styles;
+      }
+
+      function stylesToCss(selector, styles) {
+        const entries = Object.entries(styles);
+        if (entries.length === 0) return '';
+        return selector + ' {\\n' + entries.map(([k, v]) => '  ' + k + ': ' + v + ';').join('\\n') + '\\n}';
+      }
+
+      for (const [category, selectors] of Object.entries(catSelectors)) {
+        for (const sel of selectors) {
+          let elements;
+          try {
+            elements = Array.from(document.querySelectorAll(sel));
+          } catch (e) {
+            continue;
+          }
+
+          for (const el of elements) {
+            const structKey = category + ':' + getStructureKey(el);
+            if (seen.has(structKey)) continue;
+            seen.add(structKey);
+
+            const outerHTML = el.outerHTML;
+            if (outerHTML.length < 20) continue;
+            if (outerHTML.length > 50000) continue;
+
+            const styles = getRelevantStyles(el);
+            const className = '.extracted-' + category + '-' + results.length;
+            const css = stylesToCss(className, styles);
+
+            let childCss = '';
+            Array.from(el.children).slice(0, 10).forEach((child, i) => {
+              const childStyles = getRelevantStyles(child);
+              childCss += stylesToCss(className + ' > :nth-child(' + (i + 1) + ')', childStyles);
+            });
+
+            results.push({
+              category: category,
+              html: outerHTML,
+              css: css + '\\n' + childCss,
+              selector: sel,
+              tagName: el.tagName.toLowerCase(),
+              textPreview: (el.textContent || '').trim().slice(0, 100),
+            });
+          }
+        }
+      }
+
+      return results;
+    })`;
+
+    // Crawl each URL sequentially (to limit resource usage)
+    const perUrlResults: { url: string; components: ExtractedComponent[] }[] = [];
+    for (const url of urls) {
+      try {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        const page = await context.newPage();
+        await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+
+        const extracted: ExtractedComponent[] = await page.evaluate(
+          `${extractionScript}(${JSON.stringify(categorySelectors)})`
+        );
+        await context.close();
+
+        perUrlResults.push({ url, components: extracted });
+      } catch (crawlErr: any) {
+        // Record empty result for failed URLs instead of aborting entire batch
+        console.warn(`Batch crawl failed for ${url}:`, crawlErr.message);
+        perUrlResults.push({ url, components: [] });
+      }
+    }
+
+    // ── Cross-page deduplication ──────────────────────────────
+    // Normalize HTML structure for comparison: strip text content,
+    // collapse whitespace, lowercase tags
+    function normalizeStructure(html: string): string {
+      return html
+        .replace(/>([^<]+)</g, '><')    // strip text between tags
+        .replace(/\s+/g, ' ')           // collapse whitespace
+        .replace(/<([a-z0-9]+)/gi, (_, tag) => `<${tag.toLowerCase()}`)  // lowercase tags
+        .replace(/\s*(class|id|style|href|src|alt|title|data-[a-z-]+)="[^"]*"/gi, '') // strip attributes
+        .trim();
+    }
+
+    // Compute similarity ratio between two normalized strings (Dice coefficient on bigrams)
+    function structuralSimilarity(a: string, b: string): number {
+      if (a === b) return 1;
+      if (a.length < 2 || b.length < 2) return 0;
+
+      const bigramsA = new Map<string, number>();
+      for (let i = 0; i < a.length - 1; i++) {
+        const bg = a.substring(i, i + 2);
+        bigramsA.set(bg, (bigramsA.get(bg) || 0) + 1);
+      }
+
+      let matches = 0;
+      for (let i = 0; i < b.length - 1; i++) {
+        const bg = b.substring(i, i + 2);
+        const count = bigramsA.get(bg) || 0;
+        if (count > 0) {
+          matches++;
+          bigramsA.set(bg, count - 1);
+        }
+      }
+
+      return (2 * matches) / ((a.length - 1) + (b.length - 1));
+    }
+
+    // Build a global list with source URL, then deduplicate
+    interface TaggedComponent extends ExtractedComponent {
+      sourceUrl: string;
+      deduplicated?: boolean;
+      originalUrl?: string;
+    }
+
+    const allComponents: TaggedComponent[] = [];
+    for (const result of perUrlResults) {
+      for (const comp of result.components) {
+        allComponents.push({ ...comp, sourceUrl: result.url });
+      }
+    }
+
+    const totalBeforeDedup = allComponents.length;
+    const kept: TaggedComponent[] = [];
+    const keptNorms: { norm: string; tag: string; category: string }[] = [];
+
+    for (const comp of allComponents) {
+      const norm = normalizeStructure(comp.html);
+      let isDuplicate = false;
+
+      for (let i = 0; i < keptNorms.length; i++) {
+        // Only compare components with same tag + category
+        if (keptNorms[i].tag === comp.tagName && keptNorms[i].category === comp.category) {
+          const sim = structuralSimilarity(norm, keptNorms[i].norm);
+          if (sim > 0.8) {
+            isDuplicate = true;
+            // Mark as duplicate referencing the original
+            kept.push({
+              ...comp,
+              deduplicated: true,
+              originalUrl: kept[i].sourceUrl,
+            });
+            break;
+          }
+        }
+      }
+
+      if (!isDuplicate) {
+        kept.push(comp);
+        keptNorms.push({ norm, tag: comp.tagName, category: comp.category });
+      }
+    }
+
+    // Filter out deduplicated items from final results
+    const uniqueComponents = kept.filter(c => !c.deduplicated);
+    const duplicatesRemoved = totalBeforeDedup - uniqueComponents.length;
+
+    // Generate thumbnails and sanitize HTML (limit to 20 per URL)
+    const results: { url: string; components: any[] }[] = [];
+    for (const result of perUrlResults) {
+      const urlComponents = uniqueComponents
+        .filter(c => c.sourceUrl === result.url)
+        .slice(0, 20);
+
+      const previews = [];
+      for (const comp of urlComponents) {
+        let thumbnail: string | null = null;
+        try {
+          thumbnail = await renderThumbnail(sanitizeHtml(comp.html), comp.css);
+        } catch {
+          // Thumbnail generation is best-effort
+        }
+        previews.push({
+          category: comp.category,
+          html: sanitizeHtml(comp.html),
+          css: comp.css,
+          selector: comp.selector,
+          tagName: comp.tagName,
+          textPreview: comp.textPreview,
+          thumbnail,
+        });
+      }
+      results.push({ url: result.url, components: previews });
+    }
+
+    res.json({
+      results,
+      dedupedTotal: uniqueComponents.length,
+      duplicatesRemoved,
+    });
+  } catch (err: any) {
+    console.error('Error batch crawl-extracting components:', err);
+    res.status(500).json({ error: 'Failed to batch crawl and extract components' });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════
 //  Project-Component Bindings — mounted at /api/projects
 // ═══════════════════════════════════════════════════════════════

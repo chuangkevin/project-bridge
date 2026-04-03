@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authHeaders } from '../contexts/AuthContext';
 import ThemeToggle from '../components/ThemeToggle';
+import CrawlExtractDialog from '../components/CrawlExtractDialog';
 
 const CATEGORIES = [
   { key: 'all', label: '全部' },
@@ -87,6 +88,7 @@ export default function ComponentLibraryPage() {
   const [editCategory, setEditCategory] = useState('');
   const [editTags, setEditTags] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showCrawlDialog, setShowCrawlDialog] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Debounce search
@@ -233,6 +235,9 @@ export default function ComponentLibraryPage() {
         </div>
         <div style={styles.headerRight}>
           <ThemeToggle />
+          <button type="button" style={styles.crawlBtn} onClick={() => setShowCrawlDialog(true)}>
+            從網址擷取
+          </button>
           <button type="button" style={styles.newBtn} onClick={() => {/* TODO: open create dialog */}}>
             + 新增元件
           </button>
@@ -376,6 +381,14 @@ export default function ComponentLibraryPage() {
           </>
         )}
       </main>
+
+      {/* Crawl Extract Dialog */}
+      {showCrawlDialog && (
+        <CrawlExtractDialog
+          onClose={() => setShowCrawlDialog(false)}
+          onSaved={() => fetchComponents()}
+        />
+      )}
 
       {/* Detail Panel (slide-in right) */}
       {selectedId && (
@@ -579,6 +592,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 20,
     fontWeight: 700,
     color: 'var(--text-primary)',
+  },
+  crawlBtn: {
+    padding: '8px 16px',
+    border: '1px solid #8E6FA7',
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    color: '#8E6FA7',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'background-color 0.15s',
   },
   newBtn: {
     padding: '8px 16px',

@@ -22,7 +22,7 @@
 - [x] 3.2 實作 iframe postMessage 互動 — 點選元素後回傳 outerHTML + computed CSS
 - [x] 3.3 擷取對話框 — 設定名稱、分類、tags
 - [x] 3.4 CSS scoping — 擷取時重寫 class 避免全域衝突
-- [ ] 3.5 E2E 測試：從預覽中擷取元件完整流程
+- [x] 3.5 E2E 測試：從預覽中擷取元件完整流程
 
 ## Phase 4: AI 生成注入
 - [x] 4.1 實作 `componentInjector.ts` — 根據專案綁定 + 頁面架構匹配元件
@@ -35,8 +35,8 @@
 ## Phase 5: Crawler 元件擷取
 - [x] 5.1 實作 `POST /api/components/crawl-extract` — Playwright 開頁面 + 語義選擇器擷取
 - [x] 5.2 結構去重邏輯 — 同類型多個元素只保留代表性的一個
-- [ ] 5.3 擷取預覽 UI — 使用者選擇要儲存哪些元件
-- [ ] 5.4 批次 URL 爬取 + 跨頁去重
+- [x] 5.3 擷取預覽 UI — 使用者選擇要儲存哪些元件
+- [x] 5.4 批次 URL 爬取 + 跨頁去重
 - [x] 5.5 E2E 測試：爬取 URL → 擷取元件 → 儲存
 
 ## Phase 6: Figma 匯出整合
