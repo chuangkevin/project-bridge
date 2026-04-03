@@ -8,6 +8,7 @@ import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import { AuthProvider } from './contexts/AuthContext';
+import AppFooter from './components/AppFooter';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           {/* Settings — admin only (checked inside SettingsPage) */}
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
+        <AppFooter />
       </AuthProvider>
     </BrowserRouter>
   );
