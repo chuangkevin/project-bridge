@@ -23,6 +23,10 @@
 - [x] 新增 `POST /api/settings/api-keys/batch-validate` — 批次驗證（最多 20 個）
 
 ## E2E 測試
-- [ ] 測試 validate-key endpoint（valid key, invalid key, rate-limited key）
-- [ ] 測試 batch-validate endpoint
-- [ ] 測試 cooldown 持久化（寫入 DB → 讀取確認）
+- [x] 測試 validate-key endpoint（valid key, invalid key, rate-limited key）
+- [x] 測試 batch-validate endpoint
+- [x] 測試 cooldown 持久化（寫入 DB → 讀取確認）
+
+## Caller 統一
+- [x] `plannerAgent.ts` — callAIStream 改用 withStreamRetry, callAIJSON 改用 withGeminiRetry
+- [x] `parallelGenerator.ts` — 保持 batch 模式（result.success 判斷），已用 markKeyBad reason 參數

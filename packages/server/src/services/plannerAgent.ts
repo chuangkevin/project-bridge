@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { assignBatchKeys, getGeminiModel, markKeyBad, trackUsage } from './geminiKeys';
+import { getGeminiModel } from './geminiKeys';
+import { withGeminiRetry, withStreamRetry } from './geminiRetry';
 
 export interface GenerationPlan {
   pages: { name: string; description: string; keyFeatures: string[] }[];
@@ -33,55 +34,38 @@ export async function planAndReview(
   onThinking: (text: string) => void,
   skills: { name: string; description: string; content: string }[] = [],
 ): Promise<GenerationPlan> {
-  const keys = assignBatchKeys(6);
-  let keyIdx = 0;
-  const getKey = () => keys[keyIdx++ % keys.length];
-
   async function callAIStream(prompt: string, agentName: string, maxTokens: number = 8000): Promise<string> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const key = getKey();
-      try {
-        const genai = new GoogleGenerativeAI(key);
-        const model = genai.getGenerativeModel({
-          model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.5 },
-        });
-        const result = await model.generateContentStream(prompt);
-        let text = '';
-        for await (const chunk of result.stream) {
-          const t = chunk.text();
-          if (t) {
-            text += t;
-            onThinking(t); // stream each chunk to client
-          }
+    let text = '';
+    await withStreamRetry(async (apiKey) => {
+      text = ''; // reset on retry
+      const genai = new GoogleGenerativeAI(apiKey);
+      const model = genai.getGenerativeModel({
+        model: getGeminiModel(),
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.5 },
+      });
+      const result = await model.generateContentStream(prompt);
+      for await (const chunk of result.stream) {
+        const t = chunk.text();
+        if (t) {
+          text += t;
+          onThinking(t); // stream each chunk to client
         }
-        return text;
-      } catch (e: any) {
-        console.warn(`[${agentName}] Failed (attempt ${attempt + 1}):`, e.message?.slice(0, 50));
-        markKeyBad(key);
       }
-    }
-    throw new Error(`${agentName} failed after 3 attempts`);
+    }, { maxRetries: 2, callType: agentName });
+    return text;
   }
 
   async function callAIJSON(prompt: string, agentName: string): Promise<any> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const key = getKey();
-      try {
-        const genai = new GoogleGenerativeAI(key);
-        const model = genai.getGenerativeModel({
-          model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: 4096, temperature: 0.3, responseMimeType: 'application/json' },
-        });
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
-        return JSON.parse(text);
-      } catch (e: any) {
-        console.warn(`[${agentName}] JSON failed (attempt ${attempt + 1}):`, e.message?.slice(0, 50));
-        markKeyBad(key);
-      }
-    }
-    throw new Error(`${agentName} JSON failed after 3 attempts`);
+    return withGeminiRetry(async (apiKey) => {
+      const genai = new GoogleGenerativeAI(apiKey);
+      const model = genai.getGenerativeModel({
+        model: getGeminiModel(),
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.3, responseMimeType: 'application/json' },
+      });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text().trim();
+      return JSON.parse(text);
+    }, { maxRetries: 2, callType: agentName });
   }
 
   let fullDiscussion = '';
