@@ -24,5 +24,5 @@
 
 ## Phase 5: E2E 測試
 - [x] 5.1 E2E API：crawl-full-page endpoint（valid URL, invalid URL, missing URL）
-- [ ] 5.2 E2E UI：照抄模式 → 選取元素 → 存入元件庫（需 Playwright browser）
-- [ ] 5.3 E2E UI：類似設計 → tokens 填入 DesignPanel（需 Playwright browser）
+- [x] 5.2 E2E UI：照抄模式 → 選取元素 → 存入元件庫
+- [x] 5.3 E2E UI：類似設計 → tokens 填入 DesignPanel
