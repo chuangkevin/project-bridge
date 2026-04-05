@@ -4,6 +4,7 @@
 FROM node:24 AS builder
 
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy workspace config + install dependencies (layer cache)
