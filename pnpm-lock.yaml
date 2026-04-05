@@ -76,8 +76,8 @@ importers:
         specifier: ^0.24.1
         version: 0.24.1
       '@kevinsisi/ai-core':
-        specifier: file:..\..\..\ai-core
-        version: file:../ai-core
+        specifier: github:kevinsisi/ai-core
+        version: git+https://github.com/kevinsisi/ai-core.git#ff34710cc675424c212c3053edef38cd3467ebcf(better-sqlite3@11.10.0)
       '@napi-rs/canvas':
         specifier: ^0.1.97
         version: 0.1.97
@@ -612,8 +612,14 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@kevinsisi/ai-core@file:../ai-core':
-    resolution: {directory: ../ai-core, type: directory}
+  '@kevinsisi/ai-core@git+https://github.com/kevinsisi/ai-core.git#ff34710cc675424c212c3053edef38cd3467ebcf':
+    resolution: {commit: ff34710cc675424c212c3053edef38cd3467ebcf, repo: https://github.com/kevinsisi/ai-core.git, type: git}
+    version: 1.0.0
+    peerDependencies:
+      better-sqlite3: '>=11.0.0'
+    peerDependenciesMeta:
+      better-sqlite3:
+        optional: true
 
   '@mapbox/node-pre-gyp@1.0.11':
     resolution: {integrity: sha512-Yhlar6v9WQgUp/He7BdgzOz8lqMQ8sU+jkCq7Wx8Myc5YFJLbEe7lgui/V7G1qB1DJykHSGwreceSaD60Y0PUQ==}
@@ -2915,9 +2921,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@kevinsisi/ai-core@file:../ai-core':
+  '@kevinsisi/ai-core@git+https://github.com/kevinsisi/ai-core.git#ff34710cc675424c212c3053edef38cd3467ebcf(better-sqlite3@11.10.0)':
     dependencies:
       '@google/generative-ai': 0.21.0
+    optionalDependencies:
       better-sqlite3: 11.10.0
 
   '@mapbox/node-pre-gyp@1.0.11':
