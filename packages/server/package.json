@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@kevinsisi/ai-core": "file:..\\..\\..\\ai-core",
     "@napi-rs/canvas": "^0.1.97",
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^3.0.0",
@@ -26,8 +27,8 @@
     "pdfjs-dist": "^4.9.155",
     "playwright": "^1.58.2",
     "sharp": "^0.34.5",
-    "tesseract.js": "^5.1.1",
     "socket.io": "^4.8.0",
+    "tesseract.js": "^5.1.1",
     "uuid": "^10.0.0",
     "yauzl": "^3.2.0",
     "yazl": "^2.5.1"
