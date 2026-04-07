@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22 AS builder
+# Use Debian (glibc) to match production Playwright image — no native module rebuild needed
 
 WORKDIR /app
 
-# Native build tools for better-sqlite3 + git for dependencies that need it
-RUN apk add --no-cache python3 make g++ git
+# Native build tools for better-sqlite3 + git for dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -14,9 +16,6 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
-
-# Tell node-gyp to use bundled headers instead of downloading from internet
-ENV npm_config_nodedir=/usr/local
 
 # Install dependencies with BuildKit cache mount (survives across builds)
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
@@ -54,18 +53,12 @@ COPY --from=builder /app/packages/server/src/db/migrations packages/server/dist/
 COPY --from=builder /app/packages/server/src/prompts packages/server/dist/prompts
 COPY --from=builder /app/packages/server/data packages/server/data
 
-# Copy deps — but rebuild native modules (alpine musl → ubuntu glibc)
+# Copy deps — both stages use glibc, no rebuild needed
 COPY --from=builder /app/node_modules node_modules
 COPY --from=builder /app/packages/server/node_modules packages/server/node_modules
-COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml ./
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && \
-    pnpm rebuild better-sqlite3 && \
-    rm -rf /var/lib/apt/lists/*
 
 # Copy client build
 COPY --from=builder /app/packages/client/dist packages/client/dist
-
-# workspace config already copied above with pnpm rebuild
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
