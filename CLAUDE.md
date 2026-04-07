@@ -68,12 +68,12 @@ cd packages/client && pnpm build   # Vite → dist/
 - `packages/server/data/` — SQLite DB (better-sqlite3, WAL mode)
 - Stores sessions, node graphs, settings, API keys
 
-## CI/CD (Gitea)
+## CI/CD (Gitea & GitHub)
 
-- Workflow: `.gitea/workflows/docker-build.yaml`
-- Docker build → push to internal registry (`srvhpgit1:32050`) → ArgoCD sync
-- **Docker build 必須加 `--network=host`**（runner 的 Docker build network namespace 限制）
-- ai-core 依賴在 Gitea CI 走 Gitea URL，GitHub CI 走 GitHub URL
+- **GitHub CI**: `.github/workflows/docker-publish.yml` + `deploy.yml` (Tailscale)
+- **Gitea CI**: `.gitea/workflows/docker-build.yaml` (Internal Registry + ArgoCD)
+- **Network Compatibility**: `package.json` 統一指向 GitHub。Gitea CI 透過 `INTERNAL_GIT_MIRROR` (ARG) 使用 Git `insteadOf` 重導向至內網鏡像。
+- **Docker build**: 必須加 `--network=host` (Gitea Runner 限制)。
 
 ## Docker
 ```bash
@@ -81,10 +81,11 @@ docker compose up -d   # Full stack
 ```
 
 ### Dockerfile 注意事項
-- Builder: Alpine (node:22-alpine), Prod: Playwright Ubuntu image
-- better-sqlite3 需要在 prod stage rebuild（musl → glibc）
-- Tesseract 模型下載用 best-effort（`|| true`）
-- Chromium 需要 `--no-sandbox --disable-setuid-sandbox`
+- **Builder**: Debian Bookworm (`node:22-bookworm`)，解決 musl/glibc 報錯並與 Prod 一致。
+- **Production Stage**: Playwright Ubuntu image (Noble)。
+- **Dependencies**: `ai-core` (git repo) 在 Gitea 環境需透過鏡像下載；避免在 `packages/server/.npmrc` 使用 Token (CI 無法存取)。
+- **Cleanup**: 部署前需清理 `project-bridge` 與舊的 `projectbridge` 容器避免命名衝突。
+- **Chromium**: 需要 `--no-sandbox --disable-setuid-sandbox`
 
 ## Git Remotes
 
