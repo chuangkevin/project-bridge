@@ -17,9 +17,8 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 
-# Install dependencies with BuildKit cache mount (survives across builds)
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --prefer-offline
+# Install dependencies (no cache mount — stale Alpine musl cache breaks glibc builds)
+RUN pnpm install --frozen-lockfile
 
 # Copy source
 COPY packages/server/ packages/server/
