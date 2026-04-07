@@ -59,7 +59,7 @@ COPY --from=builder /app/node_modules node_modules
 COPY --from=builder /app/packages/server/node_modules packages/server/node_modules
 COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml ./
 RUN apt-get update && apt-get install -y python3 make g++ && \
-    npm rebuild better-sqlite3 && \
+    pnpm rebuild better-sqlite3 && \
     apt-get purge -y python3 make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Copy client build
