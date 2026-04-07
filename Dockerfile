@@ -18,9 +18,6 @@ COPY packages/client/package.json packages/client/
 # Tell node-gyp to use bundled headers instead of downloading from internet
 ENV npm_config_nodedir=/usr/local
 
-# Rewrite GitHub URLs to Gitea mirror (Gitea CI runner can't reach github.com)
-RUN git config --global url."https://gitea.housefun.com.tw/H1114/ai-core".insteadOf "https://github.com/kevinsisi/ai-core"
-
 # Install dependencies with BuildKit cache mount (survives across builds)
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prefer-offline
