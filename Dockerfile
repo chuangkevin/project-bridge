@@ -43,11 +43,11 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Bake Tesseract OCR language models — no CDN dependency at runtime
+# Bake Tesseract OCR language models (best-effort — skip if CDN unreachable)
 RUN mkdir -p /app/tessdata && \
-    curl -sL -o /app/tessdata/eng.traineddata "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata" && \
-    curl -sL -o /app/tessdata/chi_tra.traineddata "https://cdn.jsdelivr.net/npm/@tesseract.js-data/chi_tra/4.0.0_best_int/chi_tra.traineddata" && \
-    echo "Tesseract models downloaded"
+    (curl -sL --connect-timeout 10 -o /app/tessdata/eng.traineddata "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata" || true) && \
+    (curl -sL --connect-timeout 10 -o /app/tessdata/chi_tra.traineddata "https://cdn.jsdelivr.net/npm/@tesseract.js-data/chi_tra/4.0.0_best_int/chi_tra.traineddata" || true) && \
+    echo "Tesseract models download attempted"
 ENV TESSDATA_PREFIX=/app/tessdata
 
 # Copy server build + source configs
