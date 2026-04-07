@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6C2BD9"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A78BFA"/>
+      <stop offset="100%" stop-color="#60A5FA"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <!-- D -->
+  <path d="M22 28h16c18 0 32 14 32 32s-14 32-32 32H22V28z" fill="none" stroke="white" stroke-width="5.5" stroke-linejoin="round"/>
+  <!-- B -->
+  <path d="M76 28h14c9 0 16 7 16 16s-7 16-16 16H76V28z" fill="none" stroke="white" stroke-width="5.5" stroke-linejoin="round"/>
+  <path d="M76 60h16c10 0 18 7 18 16s-8 16-18 16H76V60z" fill="none" stroke="white" stroke-width="5.5" stroke-linejoin="round"/>
+  <!-- Spark dots -->
+  <circle cx="68" cy="44" r="3.5" fill="url(#accent)"/>
+  <circle cx="68" cy="60" r="2.5" fill="url(#accent)" opacity="0.7"/>
+  <circle cx="68" cy="76" r="1.8" fill="url(#accent)" opacity="0.5"/>
+  <!-- Accent bar -->
+  <rect x="22" y="104" width="84" height="3" rx="1.5" fill="url(#accent)" opacity="0.5"/>
+</svg>
