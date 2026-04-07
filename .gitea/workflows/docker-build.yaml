@@ -20,7 +20,7 @@ jobs:
       - name: Build Docker Image
         run: |
           echo "Building image with tag: $IMAGE_TAG and latest"
-          DOCKER_BUILDKIT=1 docker build \
+          DOCKER_BUILDKIT=1 docker build --network=host \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t srvhpgit1:32050/project-bridge:$IMAGE_TAG \
             -t srvhpgit1:32050/project-bridge:latest \
