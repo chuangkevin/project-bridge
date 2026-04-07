@@ -58,8 +58,9 @@ COPY --from=builder /app/packages/server/data packages/server/data
 COPY --from=builder /app/node_modules node_modules
 COPY --from=builder /app/packages/server/node_modules packages/server/node_modules
 COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml ./
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm rebuild better-sqlite3 2>/dev/null || npm rebuild better-sqlite3 2>/dev/null || true
+RUN apt-get update && apt-get install -y python3 make g++ && \
+    npm rebuild better-sqlite3 && \
+    apt-get purge -y python3 make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Copy client build
 COPY --from=builder /app/packages/client/dist packages/client/dist
