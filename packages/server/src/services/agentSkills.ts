@@ -67,7 +67,7 @@ export async function skillExplore(
   });
 
   const result = await model.generateContent(
-    `${EXPLORE_PROMPT}\n\n=== DOCUMENT ===\n${fullText.slice(0, 20000)}\n=== END ===`
+    `${EXPLORE_PROMPT}\n\n=== DOCUMENT ===\n${fullText.slice(0, 60000)}\n=== END ===`
   );
   try { trackUsage(apiKey, getGeminiModel(), 'skill-explore', result.response.usageMetadata); } catch {}
 
@@ -152,7 +152,7 @@ export async function skillUxReview(
   ).join('\n');
 
   const result = await model.generateContent(
-    `${UX_REVIEW_PROMPT}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 15000)}\n\n=== EXTRACTED PAGES ===\n${pagesContext}\n=== END ===`
+    `${UX_REVIEW_PROMPT}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n\n=== EXTRACTED PAGES ===\n${pagesContext}\n=== END ===`
   );
   try { trackUsage(apiKey, getGeminiModel(), 'skill-ux-review', result.response.usageMetadata); } catch {}
 
@@ -236,7 +236,7 @@ export async function skillDesignProposal(
     },
   });
 
-  let context = `${DESIGN_PROPOSAL_PROMPT}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 10000)}\n`;
+  let context = `${DESIGN_PROPOSAL_PROMPT}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n`;
   context += `\n=== PAGES ===\n${pages.map(p => `${p.name}: ${(p.components || []).join(', ')}`).join('\n')}\n`;
   if (explore) {
     context += `\n=== EXPLORATION INSIGHTS ===\n`;
@@ -349,7 +349,7 @@ export async function skillBusinessContext(
 
   const skillList = skills.map((s, i) => `${i}: ${s.name} — ${s.description.slice(0, 150)}`).join('\n');
   const classifyResult = await classifierModel.generateContent(
-    `Given this spec text, which skill indices are relevant? Return JSON: {"indices": [0, 2]}\n\nSkills:\n${skillList}\n\nSpec (first 3000 chars):\n${fullText.slice(0, 3000)}`
+    `Given this spec text, which skill indices are relevant? Return JSON: {"indices": [0, 2]}\n\nSkills:\n${skillList}\n\nSpec (first 10000 chars):\n${fullText.slice(0, 10000)}`
   );
   try { trackUsage(apiKey, getGeminiModel(), 'skill-biz-classify', classifyResult.response.usageMetadata); } catch {}
 
@@ -368,7 +368,7 @@ export async function skillBusinessContext(
 
   // Step 2: Load matched skills and analyze
   const matchedSkillContent = matchedIndices
-    .map(i => `=== SKILL: ${skills[i].name} ===\n${skills[i].content.slice(0, 8000)}\n=== END ===`)
+    .map(i => `=== SKILL: ${skills[i].name} ===\n${skills[i].content.slice(0, 20000)}\n=== END ===`)
     .join('\n\n');
 
   const pagesContext = pages.map(p =>
@@ -381,7 +381,7 @@ export async function skillBusinessContext(
   });
 
   const result = await model.generateContent(
-    `${BUSINESS_CONTEXT_PROMPT}\n\n=== INTERNAL SKILLS ===\n${matchedSkillContent}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 10000)}\n\n=== PAGES ===\n${pagesContext}\n=== END ===`
+    `${BUSINESS_CONTEXT_PROMPT}\n\n=== INTERNAL SKILLS ===\n${matchedSkillContent}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n\n=== PAGES ===\n${pagesContext}\n=== END ===`
   );
   try { trackUsage(apiKey, getGeminiModel(), 'skill-biz-context', result.response.usageMetadata); } catch {}
 
