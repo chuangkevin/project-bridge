@@ -2,11 +2,17 @@
 # ── Stage 1: Build ──────────────────────────────────────────
 FROM node:22-bookworm AS builder
 
+ARG INTERNAL_GIT_MIRROR=""
 WORKDIR /app
 
 # Native build tools for better-sqlite3 + git for dependencies
 RUN apt-get update && apt-get install -y python3 make g++ git curl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Configure git redirect if internal mirror is provided
+RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
+      git config --global url."${INTERNAL_GIT_MIRROR}".insteadOf "https://github.com/kevinsisi/"; \
+    fi
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -33,7 +39,16 @@ RUN pnpm --filter client build
 # Playwright base image — Ubuntu Noble (glibc), includes Chromium
 FROM mcr.microsoft.com/playwright:v1.52.0-noble
 
+ARG INTERNAL_GIT_MIRROR=""
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y git curl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Configure git redirect if internal mirror is provided
+RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
+      git config --global url."${INTERNAL_GIT_MIRROR}".insteadOf "https://github.com/kevinsisi/"; \
+    fi
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
