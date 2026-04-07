@@ -54,6 +54,8 @@ COPY --from=builder /app/packages/client/dist packages/client/dist
 
 # Fresh install production deps on glibc — no musl/glibc mismatch
 COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/.npmrc ./
+COPY --from=builder /app/packages/server/package.json packages/server/
+COPY --from=builder /app/packages/client/package.json packages/client/
 RUN pnpm install --frozen-lockfile --prod
 
 ENV NODE_ENV=production
