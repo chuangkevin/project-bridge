@@ -5,7 +5,8 @@
  * using Gemini AI for per-page conversion.
  */
 
-import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, trackUsage } from './geminiKeys';
+import { getGeminiModel, trackUsage } from './geminiKeys';
+import { withGeminiRetry } from './geminiRetry';
 
 export type Framework = 'react' | 'vue3' | 'nextjs' | 'nuxt3' | 'html';
 
@@ -427,9 +428,6 @@ async function convertPageWithGemini(
   apiBindings: any[],
   projectId?: string,
 ): Promise<ExportedFile[]> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) throw new Error('Gemini API key not configured');
-
   const tokensCssSnippet = Object.entries(tokens).map(([k, v]) => `${k}: ${v}`).join('; ');
   const navTargets = navMap[pageName] || [];
   const componentName = toComponentName(pageName);
@@ -512,38 +510,17 @@ HTML TO CONVERT:
 ${pageHtml}`;
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: { maxOutputTokens: 8192 },
-  });
 
-  let result;
-  try {
-    result = await model.generateContent(prompt);
-  } catch (err: any) {
-    // Try fallback key on 429
-    if (err?.status === 429 || err?.message?.includes('429')) {
-      const fallbackKey = getGeminiApiKeyExcluding(apiKey);
-      if (fallbackKey) {
-        const genai2 = new GoogleGenerativeAI(fallbackKey);
-        const model2 = genai2.getGenerativeModel({
-          model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: 8192 },
-        });
-        result = await model2.generateContent(prompt);
-      } else {
-        throw err;
-      }
-    } else {
-      throw err;
-    }
-  }
-
-  const response = result.response;
-  try {
-    trackUsage(apiKey, getGeminiModel(), 'code-export', response.usageMetadata, projectId);
-  } catch {}
+  const response = await withGeminiRetry(async (currentKey) => {
+    const genai = new GoogleGenerativeAI(currentKey);
+    const model = genai.getGenerativeModel({
+      model: getGeminiModel(),
+      generationConfig: { maxOutputTokens: 8192 },
+    });
+    const result = await model.generateContent(prompt);
+    try { trackUsage(currentKey, getGeminiModel(), 'code-export', result.response.usageMetadata, projectId); } catch {}
+    return result.response;
+  }, { callType: 'code-export', maxRetries: 3 });
 
   let text = response.text().trim();
 

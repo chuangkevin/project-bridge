@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiApiKey, getGeminiModel, trackUsage } from './geminiKeys';
+import { getGeminiModel, trackUsage } from './geminiKeys';
+import { withGeminiRetry } from './geminiRetry';
 import { DesignTokens, tokensToCssVariables } from './designTokenCompiler';
 
 export interface PageAssignment {
@@ -33,9 +34,6 @@ export async function planGeneration(
   designConvention: string,
   projectContext: string,
 ): Promise<GenerationPlan> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) throw new Error('No API key available');
-
   const cssVariables = designTokens ? tokensToCssVariables(designTokens) : '';
 
   const prompt = `You are a senior UI architect designing a multi-page interactive prototype.
@@ -109,17 +107,16 @@ RULES:
 6. If pages have mobile viewport, navType should be "bottom-tab"
 7. Return ONLY JSON — no markdown, no explanation`;
 
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' },
-  });
-
-  const result = await model.generateContent(prompt);
-  const response = result.response;
-  try { trackUsage(apiKey, getGeminiModel(), 'master-agent-plan', response.usageMetadata); } catch {}
-
-  const text = response.text();
+  const text = await withGeminiRetry(async (apiKey) => {
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: getGeminiModel(),
+      generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' },
+    });
+    const result = await model.generateContent(prompt);
+    try { trackUsage(apiKey, getGeminiModel(), 'master-agent-plan', result.response.usageMetadata); } catch {}
+    return result.response.text();
+  }, { callType: 'master-agent-plan', maxRetries: 3 });
 
   // Parse JSON (strip markdown fences if present)
   let json: string = text;

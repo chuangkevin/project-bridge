@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
+# ── Stage 1: Build ──────────────────────────────────────────
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Native build tools for better-sqlite3 (cached layer — only rebuilds if base image changes)
-RUN apk add --no-cache python3 make g++
+# Native build tools for better-sqlite3 + git for dependencies that need it
+RUN apk add --no-cache python3 make g++ git
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -31,7 +32,7 @@ RUN pnpm --filter server build
 # Build client (Vite → dist/)
 RUN pnpm --filter client build
 
-# --- Production stage ---
+# ── Stage 2: Production ────────────────────────────────────
 # Playwright base image — includes Chromium for URL crawling + all system deps
 FROM mcr.microsoft.com/playwright:v1.52.0-noble
 
@@ -60,7 +61,7 @@ COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.ya
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm rebuild better-sqlite3 2>/dev/null || npm rebuild better-sqlite3 2>/dev/null || true
 
-# Copy client build (served by Express static or separate)
+# Copy client build
 COPY --from=builder /app/packages/client/dist packages/client/dist
 
 # workspace config already copied above with pnpm rebuild
@@ -71,5 +72,4 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-# Start server (serves API; client build can be served via nginx or same Express)
 CMD ["node", "packages/server/dist/index.js"]

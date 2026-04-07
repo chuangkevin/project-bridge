@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { assignBatchKeys, getGeminiModel, markKeyBad } from './geminiKeys';
+import { getGeminiModel } from './geminiKeys';
+import { withGeminiRetry } from './geminiRetry';
 
 export async function analyzeUrlStyles(urls: string[]): Promise<{
   tokens: Record<string, any>;
@@ -73,15 +74,7 @@ ${visibleHtml.slice(0, 3000)}`);
   }
 
   // Send to Gemini for synthesis
-  const keys = assignBatchKeys(5);
-  for (const key of keys) {
-    try {
-      const genai = new GoogleGenerativeAI(key);
-      const model = genai.getGenerativeModel({
-        model: getGeminiModel(),
-        generationConfig: { maxOutputTokens: 8192, temperature: 0.2, responseMimeType: 'application/json' },
-      });
-      const prompt = `你是 UI/UX 設計分析師。分析以下網站的設計風格，提取設計系統。
+  const prompt = `你是 UI/UX 設計分析師。分析以下網站的設計風格，提取設計系統。
 
 ${siteData.join('\n\n')}
 
@@ -102,15 +95,18 @@ ${siteData.join('\n\n')}
   "convention": "用繁體中文寫一份設計規範（300+ 字）：色彩使用規則、字體層級、元件風格（按鈕/卡片/表單）、間距慣例、禁止事項"
 }`;
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
-      const parsed = JSON.parse(text);
-      console.log('[url-analyzer] AI analysis complete, primary:', parsed.tokens?.primaryColor);
-      return { ...parsed, warnings };
-    } catch (e: any) {
-      console.warn('[url-analyzer] AI failed:', e.message?.slice(0, 50));
-      markKeyBad(key);
-    }
-  }
-  throw new Error('AI analysis failed after 3 retries');
+  const parsed = await withGeminiRetry(async (key) => {
+    const genai = new GoogleGenerativeAI(key);
+    const model = genai.getGenerativeModel({
+      model: getGeminiModel(),
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.2, responseMimeType: 'application/json' },
+    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const data = JSON.parse(text);
+    console.log('[url-analyzer] AI analysis complete, primary:', data.tokens?.primaryColor);
+    return data;
+  }, { callType: 'url-style-analysis', maxRetries: 5 });
+
+  return { ...parsed, warnings };
 }

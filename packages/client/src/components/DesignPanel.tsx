@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import CrawlPreview from './CrawlPreview';
+import SaveComponentDialog from './SaveComponentDialog';
 
 interface DesignTokens {
   primaryColor: string;
@@ -49,6 +51,14 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
   const [shellExpanded, setShellExpanded] = useState(false);
   const [savingShell, setSavingShell] = useState(false);
   const [extractingShell, setExtractingShell] = useState(false);
+
+  // URL Crawl state (Phase 2 + 4)
+  const [crawlUrl, setCrawlUrl] = useState('');
+  const [crawling, setCrawling] = useState(false);
+  const [crawlResult, setCrawlResult] = useState<{ html: string; tokens: any; screenshot: string } | null>(null);
+  const [crawlZoom, setCrawlZoom] = useState(50);
+  const [extractMode, setExtractMode] = useState(false);
+  const [extractedComponent, setExtractedComponent] = useState<{ html: string; css: string } | null>(null);
 
   // Load design profile on mount
   useEffect(() => {
@@ -267,6 +277,61 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
     }
   }, [projectId, shellHtml]);
 
+  const handleCrawl = useCallback(async () => {
+    if (!crawlUrl.trim()) return;
+    setCrawling(true);
+    setCrawlResult(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/crawl-full-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: crawlUrl.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: '爬取失敗' }));
+        setToastMsg({ text: err.error || '爬取失敗', type: 'error' });
+        return;
+      }
+      const data = await res.json();
+      setCrawlResult({ html: data.html || '', tokens: data.tokens || {}, screenshot: data.screenshot || '' });
+      setToastMsg({ text: '爬取完成', type: 'success' });
+    } catch {
+      setToastMsg({ text: '爬取失敗', type: 'error' });
+    } finally {
+      setCrawling(false);
+    }
+  }, [projectId, crawlUrl]);
+
+  const updateTokenDirect = <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => {
+    setTokens(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleApplyCrawledStyle = useCallback(() => {
+    if (!crawlResult?.tokens) return;
+    const ct = crawlResult.tokens;
+    if (ct.colors?.[0]?.value) {
+      updateTokenDirect('primaryColor', ct.colors[0].value);
+    }
+    if (ct.typography?.fonts?.[0]?.value) {
+      const font = ct.typography.fonts[0].value.toLowerCase();
+      if (font.includes('serif') && !font.includes('sans')) {
+        updateTokenDirect('fontFamily', 'serif');
+      } else if (font.includes('mono')) {
+        updateTokenDirect('fontFamily', 'monospace');
+      } else if (font.includes('sans')) {
+        updateTokenDirect('fontFamily', 'sans-serif');
+      } else {
+        updateTokenDirect('fontFamily', 'system');
+      }
+    }
+    if (ct.borderRadii?.[0]?.value != null) {
+      const raw = String(ct.borderRadii[0].value).replace(/px/g, '');
+      const num = Math.min(24, Math.max(0, Math.round(Number(raw) || 0)));
+      updateTokenDirect('borderRadius', num);
+    }
+    setToastMsg({ text: '已套用爬取的設計風格', type: 'success' });
+  }, [crawlResult]);
+
   const updateToken = <K extends keyof DesignTokens>(key: K, value: DesignTokens[K]) => {
     setTokens(prev => ({ ...prev, [key]: value }));
   };
@@ -274,6 +339,88 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
   return (
     <div style={panelStyles.container}>
       <div style={panelStyles.scrollArea}>
+
+        {/* Section 0: URL Crawl */}
+        <div style={panelStyles.section}>
+          <label style={panelStyles.sectionLabel}>參考網站</label>
+          <div style={panelStyles.crawlInputRow}>
+            <input
+              type="text"
+              value={crawlUrl}
+              onChange={e => setCrawlUrl(e.target.value)}
+              placeholder="https://example.com"
+              style={panelStyles.crawlInput}
+              disabled={crawling}
+              data-testid="crawl-url-input"
+              onKeyDown={e => { if (e.key === 'Enter') handleCrawl(); }}
+            />
+            <button
+              type="button"
+              style={{
+                ...panelStyles.crawlBtn,
+                opacity: crawling || !crawlUrl.trim() ? 0.6 : 1,
+              }}
+              onClick={handleCrawl}
+              disabled={crawling || !crawlUrl.trim()}
+              data-testid="crawl-btn"
+            >
+              {crawling ? '爬取中...' : '爬取'}
+            </button>
+          </div>
+          {crawling && (
+            <div style={panelStyles.loadingSpinner}>
+              <div style={panelStyles.spinner} />
+              <span style={panelStyles.loadingText}>正在爬取網頁...</span>
+            </div>
+          )}
+          {crawlResult && (
+            <>
+              <CrawlPreview
+                html={crawlResult.html}
+                zoom={crawlZoom}
+                extractMode={extractMode}
+                onExtract={(data) => {
+                  setExtractedComponent(data);
+                  setExtractMode(false);
+                }}
+                onZoomChange={setCrawlZoom}
+              />
+              <div style={panelStyles.crawlActionRow}>
+                <button
+                  type="button"
+                  style={{
+                    ...panelStyles.crawlActionBtn,
+                    ...(extractMode ? { backgroundColor: 'var(--accent)', color: '#fff' } : {}),
+                  }}
+                  onClick={() => setExtractMode(!extractMode)}
+                  data-testid="crawl-copy-btn"
+                >
+                  {extractMode ? '取消選取' : '照抄'}
+                </button>
+                <button
+                  type="button"
+                  style={panelStyles.crawlActionBtnAccent}
+                  onClick={handleApplyCrawledStyle}
+                  data-testid="crawl-similar-btn"
+                >
+                  類似設計
+                </button>
+              </div>
+            </>
+          )}
+          {extractedComponent && (
+            <SaveComponentDialog
+              html={extractedComponent.html}
+              css={extractedComponent.css}
+              projectId={projectId}
+              onClose={() => setExtractedComponent(null)}
+              onSaved={() => {
+                setExtractedComponent(null);
+                setToastMsg({ text: '元件已存入元件庫', type: 'success' });
+              }}
+            />
+          )}
+        </div>
 
         {/* Section 1: Design Direction */}
         <div style={panelStyles.section}>
@@ -1014,6 +1161,88 @@ const panelStyles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     alignSelf: 'flex-start' as const,
+  },
+  crawlInputRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  crawlInput: {
+    flex: 1,
+    padding: '7px 10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '13px',
+    outline: 'none',
+    fontFamily: 'inherit',
+    color: '#1e293b',
+    backgroundColor: '#ffffff',
+    boxSizing: 'border-box' as const,
+  },
+  crawlBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '7px 14px',
+    border: '1px solid #3b82f6',
+    borderRadius: '8px',
+    backgroundColor: '#3b82f6',
+    color: '#ffffff',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
+  },
+  crawlPreviewBox: {
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    backgroundColor: '#f1f5f9',
+  },
+  crawlZoomRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '6px 10px',
+    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+  },
+  crawlIframeContainer: {
+    width: '100%',
+    height: '400px',
+    overflow: 'hidden',
+    position: 'relative' as const,
+  },
+  crawlActionRow: {
+    display: 'flex',
+    gap: '8px',
+  },
+  crawlActionBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 14px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  crawlActionBtnAccent: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 14px',
+    border: '1px solid #7c3aed',
+    borderRadius: '8px',
+    backgroundColor: '#7c3aed',
+    color: '#ffffff',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   toast: {
     position: 'absolute',
