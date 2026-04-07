@@ -4,8 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**project-bridge** 是 AI 協作原型工具，讓多個使用者能即時共同設計 AI 工作流程（節點圖）。
+**DesignBridge** (project-bridge) 是 AI 協作顧問與設計平台，讓多個使用者能即時共同設計 AI 工作流程。
+整合知識庫 Skill 的 AI 顧問對話，以及 UI 原型生成功能。
 整合 key-pool 標準實作（`@kevinsisi/ai-core`），支援多 Gemini API key 輪替與速率限制管理。
+
+- **Domain**: `designbridge.housefun.com.tw` (公司) / `designbridge.sisihome.org` (home)
+- **Port**: 5123
 
 ## Architecture
 
@@ -13,12 +17,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Server** (`packages/server`): Express + TypeScript + SQLite (better-sqlite3) + Socket.io + ai-core
   - AI: Gemini (`@google/generative-ai`), OpenAI-compatible (`openai`)
   - Document parsing: mammoth (DOCX), pdf-parse, pdfjs-dist, tesseract.js (OCR)
+  - URL Crawler: Playwright full-page crawl, CSS extraction, style apply
   - Image: `@napi-rs/canvas`, sharp
 - **Client** (`packages/client`): React 18 + Vite + TypeScript + Socket.io-client + zustand
   - Node graph: `@xyflow/react`
   - Drag-and-drop: `@dnd-kit/core`
+  - Markdown rendering: react-markdown + remark-gfm + rehype-raw
 - **E2E** (`packages/e2e`): Playwright (61 tests)
 - **Skills** (`skill/`): houseprice, superpowers
+
+## Key Features
+
+- **顧問模式** (`chatOnlyMode`): 純對話，整合知識庫 Skill 的 AI 諮詢，不生成 UI
+- **設計模式**: AI 生成互動式 UI 原型
+- **URL Crawler** (設計 tab → 參考網站): 爬取網頁，照抄元件或套用類似設計
+- **元件庫** (`/components`): 存放從網站爬取的可重用 UI 元件
+- **Page Variant Selector**: 多版本頁面預覽與選擇
+- **Vision-based Intent**: AI 看截圖判斷調整意圖
 
 ## Development Commands
 
@@ -42,7 +57,7 @@ cd packages/client && pnpm build   # Vite → dist/
 ### Key-Pool (ai-core standard)
 - `@kevinsisi/ai-core` manages Gemini API key rotation
 - Keys loaded from env / SQLite settings table
-- Automatic bad-key marking with cooldown
+- Automatic bad-key marking with cooldown (429→2min, 401/403→30min, 5xx→30s)
 
 ### Socket.io Collaboration
 - Server broadcasts node-graph changes to all connected clients
@@ -53,12 +68,26 @@ cd packages/client && pnpm build   # Vite → dist/
 - `packages/server/data/` — SQLite DB (better-sqlite3, WAL mode)
 - Stores sessions, node graphs, settings, API keys
 
-## E2E Testing
-- 61 tests in `packages/e2e/`
-- Playwright config at `packages/e2e/playwright.config.ts` (or root)
-- Run `pnpm test:e2e` from root
+## CI/CD (Gitea)
+
+- Workflow: `.gitea/workflows/docker-build.yaml`
+- Docker build → push to internal registry (`srvhpgit1:32050`) → ArgoCD sync
+- **Docker build 必須加 `--network=host`**（runner 的 Docker build network namespace 限制）
+- ai-core 依賴在 Gitea CI 走 Gitea URL，GitHub CI 走 GitHub URL
 
 ## Docker
 ```bash
 docker compose up -d   # Full stack
 ```
+
+### Dockerfile 注意事項
+- Builder: Alpine (node:22-alpine), Prod: Playwright Ubuntu image
+- better-sqlite3 需要在 prod stage rebuild（musl → glibc）
+- Tesseract 模型下載用 best-effort（`|| true`）
+- Chromium 需要 `--no-sandbox --disable-setuid-sandbox`
+
+## Git Remotes
+
+雙 remote push（一次推 GitHub + Gitea）：
+- `origin` fetch: Gitea (`gitea.housefun.com.tw/H1114/project-bridge`)
+- `origin` push: Gitea + GitHub (`chuangkevin/project-bridge`)
