@@ -1,11 +1,12 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-bookworm AS builder
 
 WORKDIR /app
 
 # Native build tools for better-sqlite3 + git for dependencies
-RUN apk add --no-cache python3 make g++ git
+RUN apt-get update && apt-get install -y python3 make g++ git curl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -15,7 +16,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 
-# Install all dependencies (Alpine/musl — only used for TS compilation)
+# Install all dependencies (Debian/glibc — only used for TS compilation)
 RUN pnpm install --frozen-lockfile
 
 # Copy source

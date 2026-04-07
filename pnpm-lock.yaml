@@ -85,8 +85,8 @@ importers:
         specifier: ^0.24.1
         version: 0.24.1
       '@kevinsisi/ai-core':
-        specifier: git+https://gitea.housefun.com.tw/H1114/ai-core.git
-        version: git+https://gitea.housefun.com.tw/H1114/ai-core.git#c05c2a2db93671eefc82b69d865d0a4f7234400c(better-sqlite3@11.10.0)
+        specifier: git+https://github.com/kevinsisi/ai-core.git
+        version: git+https://github.com/kevinsisi/ai-core.git#c05c2a2db93671eefc82b69d865d0a4f7234400c(better-sqlite3@11.10.0)
       '@napi-rs/canvas':
         specifier: ^0.1.97
         version: 0.1.97
@@ -608,8 +608,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@kevinsisi/ai-core@git+https://gitea.housefun.com.tw/H1114/ai-core.git#c05c2a2db93671eefc82b69d865d0a4f7234400c':
-    resolution: {commit: c05c2a2db93671eefc82b69d865d0a4f7234400c, repo: https://gitea.housefun.com.tw/H1114/ai-core.git, type: git}
+  '@kevinsisi/ai-core@git+https://github.com/kevinsisi/ai-core.git#c05c2a2db93671eefc82b69d865d0a4f7234400c':
+    resolution: {commit: c05c2a2db93671eefc82b69d865d0a4f7234400c, repo: https://github.com/kevinsisi/ai-core.git, type: git}
     version: 1.1.0
     peerDependencies:
       better-sqlite3: '>=11.0.0'
@@ -3372,7 +3372,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@kevinsisi/ai-core@git+https://gitea.housefun.com.tw/H1114/ai-core.git#c05c2a2db93671eefc82b69d865d0a4f7234400c(better-sqlite3@11.10.0)':
+  '@kevinsisi/ai-core@git+https://github.com/kevinsisi/ai-core.git#c05c2a2db93671eefc82b69d865d0a4f7234400c(better-sqlite3@11.10.0)':
     dependencies:
       '@google/generative-ai': 0.21.0
     optionalDependencies:
