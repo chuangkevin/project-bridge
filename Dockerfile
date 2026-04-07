@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────
 FROM node:22-alpine AS builder
 
