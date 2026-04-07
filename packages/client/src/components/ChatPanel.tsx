@@ -1454,42 +1454,45 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           rows={2}
           disabled={streaming}
         />
-        <button
-          style={{
-            alignSelf: 'stretch',
-            padding: '0 14px',
-            fontSize: '13px',
-            fontWeight: chatOnlyMode ? 700 : 500,
-            color: chatOnlyMode ? '#fff' : '#6b7280',
-            background: chatOnlyMode ? '#3b82f6' : 'var(--bg-hover, #f1f5f9)',
-            border: chatOnlyMode ? 'none' : '1px solid var(--border-primary, #e2e8f0)',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-            whiteSpace: 'nowrap' as const,
-          }}
-          onClick={() => setChatOnlyMode(prev => !prev)}
-          title={chatOnlyMode ? '顧問模式開啟中（不生成 UI）' : '切換到顧問模式（純對話）'}
-          data-testid="chat-only-btn"
-        >
-          💬 顧問
-        </button>
-        <button
-          style={{
-            ...styles.sendBtn,
-            alignSelf: 'stretch',
-            height: 'auto',
-            opacity: (!input.trim() || streaming || hasUnreadyFiles) ? 0.5 : 1,
-          }}
-          onClick={handleSend}
-          disabled={!input.trim() || streaming || hasUnreadyFiles}
-          title={hasUnreadyFiles ? '等待檔案分析完成...' : '送出'}
-          data-testid="send-btn"
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M2 9l6-6v4h8v4H8v4L2 9z" fill="white" />
-          </svg>
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+          <button
+            style={{
+              ...styles.sendBtn,
+              alignSelf: 'stretch',
+              height: 'auto',
+              minHeight: '36px',
+              flex: 1,
+              opacity: (!input.trim() || streaming || hasUnreadyFiles) ? 0.5 : 1,
+            }}
+            onClick={handleSend}
+            disabled={!input.trim() || streaming || hasUnreadyFiles}
+            title={hasUnreadyFiles ? '等待檔案分析完成...' : '送出'}
+            data-testid="send-btn"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M2 9l6-6v4h8v4H8v4L2 9z" fill="white" />
+            </svg>
+          </button>
+          <button
+            style={{
+              padding: '6px 10px',
+              fontSize: '11px',
+              fontWeight: chatOnlyMode ? 700 : 500,
+              color: chatOnlyMode ? '#fff' : '#6b7280',
+              background: chatOnlyMode ? '#3b82f6' : 'var(--bg-hover, #f1f5f9)',
+              border: chatOnlyMode ? 'none' : '1px solid var(--border-primary, #e2e8f0)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              whiteSpace: 'nowrap' as const,
+            }}
+            onClick={() => setChatOnlyMode(prev => !prev)}
+            title={chatOnlyMode ? '顧問模式開啟中 — 純對話，不生成 UI' : '切換到顧問模式 — 整合知識庫 Skill 的 AI 對話'}
+            data-testid="chat-only-btn"
+          >
+            {chatOnlyMode ? '💬 顧問中' : '💬 顧問'}
+          </button>
+        </div>
       </div>
       </div>{/* end resizable input area wrapper */}
 
