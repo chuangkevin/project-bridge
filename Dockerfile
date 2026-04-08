@@ -15,12 +15,18 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     fi
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 # Copy dependency files
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
+
+# Gitea CI cannot reach codeload.github.com; rewrite ai-core tarball URL when mirror is provided.
+RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
+    MIRROR="${INTERNAL_GIT_MIRROR%/}/"; \
+    sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
+    fi
 
 # Install all dependencies (Alpine/musl — only used for TS compilation)
 RUN pnpm install --frozen-lockfile
@@ -41,7 +47,8 @@ FROM mcr.microsoft.com/playwright:v1.52.0-noble
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+ARG INTERNAL_GIT_MIRROR=""
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 # Bake Tesseract OCR language models (best-effort)
 RUN mkdir -p /app/tessdata && \
@@ -64,16 +71,14 @@ COPY --from=builder /app/packages/client/dist packages/client/dist
 COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/.npmrc ./
 COPY --from=builder /app/packages/server/package.json packages/server/
 COPY --from=builder /app/packages/client/package.json packages/client/
-RUN pnpm install --frozen-lockfile --prod
 
-ENV NODE_ENV=production
-ENV HOST=0.0.0.0
-ENV PORT=3001
+# Keep production install consistent with build stage URL rewrite in company network.
+RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
+    MIRROR="${INTERNAL_GIT_MIRROR%/}/"; \
+    sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
+    fi
 
-EXPOSE 3001
-
-
-CMD ["node", "packages/server/dist/index.js"]
+RUN pnpm install --frozen-lockfile --prod --reporter=append-only
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
