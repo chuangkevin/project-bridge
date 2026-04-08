@@ -21,7 +21,7 @@ jobs:
         run: |
           echo "Building image with tag: $IMAGE_TAG and latest"
           docker build --network=host \
-            --build-arg INTERNAL_GIT_MIRROR="http://srvhpgit1:32000/H1114/" \
+            --build-arg INTERNAL_GIT_MIRROR="http://srvhpgit:32000/H1114/" \
             -t srvhpgit1:32050/project-bridge:$IMAGE_TAG \
             -t srvhpgit1:32050/project-bridge:latest \
             .
