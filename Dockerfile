@@ -7,6 +7,13 @@ WORKDIR /app
 # Native build tools for better-sqlite3 + git for dependencies
 RUN apk add --no-cache python3 make g++ git
 
+# Internal Git Mirror support for company environment
+ARG INTERNAL_GIT_MIRROR=""
+RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
+    git config --global url."${INTERNAL_GIT_MIRROR}".insteadOf "https://github.com/H1114/"; \
+    git config --global url."${INTERNAL_GIT_MIRROR}".insteadOf "https://github.com/kevinsisi/"; \
+    fi
+
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
@@ -58,6 +65,15 @@ COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.ya
 COPY --from=builder /app/packages/server/package.json packages/server/
 COPY --from=builder /app/packages/client/package.json packages/client/
 RUN pnpm install --frozen-lockfile --prod
+
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3001
+
+EXPOSE 3001
+
+CMD ["node", "packages/server/dist/index.js"]
+le --prod
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
