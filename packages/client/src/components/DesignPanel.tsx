@@ -395,7 +395,7 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
                   onClick={() => setExtractMode(!extractMode)}
                   data-testid="crawl-copy-btn"
                 >
-                  {extractMode ? '取消選取' : '照抄'}
+                  {extractMode ? '取消選取模式' : '進入選取模式'}
                 </button>
                 <button
                   type="button"
@@ -406,6 +406,20 @@ export default function DesignPanel({ projectId, onSaved }: Props) {
                   類似設計
                 </button>
               </div>
+              {extractMode && (
+                <div style={{
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: '1px solid #93c5fd',
+                  background: '#eff6ff',
+                  color: '#1e40af',
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}>
+                  已進入選取模式：請直接在右側預覽畫面點一下要照抄的元件
+                </div>
+              )}
             </>
           )}
           {extractedComponent && (

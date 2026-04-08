@@ -83,6 +83,11 @@ export default function CrawlPreview({ html, zoom, extractMode, onExtract, onZoo
 
       {/* Iframe container */}
       <div style={styles.iframeContainer}>
+        {extractMode && (
+          <div style={styles.overlayHint}>
+            請在預覽中點選元件，成功後會跳出儲存元件視窗
+          </div>
+        )}
         <div style={{
           ...styles.iframeScaler,
           transform: `scale(${scale})`,
@@ -93,7 +98,10 @@ export default function CrawlPreview({ html, zoom, extractMode, onExtract, onZoo
           <iframe
             ref={iframeRef}
             srcDoc={srcdoc}
-            style={styles.iframe}
+            style={{
+              ...styles.iframe,
+              ...(extractMode ? styles.iframeExtractMode : {}),
+            }}
             sandbox="allow-scripts allow-same-origin"
             title="爬取預覽"
           />
@@ -187,6 +195,22 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'auto',
     position: 'relative',
   },
+  overlayHint: {
+    position: 'sticky',
+    top: 8,
+    left: 8,
+    right: 8,
+    zIndex: 10,
+    margin: '8px',
+    padding: '8px 12px',
+    borderRadius: '10px',
+    backgroundColor: 'rgba(37, 99, 235, 0.92)',
+    color: '#ffffff',
+    fontSize: '12px',
+    fontWeight: 700,
+    textAlign: 'center',
+    pointerEvents: 'none',
+  },
   iframeScaler: {
     position: 'absolute',
     top: 0,
@@ -197,5 +221,9 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     border: 'none',
     backgroundColor: '#ffffff',
+  },
+  iframeExtractMode: {
+    border: '2px dashed #2563eb',
+    cursor: 'crosshair',
   },
 };
