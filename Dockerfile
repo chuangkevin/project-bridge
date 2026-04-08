@@ -1,11 +1,17 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-bookworm AS builder
 
 WORKDIR /app
 
 # Native build tools for better-sqlite3 + git for dependencies
-RUN apk add --no-cache python3 make g++ git curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Internal Git Mirror support for company environment
 ARG INTERNAL_GIT_MIRROR=""
@@ -28,7 +34,7 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
     fi
 
-# Install all dependencies (Alpine/musl — only used for TS compilation)
+# Install all dependencies for TypeScript compilation
 RUN pnpm install --frozen-lockfile
 
 # Copy source
