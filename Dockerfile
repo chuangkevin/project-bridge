@@ -72,8 +72,8 @@ ENV PORT=3001
 
 EXPOSE 3001
 
+
 CMD ["node", "packages/server/dist/index.js"]
-le --prod
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
