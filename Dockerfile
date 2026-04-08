@@ -1,18 +1,11 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM node:22-bookworm AS builder
+FROM node:22-alpine AS builder
 
-ARG INTERNAL_GIT_MIRROR=""
 WORKDIR /app
 
 # Native build tools for better-sqlite3 + git for dependencies
-RUN apt-get update && apt-get install -y python3 make g++ git curl && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Configure git redirect if internal mirror is provided
-RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
-      git config --global url."${INTERNAL_GIT_MIRROR}".insteadOf "https://github.com/kevinsisi/"; \
-    fi
+RUN apk add --no-cache python3 make g++ git
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -22,7 +15,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 
-# Install all dependencies (Debian/glibc — only used for TS compilation)
+# Install all dependencies (Alpine/musl — only used for TS compilation)
 RUN pnpm install --frozen-lockfile
 
 # Copy source
@@ -39,16 +32,7 @@ RUN pnpm --filter client build
 # Playwright base image — Ubuntu Noble (glibc), includes Chromium
 FROM mcr.microsoft.com/playwright:v1.52.0-noble
 
-ARG INTERNAL_GIT_MIRROR=""
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y git curl && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Configure git redirect if internal mirror is provided
-RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
-      git config --global url."${INTERNAL_GIT_MIRROR}".insteadOf "https://github.com/kevinsisi/"; \
-    fi
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 

@@ -173,7 +173,7 @@ export async function planAndReview(
   try {
     pmText = await callAIStream(`你是 ${pm.name}，一位資深產品經理。你正在團隊會議上分析客戶需求。
 ${buildAgentContext('pm')}${historyContext}
-客戶說：「${userMessage.slice(0, 500000)}」
+客戶說：「${userMessage.slice(0, 50000)}」
 
 請用繁體中文，以 ${pm.name} 的口吻。使用以下結構回答：
 
@@ -199,7 +199,7 @@ ${buildAgentContext('pm')}${historyContext}
   try {
     uxText = await callAIStream(`你是 ${ux.name}，UX 設計師。你在團隊會議上，剛聽完 ${pm.name}（產品經理）的分析。
 ${buildAgentContext('ux')}${historyContext}
-客戶需求：「${userMessage.slice(0, 500000)}」
+客戶需求：「${userMessage.slice(0, 50000)}」
 
 ${pm.name} 的分析：
 ${pmText.slice(0, 6000)}
@@ -238,7 +238,7 @@ ${pmText.slice(0, 6000)}
 
     qaText = await callAIStream(`你是 ${qa.name}，QA 審查員。你剛聽完 ${pm.name} 和 ${ux.name} 的討論。
 ${buildAgentContext('qa')}${historyContext}
-客戶需求：「${userMessage.slice(0, 500000)}」
+客戶需求：「${userMessage.slice(0, 50000)}」
 
 ${pm.name} 說：${pmText.slice(0, 4000)}
 ${ux.name} 說：${uxText.slice(0, 4000)}
@@ -291,7 +291,7 @@ ${qaText.slice(0, 4000)}
   try {
     techText = await callAIStream(`你是 ${tech.name}，技術主管。團隊討論完了，你要做最後總結。
 ${buildAgentContext('tech')}${historyContext}
-客戶需求：「${userMessage.slice(0, 500000)}」
+客戶需求：「${userMessage.slice(0, 50000)}」
 
 ${pm.name}（產品經理）：${pmText.slice(0, 4000)}
 ${ux.name}（UX 設計師）：${uxText.slice(0, 4000)}
@@ -321,7 +321,7 @@ ${qa.name}（QA 審查員）：${qaText.slice(0, 4000)}
   try {
     const confirmText = await callAIStream(`你是 ${pm.name}，產品經理。團隊討論結束了，你要做最終確認。
 ${buildAgentContext('pm')}
-客戶需求：「${userMessage.slice(0, 500000)}」
+客戶需求：「${userMessage.slice(0, 50000)}」
 
 團隊討論摘要：
 ${fullDiscussion.slice(-10000)}
@@ -345,7 +345,7 @@ PAGES: 頁面1, 頁面2, ...`, pm.name, 6000);
   try {
     plan = await callAIJSON(`根據以下團隊討論，產出最終設計方案 JSON。
 
-客戶需求：「${userMessage.slice(0, 500000)}」
+客戶需求：「${userMessage.slice(0, 50000)}」
 
 團隊討論：
 ${fullDiscussion.slice(0, 12000)}

@@ -77,9 +77,9 @@ export async function extractSpecData(
   }
 
   // Send the FULL text (gemini-2.5-flash has 1M context)
-  // Cap at 500K chars — model supports 1M tokens, 500K chars is well within limits
+  // Cap at 80K chars — model supports 1M tokens, 80K chars is well within limits
   parts.push({
-    text: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 500000)}\n=== END ===`,
+    text: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 80000)}\n=== END ===`,
   });
 
   const result = await model.generateContent(parts);

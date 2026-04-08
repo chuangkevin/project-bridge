@@ -586,9 +586,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             generationConfig: { maxOutputTokens: 32768, temperature: generationTemperature },
           });
 
-          // Truncate HTML if too large (>500K chars) to avoid API limits
-          const protoHtml = currentPrototype.html.length > 500000
-            ? currentPrototype.html.slice(0, 500000) + '\n<!-- [truncated] -->'
+          // Truncate HTML if too large (>200K chars) to avoid API limits
+          const protoHtml = currentPrototype.html.length > 200000
+            ? currentPrototype.html.slice(0, 200000) + '\n<!-- [truncated] -->'
             : currentPrototype.html;
 
           const result = await model.generateContentStream(
