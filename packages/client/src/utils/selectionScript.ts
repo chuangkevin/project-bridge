@@ -71,50 +71,42 @@ export function getSelectionScript(): string {
     var target = e.target;
     if (target === document.body || target === document.documentElement) return;
 
+      // Clone before visual confirmation outline, so extracted HTML won't contain highlight style.
+      var cloneRoot = target.cloneNode(true);
+
     // Flash green to confirm selection
     target.style.outline = '3px solid #10b981';
     target.style.outlineOffset = '2px';
 
-    var extractHtml = target.outerHTML;
-    var cs = window.getComputedStyle(target);
-    var cssLines = [];
-    CSS_PROPS.forEach(function(prop) {
-      var kebab = toKebab(prop);
-      var val = cs.getPropertyValue(kebab);
-      if (val && !skipSet[val]) {
-        cssLines.push(kebab + ': ' + val + ';');
-      }
-    });
+      // Inline computed styles for selected subtree to improve visual fidelity after copy.
+      var origNodes = [target].concat(Array.from(target.querySelectorAll('*')).slice(0, 300));
+      var cloneNodes = [cloneRoot].concat(Array.from(cloneRoot.querySelectorAll('*')).slice(0, 300));
 
-    // Also extract children's computed styles (one level deep)
-    var children = target.querySelectorAll('*');
-    var childCssMap = {};
-    for (var i = 0; i < children.length && i < 50; i++) {
-      var child = children[i];
-      var tag = child.tagName.toLowerCase();
-      var childCs = window.getComputedStyle(child);
-      var childLines = [];
-      CSS_PROPS.forEach(function(prop) {
-        var kebab = toKebab(prop);
-        var val = childCs.getPropertyValue(kebab);
-        if (val && !skipSet[val]) {
-          childLines.push(kebab + ': ' + val + ';');
-        }
-      });
-      if (childLines.length > 0) {
-        var key = tag + (child.className ? '.' + child.className.toString().split(' ').filter(Boolean).join('.') : '');
-        if (!childCssMap[key]) {
-          childCssMap[key] = childLines.join(' ');
+      for (var i = 0; i < origNodes.length && i < cloneNodes.length; i++) {
+        var origNode = origNodes[i];
+        var cloneNode = cloneNodes[i];
+        var cs = window.getComputedStyle(origNode);
+        var styleLines = [];
+
+        CSS_PROPS.forEach(function(prop) {
+          var kebab = toKebab(prop);
+          var val = cs.getPropertyValue(kebab);
+          if (val && !skipSet[val]) {
+            styleLines.push(kebab + ': ' + val + ';');
+          }
+        });
+
+        if (styleLines.length > 0) {
+          cloneNode.setAttribute('style', styleLines.join(' '));
         }
       }
-    }
 
-    var extractedCss = cssLines.join(' ');
+      var extractHtml = cloneRoot.outerHTML;
 
     window.parent.postMessage({
       type: 'component-extracted',
       html: extractHtml,
-      css: extractedCss
+        css: ''
     }, '*');
   }, true);
 })();
