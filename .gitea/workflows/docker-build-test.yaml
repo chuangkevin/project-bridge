@@ -27,6 +27,12 @@ jobs:
           docker push srvhpgit1:32050/project-bridge:$IMAGE_TAG
           docker push srvhpgit1:32050/project-bridge:latest
 
+      - name: Validate Pushed Image
+        run: |
+          docker rmi -f srvhpgit1:32050/project-bridge:$IMAGE_TAG || true
+          docker pull srvhpgit1:32050/project-bridge:$IMAGE_TAG
+          docker inspect srvhpgit1:32050/project-bridge:$IMAGE_TAG >/dev/null
+
       - name: Clean Up Local Images
         run: |
           docker rmi -f srvhpgit1:32050/project-bridge:$IMAGE_TAG || true
