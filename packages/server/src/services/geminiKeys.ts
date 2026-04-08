@@ -158,8 +158,8 @@ export function getGeminiApiKey(): string | null {
 }
 
 /** Get a key excluding a specific failed key */
-export function getGeminiApiKeyExcluding(failedKey: string): string | null {
-  markKeyBad(failedKey);
+export function getGeminiApiKeyExcluding(failedKey: string, reason: string = '429'): string | null {
+  markKeyBad(failedKey, reason);
   const keys = getAvailableKeys().filter(k => k !== failedKey);
   if (keys.length === 0) return null;
   return keys[Math.floor(Math.random() * keys.length)];

@@ -895,6 +895,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         } catch (err: any) {
           const msg = err?.message || '';
           const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
+          const isServiceUnavailable = msg.includes('503') || msg.toLowerCase().includes('service unavailable') || msg.toLowerCase().includes('high demand');
           if (isRateLimit && qaRetries < 4) {
             const altKey = getGeminiApiKeyExcluding(qaKey);
             if (altKey) { qaKey = altKey; }
@@ -902,6 +903,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             // Wait before retry — let rate limit cool down
             await new Promise(resolve => setTimeout(resolve, 3000));
             console.log(`[chat-qa] 429, retrying ${qaRetries}/4 with key ...${qaKey.slice(-4)}`);
+            continue;
+          }
+          if (isServiceUnavailable && qaRetries < 4) {
+            const altKey = getGeminiApiKeyExcluding(qaKey, 'server_error');
+            if (altKey) { qaKey = altKey; }
+            qaRetries++;
+            const waitMs = Math.min(8000, 2000 * qaRetries);
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+            console.log(`[chat-qa] 503/high-demand, retrying ${qaRetries}/4 after ${waitMs}ms with key ...${qaKey.slice(-4)}`);
             continue;
           }
           console.error('Gemini QA error:', err);
