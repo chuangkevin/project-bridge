@@ -16,7 +16,11 @@ jobs:
       - name: Build Docker Image
         run: |
           echo "Building image with tag: $IMAGE_TAG and latest"
-          docker build -t srvhpgit1:32050/project-bridge:$IMAGE_TAG -t srvhpgit1:32050/project-bridge:latest .
+          docker build --network=host \
+            --build-arg INTERNAL_GIT_MIRROR="https://gitea.housefun.com.tw/H1114/" \
+            -t srvhpgit1:32050/project-bridge:$IMAGE_TAG \
+            -t srvhpgit1:32050/project-bridge:latest \
+            .
 
       - name: Push to Internal Registry
         run: |

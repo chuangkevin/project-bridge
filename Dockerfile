@@ -25,11 +25,7 @@ COPY packages/client/package.json packages/client/
 # Gitea CI cannot reach codeload.github.com; rewrite ai-core tarball URL when mirror is provided.
 RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     MIRROR="${INTERNAL_GIT_MIRROR%/}/"; \
-        if curl -fsS --connect-timeout 3 "${MIRROR}" >/dev/null; then \
-            sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
-        else \
-            echo "Mirror unreachable: ${MIRROR}, fallback to GitHub codeload"; \
-        fi; \
+    sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
     fi
 
 # Install all dependencies (Alpine/musl — only used for TS compilation)
@@ -79,11 +75,7 @@ COPY --from=builder /app/packages/client/package.json packages/client/
 # Keep production install consistent with build stage URL rewrite in company network.
 RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     MIRROR="${INTERNAL_GIT_MIRROR%/}/"; \
-        if curl -fsS --connect-timeout 3 "${MIRROR}" >/dev/null; then \
-            sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
-        else \
-            echo "Mirror unreachable: ${MIRROR}, fallback to GitHub codeload"; \
-        fi; \
+    sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
     fi
 
 RUN pnpm install --frozen-lockfile --prod --reporter=append-only
