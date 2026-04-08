@@ -50,6 +50,14 @@ WORKDIR /app
 ARG INTERNAL_GIT_MIRROR=""
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
+# Build sharp against distro libvips to avoid linux-x64-v2 prebuilt binary requirement.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3 \
+    pkg-config \
+    libvips-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Bake Tesseract OCR language models (best-effort)
 RUN mkdir -p /app/tessdata && \
     (curl -sL --connect-timeout 10 -o /app/tessdata/eng.traineddata "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata" || true) && \
@@ -78,7 +86,7 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
     fi
 
-RUN pnpm install --frozen-lockfile --prod --reporter=append-only
+RUN npm_config_build_from_source=true pnpm install --frozen-lockfile --prod --reporter=append-only
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
