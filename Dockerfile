@@ -43,7 +43,7 @@ RUN pnpm --filter client build
 
 # ── Stage 2: Production ────────────────────────────────────
 # Playwright base image — Ubuntu Noble (glibc), includes Chromium
-FROM mcr.microsoft.com/playwright:v1.52.0-noble
+FROM mcr.microsoft.com/playwright:v1.58.2-noble
 
 WORKDIR /app
 
