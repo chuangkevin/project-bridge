@@ -1,4 +1,4 @@
-import { chromium, Browser } from 'playwright';
+import { chromium, Browser, BrowserContextOptions, Page } from 'playwright';
 
 export interface CrawledStyles {
   url: string;
@@ -40,9 +40,54 @@ export interface AggregatedDesignSystem {
 
 let browserInstance: Browser | null = null;
 
+const CRAWLER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+
+export function getCrawlerContextOptions(): BrowserContextOptions {
+  return {
+    viewport: { width: 1440, height: 900 },
+    userAgent: CRAWLER_USER_AGENT,
+    locale: 'zh-TW',
+    timezoneId: 'Asia/Taipei',
+    colorScheme: 'light',
+    extraHTTPHeaders: {
+      'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Upgrade-Insecure-Requests': '1',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    },
+  };
+}
+
+export async function applyCrawlerStealth(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    Object.defineProperty(navigator, 'language', { get: () => 'zh-TW' });
+    Object.defineProperty(navigator, 'languages', { get: () => ['zh-TW', 'zh', 'en-US', 'en'] });
+    Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+    Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+  });
+}
+
+export function looksForbiddenHtml(html: string): boolean {
+  const normalized = html.toLowerCase();
+  return normalized.includes('<title>403 forbidden</title>')
+    || normalized.includes('<h1>403 forbidden</h1>')
+    || normalized.includes('access denied')
+    || normalized.includes('request forbidden');
+}
+
 export async function getBrowser(): Promise<Browser> {
   if (!browserInstance || !browserInstance.isConnected()) {
-    browserInstance = await chromium.launch({ headless: true });
+    browserInstance = await chromium.launch({
+      headless: true,
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ],
+    });
   }
   return browserInstance;
 }
@@ -58,10 +103,19 @@ export async function crawlWebsite(url: string): Promise<CrawledStyles> {
 
   try {
     browser = await getBrowser();
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const context = await browser.newContext(getCrawlerContextOptions());
     const page = await context.newPage();
 
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
+    await applyCrawlerStealth(page);
+
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
+
+    const html = await page.content();
+    if ((response && response.status() === 403) || looksForbiddenHtml(html)) {
+      await context.close();
+      return { url, success: false, error: 'forbidden', colors: [], typography: { fonts: [], sizes: [], headings: [], body: null }, buttons: [], inputs: [], backgrounds: [], borderRadii: [], shadows: [] };
+    }
 
     // Take screenshot
     const screenshotBuffer = await page.screenshot({ fullPage: false });

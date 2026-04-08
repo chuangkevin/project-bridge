@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { crawlWebsite, aggregateStyles, CrawledStyles, getBrowser } from '../services/websiteCrawler';
+import { crawlWebsite, aggregateStyles, CrawledStyles, getBrowser, getCrawlerContextOptions, applyCrawlerStealth, looksForbiddenHtml } from '../services/websiteCrawler';
 import { compileDesignTokens } from '../services/designTokenCompiler';
 import db from '../db/connection';
 
@@ -138,10 +138,19 @@ router.post('/:projectId/crawl-full-page', async (req: Request, res: Response) =
   let context: any = null;
   try {
     const browser = await getBrowser();
-    context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    context = await browser.newContext(getCrawlerContextOptions());
     const page = await context.newPage();
 
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
+    await applyCrawlerStealth(page);
+
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
+
+    const initialHtml = await page.content();
+    if ((response && response.status() === 403) || looksForbiddenHtml(initialHtml)) {
+      await context.close();
+      return res.status(422).json({ error: '目標網站拒絕爬取，請改用可公開存取且未阻擋機器瀏覽的頁面。' });
+    }
 
     const origin = parsedUrl.origin;
 
