@@ -5,6 +5,7 @@ dist
 data/
 test-results/
 .claude/settings.local.json
+.ai-review/
 
 # Test artifacts
 *.traineddata

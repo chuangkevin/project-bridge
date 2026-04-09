@@ -112,8 +112,10 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         }
       }
 
+      const hasMeaningfulText = extractedText.trim().length > 100;
+
       // Fire-and-forget: Document Analysis Agent (structured analysis)
-      if (apiKey && (isPdf || isImage)) {
+      if (apiKey && (isPdf || isImage || hasMeaningfulText)) {
         db.prepare("UPDATE uploaded_files SET analysis_status = 'pending' WHERE id = ?").run(id);
         import('../services/documentAnalysisAgent').then(({ analyzeDocument }) => {
           analyzeDocument(id, storagePath, mimetype, extractedText).catch(err => {
@@ -126,7 +128,7 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
       const artStyle = db.prepare('SELECT detected_style FROM art_style_preferences WHERE project_id = ?').get(projectId) as any;
 
       // Determine analysis_status for client polling
-      const analysisTriggered = !!(apiKey && (isPdf || isImage));
+      const analysisTriggered = !!(apiKey && (isPdf || isImage || hasMeaningfulText));
       const analysisStatus = analysisTriggered ? 'pending' : 'not_started';
 
       return res.status(201).json({
@@ -204,8 +206,9 @@ router.get('/:id/upload/:fileId/analysis-status', (req: Request, res: Response) 
     'SELECT analysis_status, analysis_result FROM uploaded_files WHERE id = ? AND project_id = ?'
   ).get(req.params.fileId, req.params.id) as any;
   if (!file) return res.status(404).json({ error: 'File not found' });
+  const normalizedStatus = file.analysis_status === 'failed' ? 'error' : (file.analysis_status || 'not_started');
   return res.json({
-    status: file.analysis_status || 'not_started',
+    status: normalizedStatus,
     result: file.analysis_result ? JSON.parse(file.analysis_result) : null,
   });
 });

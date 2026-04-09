@@ -20,6 +20,12 @@ import { getActiveSkills } from './skills';
 import { scorePrototype } from '../services/qualityScorer';
 import { generationQueue } from '../services/generationQueue';
 import { observePreference, getPreferences, formatPreferencesForPrompt } from '../services/preferenceTracker';
+import {
+  formatSpecReviewForPrompt,
+  reviewSpecDocuments,
+  ReviewDocumentInput,
+  ReviewSkillInput,
+} from '../services/specReviewAgent';
 
 const router = Router();
 
@@ -71,7 +77,108 @@ const qaSystemPromptBase = `你是一位資深產品架構師和 UI/UX 顧問，
 - 使用者的每一句話都是在延續之前的對話，不是開新話題
 - 使用者說了簡短的話（如「早期規劃」「繼續」「然後呢」），就是要你繼續深入之前的主題
 - 絕對不要在已經聊了多輪之後還問「請問您想要什麼」「請提供更多資訊」
-- 如果使用者的意圖不明確，根據對話脈絡做最合理的推斷，直接給建議`;
+- 如果使用者的意圖不明確，根據對話脈絡做最合理的推斷，直接給建議
+
+文件分析規則：
+- 原始需求/規格文件優先於 AI 二次整理文件
+- 先保留 API contract 與明確規則，再做架構建議
+- 如果多份文件互相衝突，先列出差異與依據，再給結論
+- 不得把推測當成已確認事實；不確定的地方明確標註「⚠️ 需確認」`;
+
+function decodeStoredFileName(name: string): string {
+  try {
+    const fixed = Buffer.from(name, 'latin1').toString('utf8');
+    if (/[\u4e00-\u9fff]/.test(fixed)) return fixed;
+  } catch {}
+  return name;
+}
+
+async function buildHighFidelityReviewBlock(
+  documents: ReviewDocumentInput[],
+  skills: ReviewSkillInput[]
+): Promise<string> {
+  const review = await reviewSpecDocuments(documents, skills);
+  return review ? formatSpecReviewForPrompt(review) : '';
+}
+
+type QaUploadedDoc = {
+  original_name: string;
+  extracted_text: string | null;
+  analysis_result: string | null;
+  intent: string | null;
+};
+
+type ConsultantMode = 'spec-review' | 'architecture-review' | 'ux-review' | 'general';
+
+function chooseConsultantMode(message: string, docs: QaUploadedDoc[]): ConsultantMode {
+  const text = message.toLowerCase();
+  const hasDocs = docs.some(doc => (doc.extracted_text || '').trim().length > 50 || !!doc.analysis_result);
+  const specLikeDoc = docs.some(doc => {
+    const name = decodeStoredFileName(doc.original_name).toLowerCase();
+    const body = (doc.extracted_text || '').slice(0, 2000).toLowerCase();
+    return /spec|規格|需求|api|swagger|openapi/.test(name) || /api|endpoint|request|response|errorcode|規格|需求/.test(body);
+  });
+
+  if (hasDocs && (specLikeDoc || /diff|差異|比對|完整評估|規格|需求|api|契約|source of truth/.test(text))) {
+    return 'spec-review';
+  }
+  if (/架構|專案拆分|資料庫|db|es|job|service|repository|controller|部署/.test(text)) {
+    return 'architecture-review';
+  }
+  if (/ux|ui|頁面|流程|互動|畫面|設計評審|易用性/.test(text)) {
+    return 'ux-review';
+  }
+  return 'general';
+}
+
+function buildConsultantModeInstruction(mode: ConsultantMode): string {
+  switch (mode) {
+    case 'spec-review':
+      return `\n\n=== 顧問子模式：Spec Review ===
+你現在是 API/需求審查顧問。
+- 先列 source of truth，再列結論
+- 先整理完整 contract（API、欄位、error code、business rule）
+- 如果多份文件有差異，先列差異與依據，再做判斷
+- 明確區分「文件明講」與「你的推論」
+- 架構建議只能放在最後，且不能蓋過原始規格\n===`;
+    case 'architecture-review':
+      return `\n\n=== 顧問子模式：Architecture Review ===
+你現在是系統架構顧問。
+- 先列已確認事實
+- 再列需確認假設
+- 最後再給專案分工、DB/ES/Job/API 設計建議
+- 不得把未被文件支持的架構判斷寫成既定事實\n===`;
+    case 'ux-review':
+      return `\n\n=== 顧問子模式：UX Review ===
+你現在是 UX/產品顧問。
+- 優先指出流程斷點、缺失狀態、資訊階層問題
+- 如果文件已明定需求，不要任意改寫成你的偏好
+- 先列問題，再列調整建議\n===`;
+    default:
+      return `\n\n=== 顧問子模式：General Consulting ===
+依照對話脈絡提供直接、結構化的分析；若引用文件，仍以 source of truth 優先。\n===`;
+  }
+}
+
+function buildGenerationTodos(plan: { pages: { name: string }[] }): Array<{ id: string; label: string; status: 'pending' | 'in_progress' | 'completed' }> {
+  return [
+    { id: 'analyze', label: '確認需求與文件範圍', status: 'completed' },
+    { id: 'plan', label: '規劃頁面與流程', status: 'completed' },
+    { id: 'skill-check', label: '檢查技能與業務規則衝突', status: 'pending' },
+    ...plan.pages.map((page) => ({ id: `page:${page.name}`, label: `生成頁面：${page.name}`, status: 'pending' as const })),
+    { id: 'validate', label: '驗證導航與內容完整性', status: 'pending' },
+  ];
+}
+
+function buildGenerationTodosFromPages(pages: string[]): Array<{ id: string; label: string; status: 'pending' | 'in_progress' | 'completed' }> {
+  return [
+    { id: 'analyze', label: '確認需求與文件範圍', status: 'completed' },
+    { id: 'plan', label: '規劃頁面與流程', status: 'completed' },
+    { id: 'skill-check', label: '檢查技能與業務規則衝突', status: 'pending' },
+    ...pages.map((page) => ({ id: `page:${page}`, label: `生成頁面：${page}`, status: 'pending' as const })),
+    { id: 'validate', label: '驗證導航與內容完整性', status: 'pending' },
+  ];
+}
 
 // getGeminiApiKey is now imported from ../services/geminiKeys
 
@@ -98,6 +205,31 @@ function formatAnalysisForPrompt(analysis: any, fileName: string): string {
   }
   if (analysis.globalRules?.length) {
     block += `Global Rules:\n${analysis.globalRules.map((r: string) => `  - ${r}`).join('\n')}\n`;
+  }
+
+  if (analysis.review) {
+    const review = analysis.review;
+    if (review.overallAssessment) {
+      block += `\nReview Assessment: ${review.overallAssessment}\n`;
+    }
+    if (review.apiContracts?.length) {
+      block += 'Confirmed Contracts:\n';
+      for (const api of review.apiContracts.slice(0, 8)) {
+        block += `  - ${api.method} ${api.path}: ${api.purpose}\n`;
+      }
+    }
+    if (review.differences?.length) {
+      block += 'Review Differences:\n';
+      for (const diff of review.differences.slice(0, 8)) {
+        block += `  - [${diff.severity}] ${diff.topic}: ${diff.details}\n`;
+      }
+    }
+    if (review.verification?.uncertainClaims?.length) {
+      block += 'Review Uncertain Claims:\n';
+      for (const claim of review.verification.uncertainClaims.slice(0, 6)) {
+        block += `  - ${claim}\n`;
+      }
+    }
   }
 
   // Skills output — enriched understanding for better generation
@@ -794,18 +926,47 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         richQaPrompt += '\n===';
       }
 
-      // Inject uploaded document analysis
-      const qaSpecRows = (db.prepare(
-        'SELECT original_name, analysis_result FROM uploaded_files WHERE project_id = ? AND analysis_result IS NOT NULL'
-      ).all(projectId) as any[]);
-      if (qaSpecRows.length > 0) {
-        richQaPrompt += '\n\n=== 上傳的文件分析 ===\n';
-        for (const doc of qaSpecRows) {
-          try {
-            const analysis = JSON.parse(doc.analysis_result as string);
-            const pages = (analysis.pages || []).map((p: any) => p.name || p).join('、');
-            richQaPrompt += `文件「${doc.original_name}」：${pages}\n`;
-          } catch {}
+      const qaSkillInputs: ReviewSkillInput[] = qaSkills.map(skill => ({
+        name: skill.name,
+        description: skill.description || '',
+        content: skill.content,
+      }));
+
+      let qaDocs: QaUploadedDoc[] = [];
+      if (Array.isArray(fileIds) && fileIds.length > 0) {
+        const placeholders = fileIds.map(() => '?').join(',');
+        qaDocs = db.prepare(
+          `SELECT original_name, extracted_text, analysis_result, intent FROM uploaded_files
+           WHERE id IN (${placeholders}) AND project_id = ?`
+        ).all(...fileIds, projectId) as QaUploadedDoc[];
+      }
+
+      const consultantMode = chooseConsultantMode(userContent, qaDocs);
+      richQaPrompt += buildConsultantModeInstruction(consultantMode);
+
+      if (qaDocs.length > 0) {
+        const reviewBlock = await buildHighFidelityReviewBlock(
+          qaDocs.map(doc => ({
+            fileName: decodeStoredFileName(doc.original_name),
+            extractedText: doc.extracted_text || '',
+            intent: doc.intent,
+            analysisResult: doc.analysis_result ? (() => {
+              try { return JSON.parse(doc.analysis_result); } catch { return doc.analysis_result; }
+            })() : undefined,
+          })),
+          qaSkillInputs
+        );
+
+        if (reviewBlock) {
+          richQaPrompt += `\n\n${reviewBlock}`;
+        }
+
+        richQaPrompt += '\n\n=== 上傳文件清單 ===\n';
+        for (const doc of qaDocs) {
+          const docName = decodeStoredFileName(doc.original_name);
+          richQaPrompt += `- ${docName}`;
+          if (doc.intent) richQaPrompt += ` (${doc.intent})`;
+          richQaPrompt += '\n';
         }
         richQaPrompt += '===';
       }
@@ -1341,6 +1502,12 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
 
     // Track accumulated thinking from AI analysis (for metadata)
     let aiThinkingText = '';
+    let generationTodoSent = false;
+    const sendGenerationTodos = (pages: string[]) => {
+      if (generationTodoSent || pages.length === 0) return;
+      res.write(`data: ${JSON.stringify({ type: 'todo', items: buildGenerationTodosFromPages(pages) })}\n\n`);
+      generationTodoSent = true;
+    };
 
     // Load lessons for this project (used by planAndReview + buildLocalPlan)
     const projectLessons = getLessons(projectId as string);
@@ -1350,7 +1517,8 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
 
     // === PLAN + REVIEW (replaces keyword matching + AI analysis) ===
     console.log('[chat] Pre-analysis check: finalPages=', finalPages.length, 'intent=', intent);
-    if (finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell')) {
+    const needsPlanningReview = finalPages.length <= 1 && (intent === 'full-page' || intent === 'in-shell');
+    if (needsPlanningReview) {
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
 
       // Heartbeat during planning (3 agents discussion can take 30-60s)
@@ -1400,6 +1568,9 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
         }, planSkills, history, projectLessons);
         clearInterval(planHeartbeat);
 
+        res.write(`data: ${JSON.stringify({ type: 'todo', items: buildGenerationTodos(plan) })}\n\n`);
+        generationTodoSent = true;
+
         finalPages = plan.pages.map(p => p.name);
         isMultiPage = finalPages.length >= 2;
 
@@ -1428,6 +1599,7 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
         // Last resort fallback
         finalPages = ['首頁', '列表瀏覽', '詳情頁面', '操作功能', '個人帳戶'];
         isMultiPage = true;
+        sendGenerationTodos(finalPages);
       }
 
       // === SKILL CONFLICT DETECTION ===
@@ -1437,6 +1609,7 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
       }));
       if (conflictSkills.length > 0) {
         try {
+          res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'skill-check', status: 'in_progress' })}\n\n`);
           res.write(`data: ${JSON.stringify({ type: 'thinking', content: '\n\n🔍 檢查業務規則衝突...\n' })}\n\n`);
           const conflictReport = await checkSkillConflicts(
             userContent, finalPages, supplement ? [supplement] : [], conflictSkills,
@@ -1450,9 +1623,19 @@ NEVER hardcode hex color values — the design tokens are defined in :root CSS v
               await new Promise(resolve => setTimeout(resolve, 3000));
             }
           }
+          res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'skill-check', status: 'completed' })}\n\n`);
         } catch (e: any) {
           console.warn('[chat] Skill conflict check failed:', e.message?.slice(0, 60));
         }
+      } else {
+        res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'skill-check', status: 'completed' })}\n\n`);
+      }
+    }
+
+    if (intent !== 'question' && intent !== 'component') {
+      sendGenerationTodos(finalPages);
+      if (!needsPlanningReview) {
+        res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'skill-check', status: 'completed' })}\n\n`);
       }
     }
 
@@ -1575,9 +1758,11 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
 
           // Validate
           {
+            res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'validate', status: 'in_progress' })}\n\n`);
             const conventionPrimary = designConvention.match(/#([89a-fA-F][0-9a-fA-F]{5})/)?.[0] || null;
             const validationResult = validatePrototype(parallelResult.html, analysisData, conventionPrimary, true);
             logValidation(validationResult, projectId as string);
+            res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'validate', status: 'completed' })}\n\n`);
           }
 
           // Save prototype version
@@ -1631,6 +1816,7 @@ IMPORTANT: Follow the project design direction. All colors must use CSS var() re
             db.prepare('INSERT INTO prototype_versions (id, project_id, conversation_id, html, version, is_current, is_multi_page, pages) VALUES (?, ?, ?, ?, ?, 1, ?, ?)').run(retryVersionId, projectId, retryMsgId, retryResult.html, retryVersion, 1, JSON.stringify(retryResult.pages));
             db.prepare("UPDATE projects SET updated_at = datetime('now') WHERE id = ?").run(projectId);
             triggerQualityScoring(retryVersionId, retryResult.html, apiKey);
+            res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'validate', status: 'completed' })}\n\n`);
             res.write(`data: ${JSON.stringify({ done: true, html: retryResult.html, messageType: 'generate', intent, isMultiPage: true, pages: retryResult.pages })}\n\n`);
             res.end();
             return;
@@ -1855,6 +2041,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
 
     // Validate prototype quality (non-blocking — logs warnings only)
     {
+      res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'validate', status: 'in_progress' })}\n\n`);
       // Get analysis_result for validation if available
       const latestAnalysis = specRowsEarly.length > 0 && specRowsEarly[0].analysis_result
         ? (() => { try { return JSON.parse(specRowsEarly[0].analysis_result); } catch { return null; } })()
@@ -1862,6 +2049,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       const conventionPrimary = designConvention.match(/#([89a-fA-F][0-9a-fA-F]{5})/)?.[0] || null;
       const validationResult = validatePrototype(html, latestAnalysis, conventionPrimary, isMultiPage);
       logValidation(validationResult, projectId as string);
+      res.write(`data: ${JSON.stringify({ type: 'todo-update', id: 'validate', status: 'completed' })}\n\n`);
     }
 
     // Only create prototype version if response looks like HTML
@@ -1992,6 +2180,9 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       // Send page list as separate event before done
       if (finalPages.length > 0) {
         res.write(`data: ${JSON.stringify({ type: 'pages', pages: finalPages })}\n\n`);
+        for (const pageName of finalPages) {
+          res.write(`data: ${JSON.stringify({ type: 'todo-update', id: `page:${pageName}`, status: 'completed' })}\n\n`);
+        }
       }
 
       // Quick summary call (after generation completes)

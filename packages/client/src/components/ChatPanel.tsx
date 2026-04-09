@@ -52,6 +52,12 @@ interface UploadedFile {
   intent?: FileIntent;
 }
 
+interface TodoItem {
+  id: string;
+  label: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
 interface ArtStyle {
   summary: string;
   applyStyle: boolean;
@@ -111,6 +117,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   });
   const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
   const [pageDevNames, setPageDevNames] = useState<Record<string, string>>({});
+  const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; options: { id: string; label: string; description: string }[]; originalText: string } | null>(null);
@@ -328,7 +335,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           clearInterval(pollingIntervalsRef.current[fileId]);
           delete pollingIntervalsRef.current[fileId];
           setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, analysisStatus: 'ready' as const } : f));
-        } else if (data.status === 'error') {
+        } else if (data.status === 'error' || data.status === 'failed') {
           clearInterval(pollingIntervalsRef.current[fileId]);
           delete pollingIntervalsRef.current[fileId];
           setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, analysisStatus: 'error' as const } : f));
@@ -416,6 +423,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     setLastGenerationSummary('');
     setLastGeneratedPages([]);
     setVariantSelection(null);
+    setTodoItems([]);
 
     const fileIds = attachedFiles.map(f => f.id);
     const sentFiles = [...attachedFiles];
@@ -548,6 +556,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               data.pages.forEach((p: string) => { initial[p] = 'pending'; });
               setPageProgress(initial);
             }
+            if (data.type === 'todo' && Array.isArray(data.items)) {
+              setTodoItems(data.items);
+            }
+            if (data.type === 'todo-update' && data.id && data.status) {
+              setTodoItems(prev => prev.map(item => item.id === data.id ? { ...item, status: data.status } : item));
+            }
             if (data.type === 'phase') {
               if (data.phase === 'analyzing' || data.phase === 'planning' || data.phase === 'generating' || data.phase === 'done') {
                 setGenerationPhase(data.phase);
@@ -562,6 +576,10 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               if (data.phase === 'generating' && data.page) {
                 setPageProgress(prev => ({ ...prev, [data.page]: data.status || 'started' }));
                 if (data.message) setPageDevNames(prev => ({ ...prev, [data.page]: data.message }));
+                setTodoItems(prev => prev.map(item => item.id === `page:${data.page}` ? {
+                  ...item,
+                  status: data.status === 'done' ? 'completed' : data.status === 'started' ? 'in_progress' : item.status,
+                } : item));
               }
             }
             if (data.content && data.type !== 'thinking') {
@@ -648,7 +666,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       setStreaming(false);
       setGenerationPhase('idle');
       setPageProgress({});
-    setPageDevNames({});
+      setPageDevNames({});
       setParallelMessage('');
       setTokenCount(0);
     }
@@ -766,6 +784,23 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               {tokenCount > 0 && (
                 <div style={{ fontSize: 11, color: '#8E6FA7', textAlign: 'right' as const, padding: '4px 0 0 0' }}>
                   約 {tokenCount.toLocaleString()} 字
+                </div>
+              )}
+              {todoItems.length > 0 && !chatOnlyMode && (
+                <div style={styles.todoPanel} data-testid="generation-todo-list">
+                  <div style={styles.todoTitle}>執行清單</div>
+                  <div style={styles.todoList}>
+                    {todoItems.map(item => {
+                      const color = item.status === 'completed' ? '#22c55e' : item.status === 'in_progress' ? '#3b82f6' : '#94a3b8';
+                      const icon = item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○';
+                      return (
+                        <div key={item.id} style={styles.todoRow}>
+                          <span style={{ ...styles.todoIcon, color }}>{icon}</span>
+                          <span style={{ ...styles.todoText, color: item.status === 'pending' ? '#64748b' : '#1e293b' }}>{item.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </>
@@ -2051,6 +2086,39 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#3b82f6',
     borderRadius: '2px',
     transition: 'width 0.5s ease',
+  },
+  todoPanel: {
+    marginTop: '10px',
+    padding: '10px 12px',
+    border: '1px solid var(--border-primary, #e2e8f0)',
+    borderRadius: '10px',
+    backgroundColor: 'var(--bg-secondary, #f8fafc)',
+  },
+  todoTitle: {
+    fontSize: '12px',
+    fontWeight: 700,
+    color: 'var(--accent, #8E6FA7)',
+    marginBottom: '8px',
+  },
+  todoList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '6px',
+  },
+  todoRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '12px',
+  },
+  todoIcon: {
+    width: '14px',
+    textAlign: 'center' as const,
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  todoText: {
+    lineHeight: 1.4,
   },
   msgBubbleWrapper: {
     position: 'relative' as const,

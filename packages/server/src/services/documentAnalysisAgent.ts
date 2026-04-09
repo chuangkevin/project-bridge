@@ -11,6 +11,7 @@ import {
   skillDesignProposal, DesignProposalResult,
   skillBusinessContext, BusinessContextResult,
 } from './agentSkills';
+import { reviewSpecDocuments, SpecReviewResult } from './specReviewAgent';
 
 export interface AnalysisPage {
   name: string;
@@ -29,6 +30,7 @@ export interface DocumentAnalysisResult {
   globalStyles?: DesignGlobalStyles;
   globalRules: string[];
   summary: string;
+  review?: SpecReviewResult;
   // Skills output — enriched understanding
   explore?: ExploreResult;
   uxReview?: UxReviewResult;
@@ -240,6 +242,24 @@ export async function analyzeDocument(
         console.log(`[agent] Business Context: ${result.businessContext.matchedSkills.length} skills matched, ${result.businessContext.businessRules.length} rules, ${result.businessContext.internalTerms.length} terms`);
       } catch (e: any) {
         console.warn(`[agent] Business Context skill failed:`, e.message);
+      }
+
+      try {
+        const originalNameRow = db.prepare('SELECT original_name FROM uploaded_files WHERE id = ?').get(fileId) as { original_name?: string } | undefined;
+        result.review = await reviewSpecDocuments([
+          {
+            fileName: originalNameRow?.original_name || storagePath.split(/[/\\]/).pop() || 'uploaded-document',
+            extractedText,
+            analysisResult: {
+              documentType: result.documentType,
+              pages: result.pages,
+              globalRules: result.globalRules,
+              summary: result.summary,
+            },
+          },
+        ], []) || undefined;
+      } catch (e: any) {
+        console.warn('[agent] Spec review failed:', e.message);
       }
     }
 

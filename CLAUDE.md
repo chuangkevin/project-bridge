@@ -29,7 +29,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Key Features
 
 - **顧問模式** (`chatOnlyMode`): 純對話，整合知識庫 Skill 的 AI 諮詢，不生成 UI
+- **顧問審查優先級**: 原始規格/需求文件 > AI 整理文件 > skills/domain 記憶；多文件時先 diff 再下結論
 - **設計模式**: AI 生成互動式 UI 原型
+- **設計模式 Checklist**: 生成時應對外顯示需求確認、規則檢查、逐頁生成、驗證等 todo 狀態
 - **URL Crawler** (設計 tab → 參考網站): 爬取網頁，照抄元件或套用類似設計
 - **元件庫** (`/components`): 存放從網站爬取的可重用 UI 元件
 - **Page Variant Selector**: 多版本頁面預覽與選擇
