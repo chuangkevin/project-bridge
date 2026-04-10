@@ -22,9 +22,23 @@ const MCP_SETTINGS_KEY = 'mcp_servers';
 const DEFAULT_TOOLS_BY_SERVER: Record<string, string[]> = {
   'mssql-mcp': ['get-table-schema', 'list-all-tables'],
 };
+const LEGACY_DEFAULT_MSSQL_ENDPOINT = 'http://srvhpgit1:32500/mcp';
 
 function getDefaultAllowedTools(name: string): string[] {
   return DEFAULT_TOOLS_BY_SERVER[name.trim().toLowerCase()] || [];
+}
+
+function shouldTreatAsLegacyRecommendedTools(item: any, explicitAllowedTools: string[]): boolean {
+  if (!item || typeof item !== 'object') return false;
+  if (Object.prototype.hasOwnProperty.call(item, 'useRecommendedTools')) return false;
+  const normalizedName = typeof item.name === 'string' ? item.name.trim().toLowerCase() : '';
+  const normalizedEndpoint = typeof item.endpoint === 'string' ? item.endpoint.trim() : '';
+  const normalizedScope = typeof item.scope === 'string' ? item.scope : 'consultant';
+  return normalizedName === 'mssql-mcp'
+    && normalizedEndpoint === LEGACY_DEFAULT_MSSQL_ENDPOINT
+    && explicitAllowedTools.length === 0
+    && item.enabled !== false
+    && normalizedScope === 'consultant';
 }
 
 function parseServers(raw: string | null | undefined): McpServerRecord[] {
@@ -44,7 +58,7 @@ function normalizeRecord(item: any): McpServerRecord | null {
   if (!item || typeof item !== 'object') return null;
   if (typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.endpoint !== 'string') return null;
   const explicit = Array.isArray(item.allowedTools) ? item.allowedTools.filter((tool: unknown) => typeof tool === 'string') : [];
-  const useRecommendedTools = item.useRecommendedTools === true;
+  const useRecommendedTools = item.useRecommendedTools === true || shouldTreatAsLegacyRecommendedTools(item, explicit);
   return {
     id: item.id,
     name: item.name,

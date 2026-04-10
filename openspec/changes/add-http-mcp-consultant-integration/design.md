@@ -46,6 +46,11 @@
 
 建議由 SQLite 管理，讓 project-bridge 可以持久保存設定。
 
+升級相容性：
+
+- 若部署環境中存在舊版 `mssql-mcp` 預設設定（缺少 `useRecommendedTools`，但使用預設 endpoint 與空 allowlist），runtime 可將其視為 legacy default shape 並套用推薦白名單。
+- 這個相容行為必須足夠窄，避免覆蓋一般自訂 server 或非預設 endpoint 的空 allowlist 設定。
+
 ### 2. HTTP MCP Client Layer
 
 新增 server-side MCP client，封裝：
