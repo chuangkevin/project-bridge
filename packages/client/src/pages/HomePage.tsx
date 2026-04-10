@@ -31,6 +31,14 @@ interface Project {
   owner_name?: string;
 }
 
+type ProjectMode = 'design' | 'consultant' | 'architecture';
+
+const HOME_QUICK_STARTS: Array<{ mode: ProjectMode; title: string; description: string; cta: string }> = [
+  { mode: 'consultant', title: '先分析需求', description: '適合你手上已有 PRD、API 規格或還在釐清需求時，先讓 AI 幫你整理範圍與缺口。', cta: '建立顧問專案' },
+  { mode: 'design', title: '直接做第一版畫面', description: '適合你已大致知道想做什麼頁面，直接從一句描述開始生成互動式原型。', cta: '建立設計專案' },
+  { mode: 'architecture', title: '先拆頁面流程', description: '適合多頁系統與後台專案，先把頁面與導航關係整理好，再進入生成。', cta: '建立架構專案' },
+];
+
 /** Normalize SQLite datetime strings (no TZ) to UTC */
 function parseUTC(dateStr: string): number {
   // SQLite datetime('now') → '2026-03-23 17:00:00' (UTC but no Z)
@@ -70,6 +78,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectInitialMode, setNewProjectInitialMode] = useState<ProjectMode>('design');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'custom'>('custom');
   const [savedOrder, setSavedOrder] = useState<string[]>([]);
@@ -171,7 +180,16 @@ export default function HomePage() {
   };
 
   const handleNewProject = async () => {
-    await requireAuth();
+    setNewProjectInitialMode('design');
+    const authUser = await requireAuth();
+    if (!authUser) return;
+    setShowNewProject(true);
+  };
+
+  const handleQuickStartProject = async (mode: ProjectMode) => {
+    setNewProjectInitialMode(mode);
+    const authUser = await requireAuth();
+    if (!authUser) return;
     setShowNewProject(true);
   };
 
@@ -319,7 +337,18 @@ export default function HomePage() {
                 <line x1="20" y1="40" x2="32" y2="40" />
               </svg>
             </div>
-            <p style={styles.emptyText}>尚無專案。建立一個開始吧！</p>
+            <p style={styles.emptyText}>還沒有專案。先選一種開始方式，30 秒內就能進入工作狀態。</p>
+            <div style={styles.quickStartGrid}>
+              {HOME_QUICK_STARTS.map(item => (
+                <div key={item.mode} style={styles.quickStartCard}>
+                  <div style={styles.quickStartTitle}>{item.title}</div>
+                  <div style={styles.quickStartDescription}>{item.description}</div>
+                  <button type="button" style={styles.quickStartBtn} onClick={() => handleQuickStartProject(item.mode)}>
+                    {item.cta}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {!loading && !error && projects.length > 0 && (
@@ -411,6 +440,7 @@ export default function HomePage() {
 
       {showNewProject && (
         <NewProjectDialog
+          initialMode={newProjectInitialMode}
           onClose={() => setShowNewProject(false)}
           onCreated={handleProjectCreated}
         />
@@ -664,6 +694,51 @@ const styles: Record<string, React.CSSProperties> = {
   emptyText: {
     color: 'var(--text-secondary)',
     fontSize: '16px',
+    margin: '0 0 20px',
+    textAlign: 'center' as const,
+    maxWidth: '560px',
+  },
+  quickStartGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '16px',
+    width: '100%',
+    maxWidth: '960px',
+    marginTop: '8px',
+  },
+  quickStartCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '10px',
+    padding: '18px',
+    borderRadius: '14px',
+    border: '1px solid var(--border-primary)',
+    backgroundColor: 'var(--bg-card)',
+    boxShadow: 'var(--shadow-sm)',
+    textAlign: 'left' as const,
+  },
+  quickStartTitle: {
+    fontSize: '15px',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+  },
+  quickStartDescription: {
+    fontSize: '13px',
+    lineHeight: 1.6,
+    color: 'var(--text-secondary)',
+    minHeight: '64px',
+  },
+  quickStartBtn: {
+    marginTop: 'auto',
+    padding: '10px 14px',
+    minHeight: '44px',
+    borderRadius: '10px',
+    border: '1px solid color-mix(in srgb, var(--accent, #8E6FA7) 35%, var(--border-primary))',
+    backgroundColor: 'color-mix(in srgb, var(--accent, #8E6FA7) 14%, var(--bg-card))',
+    color: 'var(--text-primary)',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   toolbar: {
     display: 'flex',

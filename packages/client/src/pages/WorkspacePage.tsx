@@ -49,6 +49,32 @@ interface Project {
   owner_name?: string;
 }
 
+const WORKSPACE_QUICK_STARTS: Array<{
+  title: string;
+  description: string;
+  mode: 'design' | 'consultant' | 'architecture';
+  prompt: string;
+}> = [
+  {
+    title: '先審查需求',
+    description: '整理功能清單、頁面清單與待確認點，適合剛接到需求時先釐清方向。',
+    mode: 'consultant',
+    prompt: '請先幫我整理這個專案的需求，列出功能清單、頁面清單、待確認點，並用繁體中文回答。',
+  },
+  {
+    title: '生成第一版畫面',
+    description: '直接開始做可操作的第一版原型，至少先做首頁與一個主要操作頁面。',
+    mode: 'design',
+    prompt: '請先生成這個專案的第一版互動式原型，至少包含首頁與一個主要操作頁面，介面文案使用繁體中文。',
+  },
+  {
+    title: '先聊流程與頁面',
+    description: '適合多頁後台或流程型產品，先用顧問模式把資訊架構與導航關係整理好。',
+    mode: 'consultant',
+    prompt: '請先幫我拆解這個專案需要的主要頁面、導航關係與核心流程，之後再進入畫面生成。',
+  },
+];
+
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -323,6 +349,11 @@ export default function WorkspacePage() {
 
   const handleNewMessages = useCallback((userMsg: ChatMessage, assistantMsg: ChatMessage) => {
     setMessages(prev => [...prev, userMsg, assistantMsg]);
+  }, []);
+
+  const triggerQuickStart = useCallback((mode: 'design' | 'consultant' | 'architecture', prompt: string) => {
+    setActiveMode(mode);
+    setPendingChatMessage(prompt);
   }, []);
 
   const handleHtmlGenerated = useCallback((data: { html: string; isMultiPage: boolean; pages: string[] }) => {
@@ -1568,6 +1599,19 @@ export default function WorkspacePage() {
                         <li>📎 上傳設計稿 PDF 讓 AI 分析樣式</li>
                         <li>⚡ 點擊元素可以直接修改</li>
                       </ul>
+                      <div style={styles.emptyStateActionGrid}>
+                        {WORKSPACE_QUICK_STARTS.map(item => (
+                          <button
+                            key={item.title}
+                            type="button"
+                            style={styles.emptyStateActionCard}
+                            onClick={() => triggerQuickStart(item.mode, item.prompt)}
+                          >
+                            <div style={styles.emptyStateActionTitle}>{item.title}</div>
+                            <div style={styles.emptyStateActionDesc}>{item.description}</div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -2453,6 +2497,37 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     textAlign: 'left' as const,
     fontSize: '13px',
+    color: 'var(--text-secondary)',
+  },
+  emptyStateActionGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '10px',
+    width: '100%',
+    marginTop: '18px',
+  },
+  emptyStateActionCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '6px',
+    alignItems: 'flex-start',
+    textAlign: 'left' as const,
+    padding: '14px',
+    minHeight: '44px',
+    borderRadius: '12px',
+    border: '1px solid color-mix(in srgb, var(--accent, #8E6FA7) 30%, var(--border-primary))',
+    backgroundColor: 'color-mix(in srgb, var(--accent, #8E6FA7) 10%, var(--bg-card))',
+    color: 'var(--text-primary)',
+    cursor: 'pointer',
+  },
+  emptyStateActionTitle: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+  },
+  emptyStateActionDesc: {
+    fontSize: '12px',
+    lineHeight: 1.5,
     color: 'var(--text-secondary)',
   },
   shortcutsBtn: {

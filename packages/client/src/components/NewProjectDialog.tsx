@@ -4,13 +4,14 @@ import { authHeaders } from '../contexts/AuthContext';
 interface Props {
   onClose: () => void;
   onCreated: (project: { id: string; name: string; share_token: string; created_at: string; updated_at: string }) => void;
+  initialMode?: ProjectMode;
 }
 
 type ProjectMode = 'design' | 'consultant' | 'architecture';
 
-export default function NewProjectDialog({ onClose, onCreated }: Props) {
+export default function NewProjectDialog({ onClose, onCreated, initialMode = 'design' }: Props) {
   const [name, setName] = useState('');
-  const [mode, setMode] = useState<ProjectMode>('design');
+  const [mode, setMode] = useState<ProjectMode>(initialMode);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +23,10 @@ export default function NewProjectDialog({ onClose, onCreated }: Props) {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   useEffect(() => {
     fetch('/api/design-presets').then(r => r.json()).then(setPresets).catch(() => {});
