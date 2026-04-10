@@ -146,6 +146,7 @@ Settings 頁新增 MCP Servers 區塊。
 ### LLM stream parsing failure
 
 - 如果 Gemini streaming SDK 在顧問模式拋出 `Failed to parse stream`，應自動降級成非串流回答
+- 在降級前，先重試一次 streaming
 - 降級後仍需保留既有 `MAX_TOKENS` auto-continue 行為，避免只拿到半段答案
 
 ### Timeout

@@ -1043,31 +1043,40 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             } catch (streamErr: any) {
               const streamMsg = streamErr?.message || '';
               if (streamMsg.includes('Failed to parse stream')) {
-                console.warn('[chat-qa] Stream parse failed, falling back to non-stream response');
-                const fallback = await chatSession.sendMessage(continuePrompt as any);
-                const fallbackText = fallback.response.text();
-                if (fallbackText) {
-                  fullResponse += fallbackText;
-                  res.write(`data: ${JSON.stringify({ content: fallbackText })}\n\n`);
-                }
+                console.warn('[chat-qa] Stream parse failed, retrying stream once before non-stream fallback');
                 try {
-                  trackUsage(qaKey, getGeminiModel(), 'chat-qa', fallback.response.usageMetadata);
-                } catch {}
-                const fallbackFinishReason = fallback.response.candidates?.[0]?.finishReason || 'STOP';
-                if (fallbackFinishReason === 'MAX_TOKENS') {
-                  const tail = fullResponse.slice(-200);
-                  const garbageRatio = (tail.match(/[-\s\n]/g) || []).length / Math.max(tail.length, 1);
-                  if (garbageRatio > 0.8) {
-                    console.log(`[chat-qa] Fallback auto-continue stopped — tail is ${Math.round(garbageRatio * 100)}% garbage`);
-                    break;
+                  result = await chatSession.sendMessageStream(continuePrompt as any);
+                } catch (retryErr: any) {
+                  const retryMsg = retryErr?.message || '';
+                  if (!retryMsg.includes('Failed to parse stream')) throw retryErr;
+                  console.warn('[chat-qa] Stream parse retry failed, falling back to non-stream response');
+                  const fallback = await chatSession.sendMessage(continuePrompt as any);
+                  const fallbackText = fallback.response.text();
+                  if (fallbackText) {
+                    fullResponse += fallbackText;
+                    res.write(`data: ${JSON.stringify({ content: fallbackText })}\n\n`);
                   }
-                  console.log(`[chat-qa] Fallback response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
-                  continuePrompt = '繼續。不要加分隔線，不要重複前面的內容，直接從斷掉的地方往下寫。';
-                  continue;
+                  try {
+                    trackUsage(qaKey, getGeminiModel(), 'chat-qa', fallback.response.usageMetadata);
+                  } catch {}
+                  const fallbackFinishReason = fallback.response.candidates?.[0]?.finishReason || 'STOP';
+                  if (fallbackFinishReason === 'MAX_TOKENS') {
+                    const tail = fullResponse.slice(-200);
+                    const garbageRatio = (tail.match(/[-\s\n]/g) || []).length / Math.max(tail.length, 1);
+                    if (garbageRatio > 0.8) {
+                      console.log(`[chat-qa] Fallback auto-continue stopped — tail is ${Math.round(garbageRatio * 100)}% garbage`);
+                      break;
+                    }
+                    console.log(`[chat-qa] Fallback response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
+                    continuePrompt = '繼續。不要加分隔線，不要重複前面的內容，直接從斷掉的地方往下寫。';
+                    continue;
+                  }
+                  break;
                 }
-                break;
+                // stream retry succeeded — continue with normal stream handling below
+              } else {
+                throw streamErr;
               }
-              throw streamErr;
             }
             // Subsequent turns are text-only
             if (continueTurn === 0) continuePrompt = '' as any;
