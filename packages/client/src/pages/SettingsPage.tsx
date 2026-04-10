@@ -25,6 +25,26 @@ interface UserInfo {
   created_at: string;
 }
 
+interface McpServerInfo {
+  id: string;
+  name: string;
+  transport: 'http';
+  endpoint: string;
+  enabled: boolean;
+  scope: 'consultant';
+  allowedTools: string[];
+  timeoutMs: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface McpTestResult {
+  ok: boolean;
+  serverInfo?: { name?: string; version?: string };
+  protocolVersion?: string;
+  error?: string;
+}
+
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
@@ -99,6 +119,23 @@ export default function SettingsPage() {
   const [ctdSavedKey, setCtdSavedKey] = useState(''); // masked display value
   const [ctdSaving, setCtdSaving] = useState(false);
   const [ctdMsg, setCtdMsg] = useState('');
+
+  // MCP management
+  const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [mcpError, setMcpError] = useState('');
+  const [editingMcpId, setEditingMcpId] = useState<string | null>(null);
+  const [mcpForm, setMcpForm] = useState({
+    name: 'mssql-mcp',
+    endpoint: 'http://srvhpgit1:32500/mcp',
+    enabled: true,
+    allowedTools: '',
+    timeoutMs: '15000',
+  });
+  const [mcpSaving, setMcpSaving] = useState(false);
+  const [mcpTestResults, setMcpTestResults] = useState<Record<string, McpTestResult>>({});
+  const [mcpTools, setMcpTools] = useState<Record<string, { name: string; description?: string }[]>>({});
+  const [mcpActionLoading, setMcpActionLoading] = useState<Record<string, 'test' | 'tools' | 'save' | 'delete'>>({});
 
   // Usage stats
   const [usage, setUsage] = useState<UsageStats | null>(null);
@@ -538,6 +575,171 @@ export default function SettingsPage() {
   const handleSaveLanguage = (lang: string) => {
     setLanguage(lang);
     localStorage.setItem('pb-language', lang);
+  };
+
+  const resetMcpForm = () => {
+    setEditingMcpId(null);
+    setMcpForm({
+      name: 'mssql-mcp',
+      endpoint: 'http://srvhpgit1:32500/mcp',
+      enabled: true,
+      allowedTools: '',
+      timeoutMs: '15000',
+    });
+  };
+
+  const clearMcpServerRuntimeState = (serverId: string) => {
+    setMcpTestResults(prev => {
+      const next = { ...prev };
+      delete next[serverId];
+      return next;
+    });
+    setMcpTools(prev => {
+      const next = { ...prev };
+      delete next[serverId];
+      return next;
+    });
+  };
+
+  const fetchMcpServers = useCallback(async () => {
+    setMcpLoading(true);
+    setMcpError('');
+    try {
+      const res = await fetch('/api/settings/mcp-servers', { headers: bridgeAuthHeaders() });
+      const data = await res.json();
+      if (!res.ok) {
+        setMcpError(data.error || '載入 MCP servers 失敗');
+      } else {
+        setMcpServers(data.servers || []);
+      }
+    } catch {
+      setMcpError('載入 MCP servers 失敗');
+    }
+    setMcpLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+    fetchMcpServers();
+  }, [authState, fetchMcpServers]);
+
+  const handleSaveMcpServer = async () => {
+    if (!mcpForm.name.trim() || !mcpForm.endpoint.trim()) {
+      setMcpError('請輸入 MCP 名稱與 endpoint');
+      return;
+    }
+    setMcpSaving(true);
+    setMcpError('');
+    try {
+      const res = await fetch(editingMcpId ? `/api/settings/mcp-servers/${editingMcpId}` : '/api/settings/mcp-servers', {
+        method: editingMcpId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({
+          name: mcpForm.name.trim(),
+          endpoint: mcpForm.endpoint.trim(),
+          enabled: mcpForm.enabled,
+          allowedTools: mcpForm.allowedTools.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean),
+          timeoutMs: Number(mcpForm.timeoutMs),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMcpError(data.error || '儲存 MCP server 失敗');
+      } else {
+        clearMcpServerRuntimeState(data.id);
+        resetMcpForm();
+        await fetchMcpServers();
+      }
+    } catch {
+      setMcpError('儲存 MCP server 失敗');
+    }
+    setMcpSaving(false);
+  };
+
+  const handleEditMcpServer = (server: McpServerInfo) => {
+    setEditingMcpId(server.id);
+    clearMcpServerRuntimeState(server.id);
+    setMcpForm({
+      name: server.name,
+      endpoint: server.endpoint,
+      enabled: server.enabled,
+      allowedTools: server.allowedTools.join('\n'),
+      timeoutMs: String(server.timeoutMs),
+    });
+  };
+
+  const handleDeleteMcpServer = async (server: McpServerInfo) => {
+    if (!window.confirm(`確定刪除 MCP server「${server.name}」？`)) return;
+    setMcpActionLoading(prev => ({ ...prev, [server.id]: 'delete' }));
+    try {
+      const res = await fetch(`/api/settings/mcp-servers/${server.id}`, {
+        method: 'DELETE',
+        headers: bridgeAuthHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setMcpError(data.error || '刪除 MCP server 失敗');
+      } else {
+        clearMcpServerRuntimeState(server.id);
+        await fetchMcpServers();
+        if (editingMcpId === server.id) resetMcpForm();
+      }
+    } catch {
+      setMcpError('刪除 MCP server 失敗');
+    }
+    setMcpActionLoading(prev => {
+      const next = { ...prev };
+      delete next[server.id];
+      return next;
+    });
+  };
+
+  const handleTestMcpServer = async (server: McpServerInfo) => {
+    setMcpActionLoading(prev => ({ ...prev, [server.id]: 'test' }));
+    try {
+      const res = await fetch(`/api/settings/mcp-servers/${server.id}/test`, {
+        method: 'POST',
+        headers: bridgeAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        clearMcpServerRuntimeState(server.id);
+        setMcpTestResults(prev => ({ ...prev, [server.id]: { ok: false, error: data.error || '測試失敗' } }));
+      } else {
+        setMcpTestResults(prev => ({ ...prev, [server.id]: data }));
+      }
+    } catch {
+      setMcpTestResults(prev => ({ ...prev, [server.id]: { ok: false, error: '測試失敗' } }));
+    }
+    setMcpActionLoading(prev => {
+      const next = { ...prev };
+      delete next[server.id];
+      return next;
+    });
+  };
+
+  const handleLoadMcpTools = async (server: McpServerInfo) => {
+    setMcpActionLoading(prev => ({ ...prev, [server.id]: 'tools' }));
+    try {
+      const res = await fetch(`/api/settings/mcp-servers/${server.id}/tools`, {
+        headers: bridgeAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        clearMcpServerRuntimeState(server.id);
+        setMcpError(data.error || '載入 MCP tools 失敗');
+      } else {
+        setMcpTools(prev => ({ ...prev, [server.id]: data.tools || [] }));
+      }
+    } catch {
+      clearMcpServerRuntimeState(server.id);
+      setMcpError('載入 MCP tools 失敗');
+    }
+    setMcpActionLoading(prev => {
+      const next = { ...prev };
+      delete next[server.id];
+      return next;
+    });
   };
 
   // ─── Skill management ─────────────────────────────
@@ -1026,6 +1228,134 @@ export default function SettingsPage() {
           {ctdMsg && (
             <p style={ctdMsg === '已儲存' ? styles.successText : styles.errorText}>{ctdMsg}</p>
           )}
+        </section>
+
+        <section style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>MCP Servers</h2>
+            <div style={styles.sectionDivider} />
+            <span style={styles.badge}>{mcpServers.length} 個</span>
+          </div>
+
+          <p style={styles.hint}>管理員可在這裡管理自架 HTTP MCP server。第一個建議接入的是 `mssql-mcp` → `http://srvhpgit1:32500/mcp`。</p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+            <div>
+              <label style={styles.label}>Server 名稱</label>
+              <input style={styles.input} value={mcpForm.name} onChange={e => setMcpForm(prev => ({ ...prev, name: e.target.value }))} placeholder="mssql-mcp" />
+            </div>
+            <div>
+              <label style={styles.label}>Timeout (ms)</label>
+              <input style={styles.input} value={mcpForm.timeoutMs} onChange={e => setMcpForm(prev => ({ ...prev, timeoutMs: e.target.value }))} placeholder="15000" />
+            </div>
+          </div>
+
+          <div style={{ marginTop: '12px' }}>
+            <label style={styles.label}>HTTP Endpoint</label>
+            <input style={styles.input} value={mcpForm.endpoint} onChange={e => setMcpForm(prev => ({ ...prev, endpoint: e.target.value }))} placeholder="http://srvhpgit1:32500/mcp" />
+          </div>
+
+          <div style={{ marginTop: '12px' }}>
+            <label style={styles.label}>Allowed Tools</label>
+            <textarea
+              style={{ ...styles.input, minHeight: 80, resize: 'vertical', whiteSpace: 'pre' }}
+              value={mcpForm.allowedTools}
+              onChange={e => setMcpForm(prev => ({ ...prev, allowedTools: e.target.value }))}
+              placeholder={'每行一個 tool name；留白代表顧問模式不會呼叫任何 tool'}
+            />
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={mcpForm.enabled} onChange={e => setMcpForm(prev => ({ ...prev, enabled: e.target.checked }))} />
+            啟用此 MCP server（scope: consultant）
+          </label>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+            <button type="button" style={{ ...styles.primaryBtn, ...(mcpSaving ? styles.btnDisabled : {}) }} onClick={handleSaveMcpServer} disabled={mcpSaving}>
+              {mcpSaving ? '儲存中...' : editingMcpId ? '更新 MCP Server' : '新增 MCP Server'}
+            </button>
+            <button type="button" style={styles.cancelBtn} onClick={resetMcpForm}>重設</button>
+          </div>
+          {mcpError && <p style={styles.errorText}>{mcpError}</p>}
+
+          <div style={{ marginTop: '18px' }}>
+            {mcpLoading ? (
+              <p style={styles.loadingText}>載入中...</p>
+            ) : mcpServers.length === 0 ? (
+              <p style={styles.loadingText}>尚未設定 MCP server</p>
+            ) : (
+              <div style={styles.tableWrap}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Name</th>
+                      <th style={styles.th}>Endpoint</th>
+                      <th style={styles.th}>Status</th>
+                      <th style={styles.th}>Allowed Tools</th>
+                      <th style={{ ...styles.th, textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mcpServers.map((server, index) => {
+                      const testResult = mcpTestResults[server.id];
+                      const tools = mcpTools[server.id] || [];
+                      const action = mcpActionLoading[server.id];
+                      return (
+                        <tr key={server.id} style={index % 2 === 0 ? {} : styles.evenRow}>
+                          <td style={styles.td}>
+                            <div style={{ fontWeight: 600 }}>{server.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{server.transport} / {server.scope}</div>
+                          </td>
+                          <td style={styles.td}>
+                            <code style={styles.inlineCode}>{server.endpoint}</code>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>timeout {server.timeoutMs}ms</div>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{ ...(server.enabled ? styles.statusActive : styles.statusDisabled), ...styles.statusBadge }}>
+                              {server.enabled ? 'enabled' : 'disabled'}
+                            </span>
+                            {testResult && (
+                              <div style={{ marginTop: 6, fontSize: 11, color: testResult.ok ? '#15803d' : '#dc2626' }}>
+                                {testResult.ok
+                                  ? `OK${testResult.serverInfo?.name ? ` · ${testResult.serverInfo.name}` : ''}`
+                                  : `失敗 · ${testResult.error}`}
+                              </div>
+                            )}
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                              {server.allowedTools.length > 0 ? server.allowedTools.join(', ') : '未授權（不呼叫任何 tool）'}
+                            </div>
+                            {tools.length > 0 && (
+                              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                                tools: {tools.map(tool => tool.name).join(', ')}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ ...styles.td, textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              <button type="button" style={styles.actionBtnNeutral} onClick={() => handleEditMcpServer(server)}>編輯</button>
+                              <button type="button" style={styles.actionBtnGreen} onClick={() => handleTestMcpServer(server)} disabled={action === 'test'}>
+                                {action === 'test' ? '測試中...' : '測試'}
+                              </button>
+                              <button type="button" style={styles.actionBtnWarn} onClick={() => handleLoadMcpTools(server)} disabled={action === 'tools'}>
+                                {action === 'tools' ? '讀取中...' : '列工具'}
+                              </button>
+                              <button type="button" style={styles.deleteBtn} onClick={() => handleDeleteMcpServer(server)} disabled={action === 'delete'} title="刪除此 MCP server">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </section>
 
         {/* ── Section: Token Usage ─────────────────────── */}
@@ -1829,6 +2159,7 @@ const styles: Record<string, React.CSSProperties> = {
   td: { padding: '10px 12px', borderBottom: '1px solid var(--bg-hover)' },
   evenRow: { backgroundColor: 'var(--bg-primary)' },
   keySuffix: { backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
+  inlineCode: { backgroundColor: '#f8fafc', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', fontFamily: 'monospace', wordBreak: 'break-all' as const },
   statNum: { fontWeight: 600, color: 'var(--text-primary)' },
   statLabel: { color: 'var(--text-muted)', fontSize: '12px' },
   deleteBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: 'var(--bg-secondary)', color: '#ef4444', cursor: 'pointer', padding: 0, transition: 'background-color 0.15s' },

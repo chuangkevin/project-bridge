@@ -5,6 +5,8 @@ import {
   getKeyList, addApiKey, removeApiKey, getUsageStats,
   getGeminiModel, invalidateKeyCache,
 } from '../services/geminiKeys';
+import { deleteMcpServer, getMcpServer, listMcpServers, upsertMcpServer } from '../services/mcpRegistry';
+import { listMcpTools, testMcpServer } from '../services/mcpHttpClient';
 
 const router = Router();
 
@@ -291,6 +293,99 @@ router.get('/token-usage', (_req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Error getting usage stats:', err);
     return res.status(500).json({ error: 'Failed to get usage stats' });
+  }
+});
+
+// ─── MCP Server Management ──────────────────────────
+
+router.get('/mcp-servers', (_req: Request, res: Response) => {
+  try {
+    return res.json({ servers: listMcpServers() });
+  } catch (err: any) {
+    console.error('Error listing MCP servers:', err);
+    return res.status(500).json({ error: 'Failed to list MCP servers' });
+  }
+});
+
+router.post('/mcp-servers', (req: Request, res: Response) => {
+  try {
+    const { name, endpoint, enabled, allowedTools, timeoutMs } = req.body || {};
+    if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Server name is required' });
+    if (!endpoint || typeof endpoint !== 'string') return res.status(400).json({ error: 'Endpoint is required' });
+    if (!/^https?:\/\//i.test(endpoint)) return res.status(400).json({ error: 'Endpoint must start with http:// or https://' });
+
+    const server = upsertMcpServer({
+      name,
+      endpoint,
+      enabled: enabled !== false,
+      allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
+      timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
+    });
+    return res.status(201).json(server);
+  } catch (err: any) {
+    console.error('Error creating MCP server:', err);
+    return res.status(500).json({ error: 'Failed to create MCP server' });
+  }
+});
+
+router.put('/mcp-servers/:id', (req: Request, res: Response) => {
+  try {
+    const serverId = String(req.params.id);
+    const existing = getMcpServer(serverId);
+    if (!existing) return res.status(404).json({ error: 'MCP server not found' });
+
+    const { name, endpoint, enabled, allowedTools, timeoutMs } = req.body || {};
+    if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Server name is required' });
+    if (!endpoint || typeof endpoint !== 'string') return res.status(400).json({ error: 'Endpoint is required' });
+    if (!/^https?:\/\//i.test(endpoint)) return res.status(400).json({ error: 'Endpoint must start with http:// or https://' });
+
+    const server = upsertMcpServer({
+      id: serverId,
+      name,
+      endpoint,
+      enabled: enabled !== false,
+      allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
+      timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
+    });
+    return res.json(server);
+  } catch (err: any) {
+    console.error('Error updating MCP server:', err);
+    return res.status(500).json({ error: 'Failed to update MCP server' });
+  }
+});
+
+router.delete('/mcp-servers/:id', (req: Request, res: Response) => {
+  try {
+    const deleted = deleteMcpServer(String(req.params.id));
+    if (!deleted) return res.status(404).json({ error: 'MCP server not found' });
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error deleting MCP server:', err);
+    return res.status(500).json({ error: 'Failed to delete MCP server' });
+  }
+});
+
+router.post('/mcp-servers/:id/test', async (req: Request, res: Response) => {
+  try {
+    const server = getMcpServer(String(req.params.id));
+    if (!server) return res.status(404).json({ error: 'MCP server not found' });
+    const result = await testMcpServer(server);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Error testing MCP server:', err);
+    return res.status(500).json({ error: 'Failed to test MCP server' });
+  }
+});
+
+router.get('/mcp-servers/:id/tools', async (req: Request, res: Response) => {
+  try {
+    const server = getMcpServer(String(req.params.id));
+    if (!server) return res.status(404).json({ error: 'MCP server not found' });
+    const tools = await listMcpTools(server);
+    return res.json({ tools });
+  } catch (err: any) {
+    console.error('Error listing MCP tools:', err);
+    return res.status(500).json({ error: err?.message || 'Failed to list MCP tools' });
   }
 });
 

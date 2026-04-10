@@ -26,6 +26,7 @@ import {
   ReviewDocumentInput,
   ReviewSkillInput,
 } from '../services/specReviewAgent';
+import { gatherConsultantMcpEvidence } from '../services/mcpConsultantEvidence';
 
 const router = Router();
 
@@ -83,7 +84,8 @@ const qaSystemPromptBase = `你是一位資深產品架構師和 UI/UX 顧問，
 - 原始需求/規格文件優先於 AI 二次整理文件
 - 先保留 API contract 與明確規則，再做架構建議
 - 如果多份文件互相衝突，先列出差異與依據，再給結論
-- 不得把推測當成已確認事實；不確定的地方明確標註「⚠️ 需確認」`;
+- 不得把推測當成已確認事實；不確定的地方明確標註「⚠️ 需確認」
+- 若有 MCP evidence，必須明確區分「MCP 查證結果」與「模型推論」`;
 
 function decodeStoredFileName(name: string): string {
   try {
@@ -950,6 +952,11 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
       const consultantMode = chooseConsultantMode(userContent, qaDocs);
       richQaPrompt += buildConsultantModeInstruction(consultantMode);
+
+      const mcpEvidence = await gatherConsultantMcpEvidence(userContent, consultantMode);
+      if (mcpEvidence?.block) {
+        richQaPrompt += `\n\n${mcpEvidence.block}`;
+      }
 
       if (qaDocs.length > 0) {
         const reviewBlock = await buildHighFidelityReviewBlock(
