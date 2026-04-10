@@ -18,3 +18,4 @@
 - `mssql-mcp` get-table-schema can return a successful payload with `content: []` for typoed table names; consultant-mode must treat that exact shape as a lookup miss and then run list-all-tables typo matching.
 - When typo fallback cannot deterministically resolve a table name, consultant-mode now exposes only a very short high-confidence candidate list (not evidence) for the LLM to judge, instead of dumping loose fuzzy matches.
 - Deployments should no longer rely on Docker `latest`; project-bridge now uses SHA-pinned image tags in CI/CD so the deployed image can be traced back to the exact commit.
+- For schema/table confirmation turns with fresh MCP evidence or candidates, consultant mode now shortens history and injects a per-turn priority block so current lookup results override stale typo-related chat history.

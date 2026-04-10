@@ -162,6 +162,12 @@ Settings 頁新增 MCP Servers 區塊。
 - 若錯誤發生在 streaming 過程中（已送出部分 chunk 後），恢復 prompt 應要求模型從最後已輸出的 tail 繼續，而不是重複整段答案
 - 降級後仍需保留既有 `MAX_TOKENS` auto-continue 行為，避免只拿到半段答案
 
+### Current-turn schema priority
+
+- 若本輪問題是 schema/table 確認，且本輪已有 `MCP EVIDENCE` 或 `MCP CANDIDATES`
+- 應在 system prompt 中加入 per-turn 高優先指示，要求模型以本輪 lookup 結果為主，而不是被先前 typo 對話帶走
+- 這類 turn 的 history window 應縮短，避免舊對話壓過本輪查證結果
+
 ### Timeout
 
 - 單次 tool call 超時後立刻終止等待

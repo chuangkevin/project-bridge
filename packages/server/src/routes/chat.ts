@@ -960,6 +960,19 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       if (mcpEvidence?.block) {
         richQaPrompt += `\n\n${mcpEvidence.block}`;
       }
+      const hasCurrentSchemaLookup = ['spec-review', 'architecture-review'].includes(consultantMode)
+        && !!mcpEvidence
+        && (mcpEvidence.items.length > 0 || mcpEvidence.candidates.length > 0);
+      if (hasCurrentSchemaLookup) {
+        richQaPrompt += `\n\n=== CURRENT TURN SCHEMA PRIORITY ===
+This turn is a DB schema/table confirmation request with fresh MCP lookup results.
+- Prioritize the current turn's MCP EVIDENCE and MCP CANDIDATES over older conversation history.
+- Do NOT answer mainly from earlier typo discussions.
+- If MCP EVIDENCE confirms a table, answer with that table's schema directly.
+- If MCP CANDIDATES strongly suggest a likely intended table, state the most likely table directly and clearly label it as inference, then answer from the confirmed schema only if a lookup succeeded.
+- Do NOT ask the user to reconfirm the typo when the current-turn MCP results already provide a strong likely table.
+===`;
+      }
 
       if (qaDocs.length > 0) {
         const reviewBlock = await buildHighFidelityReviewBlock(
@@ -1026,8 +1039,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             systemInstruction: richQaPrompt,
             generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
           });
+          const qaHistory = (hasCurrentSchemaLookup ? history.slice(-2) : history.slice(-10));
           const chatSession = model.startChat({
-            history: history.slice(-10).map(h => ({
+            history: qaHistory.map(h => ({
               role: h.role === 'assistant' ? 'model' as const : 'user' as const,
               parts: [{ text: h.content.startsWith('<') ? '[前一次生成的原型]' : h.content.slice(0, 2000) }],
             })),
