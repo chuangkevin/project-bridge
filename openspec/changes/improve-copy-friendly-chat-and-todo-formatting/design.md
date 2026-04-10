@@ -34,6 +34,13 @@
 
 這樣使用者可直接把 checklist 複製到外部工具或聊天室。
 
+另外 todo-list 本身應升級成互動式區塊：
+
+- 顯示完成進度摘要
+- 支援手動收合/展開
+- 完成時用淡化樣式降低視覺噪音
+- 即使收合，也保留可複製的 summary block
+
 ## First Implementation Unit
 
 - `ChatPanel` 增加 markdown code block custom renderer

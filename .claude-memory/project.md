@@ -9,3 +9,4 @@
 - Empty homepage and empty workspace states now expose task-oriented quick-start cards so first-time users can start from requirement review, first prototype generation, or page-flow discussion without guessing the first prompt.
 - `mssql-mcp` schema confirmation works only when the client sends the tool's real argument key (`table_name`); typo-tolerant fallback should use `list-all-tables` before letting consultant mode infer anything.
 - ChatPanel now renders fenced code blocks in a dedicated copy-friendly container and mirrors generation todo-lists into a code-style block for easy copy/paste.
+- ChatPanel todo-lists now behave like an interactive block with completion summary, manual collapse, completed-state dimming, and a persistent copy-friendly summary view.

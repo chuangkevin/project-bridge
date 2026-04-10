@@ -7,6 +7,7 @@
 
 - [x] 2.1 Add a copy-friendly code-style summary block for todo-list UI
 - [x] 2.2 Keep existing status UI while improving copyability
+- [x] 2.3 Add a collapsible todo block header with completion summary and completed-state styling
 
 ## 3. Verification
 

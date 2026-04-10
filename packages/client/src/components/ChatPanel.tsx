@@ -189,6 +189,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [pageDevNames, setPageDevNames] = useState<Record<string, string>>({});
   const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
   const [todoCopied, setTodoCopied] = useState(false);
+  const [todoCollapsed, setTodoCollapsed] = useState(false);
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; options: { id: string; label: string; description: string }[]; originalText: string } | null>(null);
@@ -284,6 +285,19 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     const t = setTimeout(() => setUploadToast(null), 2500);
     return () => clearTimeout(t);
   }, [uploadToast]);
+
+  const completedTodoCount = todoItems.filter(item => item.status === 'completed').length;
+  const allTodosCompleted = todoItems.length > 0 && completedTodoCount === todoItems.length;
+
+  useEffect(() => {
+    if (todoItems.length === 0) {
+      setTodoCollapsed(false);
+      return;
+    }
+    if (!allTodosCompleted) {
+      setTodoCollapsed(false);
+    }
+  }, [allTodosCompleted, todoItems.length]);
 
   const handleArtStyleToggle = useCallback(async (enabled: boolean) => {
     setArtStyleLoading(true);
@@ -858,9 +872,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 </div>
               )}
               {todoItems.length > 0 && !chatOnlyMode && (
-                <div style={styles.todoPanel} data-testid="generation-todo-list">
+                <div style={{ ...styles.todoPanel, ...(allTodosCompleted ? styles.todoPanelCompleted : {}) }} data-testid="generation-todo-list">
                   <div style={styles.todoHeaderRow}>
-                    <div style={styles.todoTitle}>執行清單</div>
+                    <button type="button" style={styles.todoSummaryBtn} onClick={() => setTodoCollapsed(prev => !prev)}>
+                      <span style={styles.todoTitle}>已完成 {completedTodoCount} 個待辦事項（共 {todoItems.length} 個）</span>
+                      <span style={styles.todoChevron}>{todoCollapsed ? '▾' : '▴'}</span>
+                    </button>
                     <button
                       type="button"
                       style={styles.todoCopyBtn}
@@ -875,19 +892,23 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                       {todoCopied ? '已複製' : '複製清單'}
                     </button>
                   </div>
-                  <div style={styles.todoList}>
-                    {todoItems.map(item => {
-                      const color = item.status === 'completed' ? '#22c55e' : item.status === 'in_progress' ? '#3b82f6' : '#94a3b8';
-                      const icon = item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○';
-                      return (
-                        <div key={item.id} style={styles.todoRow}>
-                          <span style={{ ...styles.todoIcon, color }}>{icon}</span>
-                          <span style={{ ...styles.todoText, color: item.status === 'pending' ? '#64748b' : '#1e293b' }}>{item.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <pre style={styles.todoCodeBlock}>{formatTodoItemsForCopy(todoItems)}</pre>
+                  {!todoCollapsed && (
+                    <>
+                      <div style={styles.todoList}>
+                        {todoItems.map(item => {
+                          const color = item.status === 'completed' ? '#22c55e' : item.status === 'in_progress' ? '#3b82f6' : '#94a3b8';
+                          const icon = item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○';
+                          return (
+                            <div key={item.id} style={{ ...styles.todoRow, ...(item.status === 'completed' ? styles.todoRowCompleted : {}) }}>
+                              <span style={{ ...styles.todoIcon, color }}>{icon}</span>
+                              <span style={{ ...styles.todoText, color: item.status === 'pending' ? '#64748b' : '#1e293b' }}>{item.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                  <pre style={{ ...styles.todoCodeBlock, ...(todoCollapsed ? styles.todoCodeBlockCollapsed : {}) }}>{formatTodoItemsForCopy(todoItems)}</pre>
                 </div>
               )}
             </>
@@ -2181,6 +2202,9 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '10px',
     backgroundColor: 'var(--bg-secondary, #f8fafc)',
   },
+  todoPanelCompleted: {
+    opacity: 0.82,
+  },
   todoHeaderRow: {
     display: 'flex',
     alignItems: 'center',
@@ -2188,10 +2212,28 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     marginBottom: '8px',
   },
+  todoSummaryBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    minHeight: '36px',
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+  },
   todoTitle: {
     fontSize: '12px',
     fontWeight: 700,
     color: 'var(--accent, #8E6FA7)',
+  },
+  todoChevron: {
+    fontSize: '12px',
+    color: 'var(--text-secondary)',
+    flexShrink: 0,
   },
   todoCopyBtn: {
     padding: '5px 10px',
@@ -2216,6 +2258,9 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     fontSize: '12px',
   },
+  todoRowCompleted: {
+    opacity: 0.68,
+  },
   todoIcon: {
     width: '14px',
     textAlign: 'center' as const,
@@ -2238,6 +2283,12 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'pre-wrap' as const,
     overflowX: 'auto' as const,
     fontFamily: '"SF Mono", "Fira Code", "Consolas", monospace',
+  },
+  todoCodeBlockCollapsed: {
+    marginTop: '8px',
+    maxHeight: '84px',
+    overflowY: 'auto' as const,
+    opacity: 0.92,
   },
   copyBlockWrap: {
     margin: '12px 0',
