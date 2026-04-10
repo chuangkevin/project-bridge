@@ -152,6 +152,7 @@ Settings 頁新增 MCP Servers 區塊。
 
 - 如果 Gemini streaming SDK 在顧問模式拋出 `Failed to parse stream`，應自動降級成非串流回答
 - 在降級前，先重試一次 streaming
+- 若錯誤發生在 streaming 過程中（已送出部分 chunk 後），恢復 prompt 應要求模型從最後已輸出的 tail 繼續，而不是重複整段答案
 - 降級後仍需保留既有 `MAX_TOKENS` auto-continue 行為，避免只拿到半段答案
 
 ### Timeout
