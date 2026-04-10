@@ -153,6 +153,7 @@ Settings 頁新增 MCP Servers 區塊。
 - 某些 MCP tool 可能不會 throw，而是回傳成功但沒有內容（例如 `content: []`）
 - 對 schema lookup 來說，這種形狀應視為「查無結果」，而不是有效 evidence
 - 在這種情況下，可進一步嘗試 `list-all-tables` 與 typo/closest-match fallback
+- 如果 deterministic typo match 仍無法唯一確認表名，可提供極短的高信心 candidate list 給 LLM 判斷，但必須明確標示為 non-evidence，避免把推測混成查證結果
 
 ### LLM stream parsing failure
 

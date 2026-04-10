@@ -16,3 +16,4 @@
 - Legacy deployed `mssql-mcp` settings can exist without `useRecommendedTools`; runtime normalization now only auto-enables the recommended allowlist for the exact legacy default shape so consultant-mode MCP keeps working after upgrades.
 - Consultant-mode stream recovery now also handles parse failures that happen during chunk iteration, by asking Gemini to continue from the last emitted tail instead of restarting the whole answer.
 - `mssql-mcp` get-table-schema can return a successful payload with `content: []` for typoed table names; consultant-mode must treat that exact shape as a lookup miss and then run list-all-tables typo matching.
+- When typo fallback cannot deterministically resolve a table name, consultant-mode now exposes only a very short high-confidence candidate list (not evidence) for the LLM to judge, instead of dumping loose fuzzy matches.

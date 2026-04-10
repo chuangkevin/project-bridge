@@ -11,6 +11,7 @@ interface McpEvidenceItem {
 export interface ConsultantMcpEvidence {
   block: string;
   items: McpEvidenceItem[];
+  candidates: Array<{ requested: string; options: string[] }>;
 }
 
 const MAX_MCP_TOOL_CALLS_PER_ANSWER = 6;
@@ -144,9 +145,24 @@ function isEmptySchemaResult(result: unknown): boolean {
   return Array.isArray(content) && content.length === 0;
 }
 
+function collectTableNamesFromText(text: string, names: Set<string>): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  for (const line of trimmed.split(/\r?\n/)) {
+    const candidate = line.trim().replace(/^[-*`\s]+|[-*`\s]+$/g, '');
+    if (/^[A-Za-z][A-Za-z0-9_]{2,}$/.test(candidate)) {
+      names.add(candidate);
+    }
+  }
+}
+
 function collectTableNames(value: unknown, names: Set<string>): void {
   if (Array.isArray(value)) {
     for (const item of value) collectTableNames(item, names);
+    return;
+  }
+  if (typeof value === 'string') {
+    collectTableNamesFromText(value, names);
     return;
   }
   if (!value || typeof value !== 'object') return;
@@ -169,10 +185,29 @@ function extractTableNamesFromListResult(result: any): string[] {
     try {
       collectTableNames(JSON.parse(item.text), names);
     } catch {
-      continue;
+      collectTableNamesFromText(item.text, names);
     }
   }
   return Array.from(names);
+}
+
+function rankClosestTableCandidates(requested: string, actualTables: string[]): string[] {
+  const normalizedRequested = normalizeToken(requested);
+  if (!normalizedRequested) return [];
+  const matches = actualTables.map(name => {
+    const normalizedActual = normalizeToken(name);
+    let score = Number.MAX_SAFE_INTEGER;
+    if (normalizedActual === normalizedRequested) score = 0;
+    else if (normalizedActual.includes(normalizedRequested) || normalizedRequested.includes(normalizedActual)) score = 1;
+    else score = damerauLevenshtein(normalizedRequested, normalizedActual);
+    return { name, score };
+  });
+  const shortlist = matches
+    .filter(match => match.score <= 1)
+    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
+    .slice(0, 3);
+  if (shortlist.length === 0 || shortlist.length > 2) return [];
+  return shortlist.map(match => match.name);
 }
 
 function findClosestTableMatch(candidates: string[], actualTables: string[]): string | null {
@@ -206,6 +241,7 @@ export async function gatherConsultantMcpEvidence(message: string, mode: string)
   if (servers.length === 0) return null;
 
   const evidence: McpEvidenceItem[] = [];
+  const candidates: Array<{ requested: string; options: string[] }> = [];
   const failures: string[] = [];
   const tableCandidates = extractTableCandidates(message);
   const budget: ToolBudget = { remaining: MAX_MCP_TOOL_CALLS_PER_ANSWER };
@@ -259,7 +295,14 @@ export async function gatherConsultantMcpEvidence(message: string, mode: string)
           try {
             const actualTables = await ensureTableList();
             const matchedTable = findClosestTableMatch([tableName], actualTables);
-            if (!matchedTable || budget.remaining <= 0) continue;
+            if (!matchedTable) {
+              const options = rankClosestTableCandidates(tableName, actualTables);
+              if (options.length > 0) {
+                candidates.push({ requested: tableName, options });
+              }
+              continue;
+            }
+            if (budget.remaining <= 0) continue;
             const result = await tryGetTableSchema(server, schemaTool, matchedTable, budget);
             if (isEmptySchemaResult(result)) continue;
             evidence.push({
@@ -296,7 +339,7 @@ export async function gatherConsultantMcpEvidence(message: string, mode: string)
     if (budget.remaining <= 0) break;
   }
 
-  if (evidence.length === 0 && failures.length === 0) return null;
+  if (evidence.length === 0 && failures.length === 0 && candidates.length === 0) return null;
 
   let block = '';
   if (evidence.length > 0) {
@@ -317,5 +360,15 @@ export async function gatherConsultantMcpEvidence(message: string, mode: string)
     block += '=== END MCP LIMITATIONS ===';
   }
 
-  return { block, items: evidence };
+  if (candidates.length > 0) {
+    block += `${block ? '\n\n' : ''}=== MCP CANDIDATES (NOT EVIDENCE) ===\n`;
+    for (const candidate of candidates) {
+      block += `- Requested: ${candidate.requested}\n`;
+      block += `  Possible tables: ${candidate.options.join(', ')}\n`;
+    }
+    block += 'These are candidate table names from list-all-tables. They are not confirmed schema evidence. Use them only to judge the most likely intended table and clearly mark that judgment as inference unless a schema lookup succeeds.\n';
+    block += '=== END MCP CANDIDATES ===';
+  }
+
+  return { block, items: evidence, candidates };
 }
