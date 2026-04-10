@@ -8,9 +8,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Exact image tag to deploy (commit SHA or explicit tag)'
+        required: true
+        type: string
 
 env:
   DOCKERHUB_USERNAME: kevin950805
+  IMAGE_NAME: project-bridge
 
 jobs:
   deploy:
@@ -20,6 +26,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Resolve image tag
+        id: resolve-image
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "image_tag=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "image_tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
@@ -46,15 +63,18 @@ jobs:
           DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_TAG: ${{ steps.resolve-image.outputs.image_tag }}
         run: |
           ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_SERVER_IP}" "mkdir -p '${DEPLOY_PATH}'"
           scp -i ~/.ssh/deploy_key docker-compose.yml "${DEPLOY_USER}@${DEPLOY_SERVER_IP}:${DEPLOY_PATH}/docker-compose.yml"
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_SERVER_IP}" "printf 'IMAGE_TAG=${IMAGE_TAG}\n' > '${DEPLOY_PATH}/.env'"
 
       - name: Deploy via SSH
         env:
           DEPLOY_SERVER_IP: ${{ secrets.DEPLOY_SERVER_IP }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_TAG: ${{ steps.resolve-image.outputs.image_tag }}
         run: |
           ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_SERVER_IP}" "
             set -e
@@ -85,6 +105,8 @@ jobs:
 
             echo \"Navigating to deployment directory...\"
             cd \"${DEPLOY_PATH}\"
+
+            export IMAGE_TAG='${IMAGE_TAG}'
 
             retry_pull
 
@@ -118,7 +140,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Server**: \`${{ secrets.DEPLOY_SERVER_IP }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image**: \`${{ env.DOCKERHUB_USERNAME }}/project-bridge:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.resolve-image.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Port**: 5123:3001" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Deployed at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
