@@ -138,6 +138,12 @@ function summarizeResult(result: unknown): string {
   return text.length > 500 ? text.slice(0, 500) + '...' : text;
 }
 
+function isEmptySchemaResult(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  const content = (result as { content?: unknown }).content;
+  return Array.isArray(content) && content.length === 0;
+}
+
 function collectTableNames(value: unknown, names: Set<string>): void {
   if (Array.isArray(value)) {
     for (const item of value) collectTableNames(item, names);
@@ -238,6 +244,9 @@ export async function gatherConsultantMcpEvidence(message: string, mode: string)
         if (budget.remaining <= 0) break;
         try {
           const result = await tryGetTableSchema(server, schemaTool, tableName, budget);
+          if (isEmptySchemaResult(result)) {
+            throw new Error('Schema lookup returned empty content');
+          }
           evidence.push({
             server: server.name,
             tool: schemaTool.name,
@@ -252,6 +261,7 @@ export async function gatherConsultantMcpEvidence(message: string, mode: string)
             const matchedTable = findClosestTableMatch([tableName], actualTables);
             if (!matchedTable || budget.remaining <= 0) continue;
             const result = await tryGetTableSchema(server, schemaTool, matchedTable, budget);
+            if (isEmptySchemaResult(result)) continue;
             evidence.push({
               server: server.name,
               tool: schemaTool.name,

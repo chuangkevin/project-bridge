@@ -148,6 +148,12 @@ Settings 頁新增 MCP Servers 區塊。
 - 顧問模式仍可回答
 - 但必須明說：「MCP 查證失敗，以下為基於現有文件與推理的回答」
 
+### Empty-but-successful lookup responses
+
+- 某些 MCP tool 可能不會 throw，而是回傳成功但沒有內容（例如 `content: []`）
+- 對 schema lookup 來說，這種形狀應視為「查無結果」，而不是有效 evidence
+- 在這種情況下，可進一步嘗試 `list-all-tables` 與 typo/closest-match fallback
+
 ### LLM stream parsing failure
 
 - 如果 Gemini streaming SDK 在顧問模式拋出 `Failed to parse stream`，應自動降級成非串流回答

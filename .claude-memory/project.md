@@ -15,3 +15,4 @@
 - Consultant-mode stream fallback now retries Gemini streaming once before switching to non-stream AI output, so transient stream parsing glitches do not immediately degrade the response path.
 - Legacy deployed `mssql-mcp` settings can exist without `useRecommendedTools`; runtime normalization now only auto-enables the recommended allowlist for the exact legacy default shape so consultant-mode MCP keeps working after upgrades.
 - Consultant-mode stream recovery now also handles parse failures that happen during chunk iteration, by asking Gemini to continue from the last emitted tail instead of restarting the whole answer.
+- `mssql-mcp` get-table-schema can return a successful payload with `content: []` for typoed table names; consultant-mode must treat that exact shape as a lookup miss and then run list-all-tables typo matching.
