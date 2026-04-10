@@ -143,6 +143,11 @@ Settings 頁新增 MCP Servers 區塊。
 - 顧問模式仍可回答
 - 但必須明說：「MCP 查證失敗，以下為基於現有文件與推理的回答」
 
+### LLM stream parsing failure
+
+- 如果 Gemini streaming SDK 在顧問模式拋出 `Failed to parse stream`，應自動降級成非串流回答
+- 降級後仍需保留既有 `MAX_TOKENS` auto-continue 行為，避免只拿到半段答案
+
 ### Timeout
 
 - 單次 tool call 超時後立刻終止等待

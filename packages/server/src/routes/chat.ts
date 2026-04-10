@@ -1037,7 +1037,38 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           const firstTurnParts: any[] = [{ text: userContent }, ...qaImageParts];
           let continuePrompt: string | any[] = qaImageParts.length > 0 ? firstTurnParts : userContent;
           for (let continueTurn = 0; continueTurn < 5; continueTurn++) {
-            const result = await chatSession.sendMessageStream(continuePrompt as any);
+            let result: any;
+            try {
+              result = await chatSession.sendMessageStream(continuePrompt as any);
+            } catch (streamErr: any) {
+              const streamMsg = streamErr?.message || '';
+              if (streamMsg.includes('Failed to parse stream')) {
+                console.warn('[chat-qa] Stream parse failed, falling back to non-stream response');
+                const fallback = await chatSession.sendMessage(continuePrompt as any);
+                const fallbackText = fallback.response.text();
+                if (fallbackText) {
+                  fullResponse += fallbackText;
+                  res.write(`data: ${JSON.stringify({ content: fallbackText })}\n\n`);
+                }
+                try {
+                  trackUsage(qaKey, getGeminiModel(), 'chat-qa', fallback.response.usageMetadata);
+                } catch {}
+                const fallbackFinishReason = fallback.response.candidates?.[0]?.finishReason || 'STOP';
+                if (fallbackFinishReason === 'MAX_TOKENS') {
+                  const tail = fullResponse.slice(-200);
+                  const garbageRatio = (tail.match(/[-\s\n]/g) || []).length / Math.max(tail.length, 1);
+                  if (garbageRatio > 0.8) {
+                    console.log(`[chat-qa] Fallback auto-continue stopped — tail is ${Math.round(garbageRatio * 100)}% garbage`);
+                    break;
+                  }
+                  console.log(`[chat-qa] Fallback response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
+                  continuePrompt = '繼續。不要加分隔線，不要重複前面的內容，直接從斷掉的地方往下寫。';
+                  continue;
+                }
+                break;
+              }
+              throw streamErr;
+            }
             // Subsequent turns are text-only
             if (continueTurn === 0) continuePrompt = '' as any;
             for await (const chunk of result.stream) {
