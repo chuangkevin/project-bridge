@@ -309,7 +309,7 @@ router.get('/mcp-servers', (_req: Request, res: Response) => {
 
 router.post('/mcp-servers', (req: Request, res: Response) => {
   try {
-    const { name, endpoint, enabled, allowedTools, timeoutMs } = req.body || {};
+    const { name, endpoint, enabled, useRecommendedTools, allowedTools, timeoutMs } = req.body || {};
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Server name is required' });
     if (!endpoint || typeof endpoint !== 'string') return res.status(400).json({ error: 'Endpoint is required' });
     if (!/^https?:\/\//i.test(endpoint)) return res.status(400).json({ error: 'Endpoint must start with http:// or https://' });
@@ -318,6 +318,7 @@ router.post('/mcp-servers', (req: Request, res: Response) => {
       name,
       endpoint,
       enabled: enabled !== false,
+      useRecommendedTools: useRecommendedTools === true,
       allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
       timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
     });
@@ -334,7 +335,7 @@ router.put('/mcp-servers/:id', (req: Request, res: Response) => {
     const existing = getMcpServer(serverId);
     if (!existing) return res.status(404).json({ error: 'MCP server not found' });
 
-    const { name, endpoint, enabled, allowedTools, timeoutMs } = req.body || {};
+    const { name, endpoint, enabled, useRecommendedTools, allowedTools, timeoutMs } = req.body || {};
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Server name is required' });
     if (!endpoint || typeof endpoint !== 'string') return res.status(400).json({ error: 'Endpoint is required' });
     if (!/^https?:\/\//i.test(endpoint)) return res.status(400).json({ error: 'Endpoint must start with http:// or https://' });
@@ -344,6 +345,7 @@ router.put('/mcp-servers/:id', (req: Request, res: Response) => {
       name,
       endpoint,
       enabled: enabled !== false,
+      useRecommendedTools: useRecommendedTools === true,
       allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
       timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
     });

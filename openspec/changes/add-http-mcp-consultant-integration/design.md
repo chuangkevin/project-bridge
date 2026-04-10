@@ -124,6 +124,11 @@ Settings 頁新增 MCP Servers 區塊。
 - List tools
 - 顯示最近一次測試結果
 
+對已知 server 可提供明確的推薦白名單切換，而不是用空白 allowlist 承載雙重語意。第一個例子是 `mssql-mcp`：
+
+- recommended tools: `get-table-schema`, `list-all-tables`
+- admin 應能明確知道目前是「使用建議白名單」還是「自訂 allowlist」
+
 第一階段不需要做複雜權限管理 UI。
 
 ## Failure Handling

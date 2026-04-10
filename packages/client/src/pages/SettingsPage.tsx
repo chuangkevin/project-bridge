@@ -32,6 +32,7 @@ interface McpServerInfo {
   endpoint: string;
   enabled: boolean;
   scope: 'consultant';
+  useRecommendedTools: boolean;
   allowedTools: string[];
   timeoutMs: number;
   createdAt: string;
@@ -129,13 +130,15 @@ export default function SettingsPage() {
     name: 'mssql-mcp',
     endpoint: 'http://srvhpgit1:32500/mcp',
     enabled: true,
-    allowedTools: '',
+    useRecommendedTools: true,
+    allowedTools: 'get-table-schema\nlist-all-tables',
     timeoutMs: '15000',
   });
   const [mcpSaving, setMcpSaving] = useState(false);
   const [mcpTestResults, setMcpTestResults] = useState<Record<string, McpTestResult>>({});
   const [mcpTools, setMcpTools] = useState<Record<string, { name: string; description?: string }[]>>({});
   const [mcpActionLoading, setMcpActionLoading] = useState<Record<string, 'test' | 'tools' | 'save' | 'delete'>>({});
+  const mcpSupportsRecommendedTools = (name: string) => name.trim().toLowerCase() === 'mssql-mcp';
 
   // Usage stats
   const [usage, setUsage] = useState<UsageStats | null>(null);
@@ -583,7 +586,8 @@ export default function SettingsPage() {
       name: 'mssql-mcp',
       endpoint: 'http://srvhpgit1:32500/mcp',
       enabled: true,
-      allowedTools: '',
+      useRecommendedTools: true,
+      allowedTools: 'get-table-schema\nlist-all-tables',
       timeoutMs: '15000',
     });
   };
@@ -638,6 +642,7 @@ export default function SettingsPage() {
           name: mcpForm.name.trim(),
           endpoint: mcpForm.endpoint.trim(),
           enabled: mcpForm.enabled,
+          useRecommendedTools: mcpSupportsRecommendedTools(mcpForm.name) && mcpForm.useRecommendedTools,
           allowedTools: mcpForm.allowedTools.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean),
           timeoutMs: Number(mcpForm.timeoutMs),
         }),
@@ -663,6 +668,7 @@ export default function SettingsPage() {
       name: server.name,
       endpoint: server.endpoint,
       enabled: server.enabled,
+      useRecommendedTools: server.useRecommendedTools && mcpSupportsRecommendedTools(server.name),
       allowedTools: server.allowedTools.join('\n'),
       timeoutMs: String(server.timeoutMs),
     });
@@ -1261,8 +1267,26 @@ export default function SettingsPage() {
               style={{ ...styles.input, minHeight: 80, resize: 'vertical', whiteSpace: 'pre' }}
               value={mcpForm.allowedTools}
               onChange={e => setMcpForm(prev => ({ ...prev, allowedTools: e.target.value }))}
-              placeholder={'每行一個 tool name；留白代表顧問模式不會呼叫任何 tool'}
+              disabled={mcpSupportsRecommendedTools(mcpForm.name) && mcpForm.useRecommendedTools}
+              placeholder={'每行一個 tool name；若不使用建議白名單且這裡留白，顧問模式不會呼叫任何 tool'}
             />
+            {mcpSupportsRecommendedTools(mcpForm.name) && (
+              <>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <input
+                    type="checkbox"
+                    checked={mcpForm.useRecommendedTools}
+                    onChange={e => setMcpForm(prev => ({
+                      ...prev,
+                      useRecommendedTools: e.target.checked,
+                      allowedTools: e.target.checked ? 'get-table-schema\nlist-all-tables' : prev.allowedTools,
+                    }))}
+                  />
+                  使用 `mssql-mcp` 建議工具白名單
+                </label>
+                <p style={{ ...styles.hint, marginTop: '6px' }}>建議值：`get-table-schema`、`list-all-tables`。</p>
+              </>
+            )}
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -1324,8 +1348,11 @@ export default function SettingsPage() {
                           </td>
                           <td style={styles.td}>
                             <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                              {server.allowedTools.length > 0 ? server.allowedTools.join(', ') : '未授權（不呼叫任何 tool）'}
+                              {server.allowedTools.length > 0 ? server.allowedTools.join(', ') : '未設定允許工具（顧問模式目前不會呼叫）'}
                             </div>
+                            {server.useRecommendedTools && (
+                              <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>使用建議工具白名單</div>
+                            )}
                             {tools.length > 0 && (
                               <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
                                 tools: {tools.map(tool => tool.name).join(', ')}
@@ -2143,7 +2170,7 @@ const styles: Record<string, React.CSSProperties> = {
   sectionDivider: { flex: 1, height: '1px', backgroundColor: 'var(--border-primary)' },
   badge: { padding: '2px 8px', borderRadius: '10px', backgroundColor: 'var(--bg-hover)', fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' },
   loadingText: { color: 'var(--text-secondary)', fontSize: '14px', margin: 0 },
-  infoNotice: { padding: '10px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '13px', color: '#1e40af', marginBottom: '12px' },
+  infoNotice: { padding: '10px 12px', backgroundColor: 'var(--bg-secondary)', border: '1px solid color-mix(in srgb, var(--accent, #8E6FA7) 30%, var(--border-primary, #e2e8f0))', borderRadius: '8px', fontSize: '13px', color: 'var(--text-primary)', marginBottom: '12px' },
   label: { display: 'block', fontSize: '14px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '4px' },
   hint: { margin: '0 0 8px', fontSize: '12px', color: 'var(--text-muted)' },
   inputRow: { display: 'flex', gap: '8px', alignItems: 'center' },
@@ -2158,8 +2185,8 @@ const styles: Record<string, React.CSSProperties> = {
   th: { padding: '8px 12px', textAlign: 'left' as const, fontWeight: 600, color: 'var(--text-secondary)', fontSize: '12px', borderBottom: '1px solid var(--border-primary)', backgroundColor: 'var(--bg-primary)' },
   td: { padding: '10px 12px', borderBottom: '1px solid var(--bg-hover)' },
   evenRow: { backgroundColor: 'var(--bg-primary)' },
-  keySuffix: { backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
-  inlineCode: { backgroundColor: '#f8fafc', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', fontFamily: 'monospace', wordBreak: 'break-all' as const },
+  keySuffix: { backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-primary)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace', color: 'var(--text-primary)' },
+  inlineCode: { backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-primary)', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', fontFamily: 'monospace', wordBreak: 'break-all' as const, color: 'var(--text-primary)' },
   statNum: { fontWeight: 600, color: 'var(--text-primary)' },
   statLabel: { color: 'var(--text-muted)', fontSize: '12px' },
   deleteBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: 'var(--bg-secondary)', color: '#ef4444', cursor: 'pointer', padding: 0, transition: 'background-color 0.15s' },
@@ -2175,16 +2202,16 @@ const styles: Record<string, React.CSSProperties> = {
   prefField: { display: 'flex', flexDirection: 'column' as const },
   select: { padding: '10px 12px', border: '1px solid var(--border-primary)', borderRadius: '8px', fontSize: '14px', color: 'var(--text-primary)', backgroundColor: 'var(--bg-input)', cursor: 'pointer', outline: 'none' },
   // User management action buttons
-  actionBtnWarn: { padding: '4px 10px', border: '1px solid #fed7aa', borderRadius: '6px', backgroundColor: '#fff7ed', color: '#c2410c', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
-  actionBtnGreen: { padding: '4px 10px', border: '1px solid #bbf7d0', borderRadius: '6px', backgroundColor: '#f0fdf4', color: '#15803d', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
-  actionBtnNeutral: { padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: '#f8fafc', color: '#475569', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  actionBtnWarn: { padding: '4px 10px', border: '1px solid color-mix(in srgb, #f59e0b 35%, var(--border-primary))', borderRadius: '6px', backgroundColor: 'color-mix(in srgb, #f59e0b 10%, var(--bg-secondary))', color: '#f59e0b', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  actionBtnGreen: { padding: '4px 10px', border: '1px solid color-mix(in srgb, #22c55e 35%, var(--border-primary))', borderRadius: '6px', backgroundColor: 'color-mix(in srgb, #22c55e 10%, var(--bg-secondary))', color: '#22c55e', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  actionBtnNeutral: { padding: '4px 10px', border: '1px solid var(--border-primary)', borderRadius: '6px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' as const },
   // Role / status badges
   roleBadge: { padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 },
-  roleBadgeAdmin: { backgroundColor: '#eff6ff', color: '#1d4ed8' },
-  roleBadgeUser: { backgroundColor: '#f8fafc', color: '#64748b' },
+  roleBadgeAdmin: { backgroundColor: 'color-mix(in srgb, var(--accent, #8E6FA7) 16%, var(--bg-secondary))', color: 'var(--accent, #8E6FA7)' },
+  roleBadgeUser: { backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' },
   statusBadge: { padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 },
-  statusActive: { backgroundColor: '#f0fdf4', color: '#15803d' },
-  statusDisabled: { backgroundColor: '#fef2f2', color: '#b91c1c' },
+  statusActive: { backgroundColor: 'color-mix(in srgb, #22c55e 12%, var(--bg-secondary))', color: '#22c55e' },
+  statusDisabled: { backgroundColor: 'color-mix(in srgb, #ef4444 12%, var(--bg-secondary))', color: '#ef4444' },
   // Design preset styles (Task 4)
   smallBtn: { padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, background: 'white', cursor: 'pointer' },
   addBtn: { padding: '8px 16px', border: '1px solid var(--border-primary)', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px', fontWeight: 500, cursor: 'pointer' },

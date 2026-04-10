@@ -11,6 +11,7 @@ export interface McpServerRecord {
   endpoint: string;
   enabled: boolean;
   scope: McpScope;
+  useRecommendedTools: boolean;
   allowedTools: string[];
   timeoutMs: number;
   createdAt: string;
@@ -18,6 +19,13 @@ export interface McpServerRecord {
 }
 
 const MCP_SETTINGS_KEY = 'mcp_servers';
+const DEFAULT_TOOLS_BY_SERVER: Record<string, string[]> = {
+  'mssql-mcp': ['get-table-schema', 'list-all-tables'],
+};
+
+function getDefaultAllowedTools(name: string): string[] {
+  return DEFAULT_TOOLS_BY_SERVER[name.trim().toLowerCase()] || [];
+}
 
 function parseServers(raw: string | null | undefined): McpServerRecord[] {
   if (!raw) return [];
@@ -35,6 +43,8 @@ function parseServers(raw: string | null | undefined): McpServerRecord[] {
 function normalizeRecord(item: any): McpServerRecord | null {
   if (!item || typeof item !== 'object') return null;
   if (typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.endpoint !== 'string') return null;
+  const explicit = Array.isArray(item.allowedTools) ? item.allowedTools.filter((tool: unknown) => typeof tool === 'string') : [];
+  const useRecommendedTools = item.useRecommendedTools === true;
   return {
     id: item.id,
     name: item.name,
@@ -42,7 +52,8 @@ function normalizeRecord(item: any): McpServerRecord | null {
     endpoint: item.endpoint,
     enabled: item.enabled !== false,
     scope: 'consultant',
-    allowedTools: Array.isArray(item.allowedTools) ? item.allowedTools.filter((tool: unknown) => typeof tool === 'string') : [],
+    useRecommendedTools,
+    allowedTools: useRecommendedTools ? getDefaultAllowedTools(item.name) : explicit,
     timeoutMs: typeof item.timeoutMs === 'number' && item.timeoutMs >= 1000 ? item.timeoutMs : 15000,
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
     updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
@@ -74,11 +85,13 @@ export function upsertMcpServer(input: {
   name: string;
   endpoint: string;
   enabled?: boolean;
+  useRecommendedTools?: boolean;
   allowedTools?: string[];
   timeoutMs?: number;
 }): McpServerRecord {
   const servers = listMcpServers();
   const now = new Date().toISOString();
+  const explicitAllowedTools = (input.allowedTools || []).map(tool => tool.trim()).filter(Boolean);
   const normalized: McpServerRecord = {
     id: input.id || randomUUID(),
     name: input.name.trim(),
@@ -86,7 +99,8 @@ export function upsertMcpServer(input: {
     endpoint: input.endpoint.trim(),
     enabled: input.enabled !== false,
     scope: 'consultant',
-    allowedTools: (input.allowedTools || []).map(tool => tool.trim()).filter(Boolean),
+    useRecommendedTools: input.useRecommendedTools === true && getDefaultAllowedTools(input.name).length > 0,
+    allowedTools: input.useRecommendedTools === true && getDefaultAllowedTools(input.name).length > 0 ? getDefaultAllowedTools(input.name) : explicitAllowedTools,
     timeoutMs: input.timeoutMs && input.timeoutMs >= 1000 ? input.timeoutMs : 15000,
     createdAt: now,
     updatedAt: now,
