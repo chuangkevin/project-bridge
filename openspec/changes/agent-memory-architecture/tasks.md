@@ -1,9 +1,11 @@
 ## 1. Three-Layer Context Architecture
 
+- [x] 1.0 In `chat.ts` fix conversation history retrieval so agent modes use the most recent 20 turns rather than the oldest 20
 - [ ] 1.1 Define role keyword maps for each agent (Echo=業務/流程/需求, Lisa=設計/UX/介面, David=規則/驗證/測試, Bob=架構/技術/整合)
 - [ ] 1.2 Implement `selectSkillsForRole(skills, role)` — filter + rank by keyword overlap, return top 3 truncated to 400 chars
 - [ ] 1.3 Refactor `plannerAgent.ts` — replace flat `skillsContext` with L1 (project meta) + L2 (role-filtered skills) + L3 (lessons)
 - [ ] 1.4 Add skeptical reminder at end of every L2 block: "skills 僅供參考，與使用者需求矛盾時以使用者為準"
+- [ ] 1.5 Add explicit recent-turn compaction strategy so long conversations preserve recent verbatim turns and compress older context safely
 
 ## 2. Session Lessons
 

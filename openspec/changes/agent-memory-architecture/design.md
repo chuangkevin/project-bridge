@@ -7,6 +7,7 @@
 - `parallelGenerator.ts` — sub-agent 已有 `selectRelevantSkills`（top 3），但 QA 只在 assembler 做
 - `htmlQaValidator.ts` — 事後 QA，報告但不修正
 - 沒有跨 session 記憶機制
+- `chat.ts` — 顧問模式與設計模式共用同一個 `conversations` 表，但需要明確保證 recent turns 的載入順序與壓縮策略正確
 
 ## Goals / Non-Goals
 
@@ -15,6 +16,7 @@
 - 同專案第二次生成時，避免重複上次的錯誤
 - Sub-agent 返回壞 HTML 時，在進入 assembler 前就攔截 retry
 - Skills 被質疑而不是盲從
+- 顧問模式與設計模式在同一專案對話中共享的 recent turns 應穩定、可預期，不因長對話而偏向最舊訊息
 
 **Non-Goals:**
 - 不做 autoDream 等背景整合（太複雜）
@@ -53,6 +55,17 @@
 ```
 
 **理由：** 比全量注入（10K tokens）省 80%，但給每個 agent 最相關的 context。
+
+### 1.5 Recent-turn Retrieval and Compaction
+
+所有模式共用的對話歷史應遵守兩個規則：
+
+1. 先抓最近 N 筆訊息，再恢復成時間正序餵給模型
+2. 若對話持續變長，應保留 recent turns verbatim，較舊內容才交由摘要/lesson 層承接
+
+最小修正先保證 query 正確抓到最近 20 筆；後續再進一步做摘要壓縮。
+
+**理由：** 若 recent-turn retrieval 出錯，顧問模式與設計模式雖然名義上共用記憶，實際上會逐漸只看到最早那批對話，導致模式切換後上下文失真。
 
 ### 2. Session Lessons 機制
 

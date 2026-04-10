@@ -423,9 +423,16 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
     console.log('[chat] Intent:', intent, effectiveChatOnly ? '(chatOnly)' : '', forceRegenerate ? '(forceRegen)' : '');
 
-    // Load conversation history (last 20 messages)
+    // Load the most recent turns, then restore chronological order for the model.
     const history = db.prepare(
-      'SELECT role, content FROM conversations WHERE project_id = ? ORDER BY created_at ASC LIMIT 20'
+      `SELECT role, content FROM (
+         SELECT role, content, created_at, rowid
+         FROM conversations
+         WHERE project_id = ?
+         ORDER BY datetime(created_at) DESC, rowid DESC
+         LIMIT 20
+       ) recent
+       ORDER BY datetime(created_at) ASC, rowid ASC`
     ).all(projectId) as { role: string; content: string }[];
 
     // Build user message, prepending file content if fileIds provided

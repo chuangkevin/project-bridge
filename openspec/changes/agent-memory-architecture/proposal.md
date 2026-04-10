@@ -7,6 +7,7 @@
 2. **不從錯誤學習** — 上次生成「物件詳情頁空白」，下次同專案同頁面還是會犯一樣的錯
 3. **Skills 被當真理** — agent 照抄 skill 規則不質疑，跟使用者需求矛盾時默默照做
 4. **Sub-agent 返回垃圾不擋** — HTML 結構壞的、內容空的，要等 assembler 才發現
+5. **最近對話記憶不穩** — chat route 原本抓的是最早 20 筆訊息而不是最近 20 筆，導致顧問模式與設計模式在長對話中共享上下文時會逐漸失真
 
 Claude Code 的三個設計原則值得學：
 - **Skeptical Memory** — 記憶只是 hint，必須驗證後才行動
@@ -16,6 +17,7 @@ Claude Code 的三個設計原則值得學：
 ## What Changes
 
 - **三層 context 架構** — plannerAgent 改成分層注入：L1 永遠載入（專案 meta）、L2 按需（相關 skills）、L3 歷史（上次 QA 結果）
+- **Recent-turn compaction** — 所有 agent 模式都應以最近對話為主，必要時再做摘要壓縮，而不是無意識地把舊訊息留在上下文前排
 - **跨 session lessons** — 每次生成後，把 QA 失敗 pattern 存到 DB，下次同專案生成時注入 agent prompt
 - **Skeptical skill injection** — agent prompt 明確要求「質疑 skill 規則是否符合當前需求」
 - **Pre-assembly validation** — sub-agent 返回 HTML 後立刻結構驗證，壞的直接 retry，不進 assembler
