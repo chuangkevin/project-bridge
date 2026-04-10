@@ -13,9 +13,79 @@ function fixBlockquoteTables(md: string): string {
 }
 
 // Memoized markdown renderer — only re-renders when content changes, not on parent re-render
+function normalizeCodeContent(children: React.ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(normalizeCodeContent).join('');
+  if (children && typeof children === 'object' && 'props' in children) {
+    return normalizeCodeContent((children as any).props?.children);
+  }
+  return '';
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const MemoMarkdown = memo(function MemoMarkdown({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{fixBlockquoteTables(content)}</ReactMarkdown>;
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]}
+      components={{
+        pre({ children }) {
+          const codeText = normalizeCodeContent(children).replace(/\n$/, '');
+          const languageMatch = /language-([\w-]+)/.exec((children as any)?.props?.className || '');
+          const languageLabel = languageMatch?.[1] || 'text';
+          return (
+            <div style={styles.copyBlockWrap}>
+              <div style={styles.copyBlockHeader}>
+                <span style={styles.copyBlockLang}>{languageLabel}</span>
+                <button
+                  type="button"
+                  style={styles.copyBlockBtn}
+                  onClick={async () => {
+                    const ok = await copyText(codeText);
+                    if (ok) {
+                      setCopiedCode(codeText);
+                      setTimeout(() => setCopiedCode(current => current === codeText ? null : current), 1800);
+                    }
+                  }}
+                >
+                  {copiedCode === codeText ? '已複製' : '複製'}
+                </button>
+              </div>
+              <pre style={styles.copyBlockPre}>{children}</pre>
+            </div>
+          );
+        },
+        code({ children, className }) {
+          const codeText = normalizeCodeContent(children);
+          const isBlockCode = !!className || codeText.includes('\n');
+          if (!isBlockCode) {
+            return <code style={styles.inlineCode}>{children}</code>;
+          }
+          return <code className={className}>{children}</code>;
+        },
+      }}
+    >
+      {fixBlockquoteTables(content)}
+    </ReactMarkdown>
+  );
 });
+
+function formatTodoItemsForCopy(items: TodoItem[]): string {
+  return items.map(item => {
+    const prefix = item.status === 'completed' ? '[x]' : item.status === 'in_progress' ? '[~]' : '[ ]';
+    return `${prefix} ${item.label}`;
+  }).join('\n');
+}
 
 function isHtmlContent(content: string): boolean {
   const t = content.trimStart().toLowerCase();
@@ -118,6 +188,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
   const [pageProgress, setPageProgress] = useState<Record<string, 'pending' | 'started' | 'done' | 'error'>>({});
   const [pageDevNames, setPageDevNames] = useState<Record<string, string>>({});
   const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
+  const [todoCopied, setTodoCopied] = useState(false);
   const [parallelMessage, setParallelMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; options: { id: string; label: string; description: string }[]; originalText: string } | null>(null);
@@ -788,7 +859,22 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               )}
               {todoItems.length > 0 && !chatOnlyMode && (
                 <div style={styles.todoPanel} data-testid="generation-todo-list">
-                  <div style={styles.todoTitle}>執行清單</div>
+                  <div style={styles.todoHeaderRow}>
+                    <div style={styles.todoTitle}>執行清單</div>
+                    <button
+                      type="button"
+                      style={styles.todoCopyBtn}
+                      onClick={async () => {
+                        const ok = await copyText(formatTodoItemsForCopy(todoItems));
+                        if (ok) {
+                          setTodoCopied(true);
+                          setTimeout(() => setTodoCopied(false), 1800);
+                        }
+                      }}
+                    >
+                      {todoCopied ? '已複製' : '複製清單'}
+                    </button>
+                  </div>
                   <div style={styles.todoList}>
                     {todoItems.map(item => {
                       const color = item.status === 'completed' ? '#22c55e' : item.status === 'in_progress' ? '#3b82f6' : '#94a3b8';
@@ -801,6 +887,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                       );
                     })}
                   </div>
+                  <pre style={styles.todoCodeBlock}>{formatTodoItemsForCopy(todoItems)}</pre>
                 </div>
               )}
             </>
@@ -2094,11 +2181,29 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '10px',
     backgroundColor: 'var(--bg-secondary, #f8fafc)',
   },
+  todoHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    marginBottom: '8px',
+  },
   todoTitle: {
     fontSize: '12px',
     fontWeight: 700,
     color: 'var(--accent, #8E6FA7)',
-    marginBottom: '8px',
+  },
+  todoCopyBtn: {
+    padding: '5px 10px',
+    minHeight: '32px',
+    borderRadius: '8px',
+    border: '1px solid var(--border-primary)',
+    backgroundColor: 'var(--bg-card)',
+    color: 'var(--text-secondary)',
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
   },
   todoList: {
     display: 'flex',
@@ -2119,6 +2224,75 @@ const styles: Record<string, React.CSSProperties> = {
   },
   todoText: {
     lineHeight: 1.4,
+  },
+  todoCodeBlock: {
+    marginTop: '10px',
+    marginBottom: 0,
+    padding: '10px 12px',
+    borderRadius: '10px',
+    border: '1px solid var(--border-primary)',
+    backgroundColor: 'var(--bg-input)',
+    color: 'var(--text-primary)',
+    fontSize: '12px',
+    lineHeight: 1.6,
+    whiteSpace: 'pre-wrap' as const,
+    overflowX: 'auto' as const,
+    fontFamily: '"SF Mono", "Fira Code", "Consolas", monospace',
+  },
+  copyBlockWrap: {
+    margin: '12px 0',
+    border: '1px solid var(--border-primary)',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    backgroundColor: 'var(--bg-card)',
+  },
+  copyBlockHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    padding: '8px 10px',
+    borderBottom: '1px solid var(--border-primary)',
+    backgroundColor: 'var(--bg-secondary)',
+  },
+  copyBlockLang: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: 'var(--text-secondary)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.04em',
+  },
+  copyBlockBtn: {
+    padding: '5px 10px',
+    minHeight: '30px',
+    borderRadius: '8px',
+    border: '1px solid var(--border-primary)',
+    backgroundColor: 'var(--bg-card)',
+    color: 'var(--text-secondary)',
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  copyBlockPre: {
+    margin: 0,
+    padding: '12px 14px',
+    backgroundColor: 'var(--bg-input)',
+    color: 'var(--text-primary)',
+    overflowX: 'auto' as const,
+    whiteSpace: 'pre-wrap' as const,
+    fontSize: '12px',
+    lineHeight: 1.65,
+    fontFamily: '"SF Mono", "Fira Code", "Consolas", monospace',
+  },
+  inlineCode: {
+    display: 'inline-block',
+    padding: '1px 6px',
+    borderRadius: '6px',
+    backgroundColor: 'var(--bg-input)',
+    border: '1px solid var(--border-primary)',
+    color: 'var(--text-primary)',
+    fontSize: '0.92em',
+    fontFamily: '"SF Mono", "Fira Code", "Consolas", monospace',
   },
   msgBubbleWrapper: {
     position: 'relative' as const,
