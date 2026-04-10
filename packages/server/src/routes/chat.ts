@@ -140,6 +140,7 @@ function buildConsultantModeInstruction(mode: ConsultantMode): string {
 你現在是 API/需求審查顧問。
 - 先列 source of truth，再列結論
 - 先整理完整 contract（API、欄位、error code、business rule）
+- 若使用者是在確認既有 DB schema / table，先回答 live schema 查證結果，不要先規劃新的資料表
 - 如果多份文件有差異，先列差異與依據，再做判斷
 - 明確區分「文件明講」與「你的推論」
 - 架構建議只能放在最後，且不能蓋過原始規格\n===`;
@@ -149,6 +150,8 @@ function buildConsultantModeInstruction(mode: ConsultantMode): string {
 - 先列已確認事實
 - 再列需確認假設
 - 最後再給專案分工、DB/ES/Job/API 設計建議
+- 若使用者是在確認既有 DB schema / table，先回答 live schema 查證結果，不要先規劃新的資料表
+- 若 MCP 已確認表存在，先列欄位與狀態，再補充風險或待確認點
 - 不得把未被文件支持的架構判斷寫成既定事實\n===`;
     case 'ux-review':
       return `\n\n=== 顧問子模式：UX Review ===
@@ -950,10 +953,10 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         ).all(...fileIds, projectId) as QaUploadedDoc[];
       }
 
-      const consultantMode = chooseConsultantMode(userContent, qaDocs);
+      const consultantMode = chooseConsultantMode(message.trim(), qaDocs);
       richQaPrompt += buildConsultantModeInstruction(consultantMode);
 
-      const mcpEvidence = await gatherConsultantMcpEvidence(userContent, consultantMode);
+      const mcpEvidence = await gatherConsultantMcpEvidence(message.trim(), consultantMode);
       if (mcpEvidence?.block) {
         richQaPrompt += `\n\n${mcpEvidence.block}`;
       }

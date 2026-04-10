@@ -41,7 +41,7 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Verify HTTP connection to `mssql-mcp` at `http://srvhpgit1:32500/mcp`
-- [ ] 7.2 Verify tool discovery succeeds against a real self-hosted MCP server
+- [x] 7.1 Verify HTTP connection to `mssql-mcp` at `http://srvhpgit1:32500/mcp`
+- [x] 7.2 Verify tool discovery succeeds against a real self-hosted MCP server
 - [ ] 7.3 Verify consultant mode can use MCP evidence in a real Q&A flow
 - [ ] 7.4 Verify fallback behavior when MCP server is unreachable or times out
