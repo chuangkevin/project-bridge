@@ -6,9 +6,9 @@
 
 ## 2. WorkspacePage Mobile Baseline
 
-- [ ] 2.1 Audit current WorkspacePage panel/overlay layout for mobile conflicts
-- [ ] 2.2 Add a single-column mobile shell for WorkspacePage
-- [ ] 2.3 Add mobile-friendly switching between chat / preview / spec / code
+- [x] 2.1 Audit current WorkspacePage panel/overlay layout for mobile conflicts
+- [x] 2.2 Add a single-column mobile shell for WorkspacePage
+- [x] 2.3 Add mobile-friendly switching between chat / preview / spec / code
 - [ ] 2.4 Move secondary tools to drawer or bottom-sheet style entry points on mobile
 
 ## 3. SettingsPage Mobile and Dark Mode
@@ -25,7 +25,7 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Verify WorkspacePage on mobile viewport
+- [x] 5.1 Verify WorkspacePage on mobile viewport
 - [ ] 5.2 Verify SettingsPage on mobile viewport in both light and dark mode
 - [ ] 5.3 Verify GlobalDesignPage on mobile viewport
-- [ ] 5.4 Re-check desktop behavior after responsive changes
+- [x] 5.4 Re-check desktop behavior after responsive changes

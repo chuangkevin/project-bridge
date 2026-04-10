@@ -89,6 +89,8 @@ export default function WorkspacePage() {
   const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
   const [activeMode, setActiveMode] = useState<'design' | 'consultant' | 'architecture'>('design');
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 960 : false);
+  const [mobileDesignSurface, setMobileDesignSurface] = useState<'chat' | 'preview' | 'spec' | 'code'>('preview');
   const { setArchData, targetPage, setTargetPage } = useArchStore();
   const [designActive, setDesignActive] = useState(false);
   const [isMultiPage, setIsMultiPage] = useState(false);
@@ -325,6 +327,18 @@ export default function WorkspacePage() {
     checkDesignActive();
     checkDesignSpec();
   }, [fetchProject, fetchAnnotations, checkDesignActive, checkDesignSpec]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobileViewport(window.innerWidth < 960);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport) return;
+    setMobileDesignSurface(viewMode === 'code' ? 'code' : 'preview');
+  }, [isMobileViewport, viewMode]);
 
   // Watch targetPage from arch store — switch to design mode and navigate to the page
   useEffect(() => {
@@ -800,6 +814,231 @@ export default function WorkspacePage() {
     fontSize: 14, transition: 'all 0.15s'
   });
 
+  const mobileSurfaceBtnStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    minHeight: '40px',
+    padding: '8px 10px',
+    borderRadius: '10px',
+    border: active ? '1px solid #8E6FA7' : '1px solid var(--border-primary)',
+    backgroundColor: active ? 'color-mix(in srgb, #8E6FA7 12%, var(--bg-card))' : 'var(--bg-card)',
+    color: active ? '#8E6FA7' : 'var(--text-secondary)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+  });
+
+  const renderWorkspaceLeftPane = () => (
+    <>
+      <div style={styles.tabBar}>
+        <button style={{ ...styles.tabBtn, ...(leftTab === 'chat' ? styles.tabBtnActive : {}) }} onClick={() => setLeftTab('chat')} data-testid="tab-chat">對話</button>
+        <button style={{ ...styles.tabBtn, ...(leftTab === 'design' ? styles.tabBtnActive : {}) }} onClick={() => setLeftTab('design')} data-testid="tab-design">設計</button>
+        <button style={{ ...styles.tabBtn, ...(leftTab === 'style' ? styles.tabBtnActive : {}), ...(!html ? styles.tabBtnDisabled : {}) }} onClick={() => html && setLeftTab('style')} disabled={!html} data-testid="tab-style" title={!html ? '請先生成原型' : undefined}>🎨 樣式</button>
+      </div>
+      <div style={styles.tabContent}>
+        {leftTab === 'chat' ? (
+          <ChatPanel
+            projectId={project.id}
+            messages={messages}
+            onNewMessages={handleNewMessages}
+            onHtmlGenerated={handleHtmlGenerated}
+            pendingMessage={pendingChatMessage}
+            onPendingMessageConsumed={() => setPendingChatMessage(null)}
+            hasPrototype={!!html}
+            selectedElement={selectedElement}
+            onClearSelectedElement={() => setSelectedElement(null)}
+          />
+        ) : leftTab === 'design' ? (
+          <DesignPanel projectId={project.id} onSaved={checkDesignActive} />
+        ) : (
+          <StyleTweakerPanel html={html} onInject={injectStyles} onSave={handleSaveStyles} />
+        )}
+      </div>
+    </>
+  );
+
+  const renderWorkspacePreviewPane = () => (
+    <div style={styles.previewPane} ref={iframeContainerRef}>
+      {viewMode === 'code' ? (
+        !html ? (
+          <div style={styles.emptyStateContainer}>
+            <div style={{ ...styles.emptyStateCard, backgroundColor: '#1e1e2e', border: '2px dashed #45475a' }}>
+              <div style={styles.emptyStateIcon}>💻</div>
+              <div style={{ ...styles.emptyStateTitle, color: '#cdd6f4' }}>尚未生成原型，請先在對話中描述需求</div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: isMobileViewport ? 'column' : 'row' }}>
+            {isMobileViewport && isMultiPage && pages.length > 1 && (
+              <div style={styles.pageSidebarMobile}>
+                <div style={styles.pageSidebarLabel}>頁面</div>
+                {pages.map(page => (
+                  <div key={page} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      type="button"
+                      style={{ ...styles.pageSidebarItem, ...(activePage === page ? styles.pageSidebarItemActive : {}), width: 'auto', whiteSpace: 'nowrap' }}
+                      onClick={() => handleNavigatePage(page)}
+                    >
+                      {page}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await fetch(`/api/projects/${id}/generate-variants`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ page }),
+                          });
+                        } catch {}
+                      }}
+                      style={styles.pageSidebarActionBtnMobile}
+                      title="其他方案"
+                    >
+                      🔄
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!isMobileViewport && (
+              <CodeFileTree pages={pages} activePage={activePage || null} onSelect={handleNavigatePage} html={html || ''} />
+            )}
+            <CodePanel html={html} pages={pages} activePage={activePage} onPageChange={handleNavigatePage} />
+          </div>
+        )
+      ) : (
+        <>
+              {isMultiPage && pages.length > 1 && (
+                <div style={isMobileViewport ? styles.pageSidebarMobile : styles.pageSidebar}>
+                  <div style={styles.pageSidebarLabel}>頁面</div>
+                  {pages.map(page => (
+                    <div key={page} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  <button
+                    type="button"
+                    style={{ ...styles.pageSidebarItem, ...(activePage === page ? styles.pageSidebarItemActive : {}), flex: 1 }}
+                        onClick={() => handleNavigatePage(page)}
+                        data-testid={`page-tab-${page}`}
+                      >
+                        {page}
+                      </button>
+                      {isMobileViewport && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await fetch(`/api/projects/${id}/generate-variants`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ page }),
+                              });
+                            } catch {}
+                          }}
+                          style={styles.pageSidebarActionBtnMobile}
+                          title="其他方案"
+                        >
+                          🔄
+                        </button>
+                      )}
+                      {!isMobileViewport && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await fetch(`/api/projects/${id}/generate-variants`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ page }),
+                                });
+                              } catch {}
+                            }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
+                            title="其他方案"
+                          >
+                            🔄
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!confirm(`重新生成「${page}」頁面？`)) return;
+                              try {
+                                const res = await fetch(`/api/projects/${id}/regenerate-page`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ page }),
+                                });
+                                const data = await res.json();
+                                if (res.ok) {
+                                  window.location.reload();
+                                } else {
+                                  alert(data.error || '重新生成失敗');
+                                }
+                              } catch { alert('重新生成失敗'); }
+                            }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
+                            title="重新生成此頁面"
+                          >
+                            ↻
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+          <div style={deviceSize === 'desktop' && !isMobileViewport ? styles.previewScrollDesktop : styles.previewScroll}>
+            {!html ? (
+              <div style={styles.emptyStateContainer}>
+                <div style={styles.emptyStateCard}>
+                  <div style={styles.emptyStateIcon}>🎨</div>
+                  <div style={styles.emptyStateTitle}>尚未生成原型</div>
+                  <div style={styles.emptyStateSubtitle}>在左側聊天輸入你的需求，或上傳設計稿 PDF，AI 將生成互動式原型</div>
+                  <ul style={styles.emptyStateHints}>
+                    <li>💡 描述你想要的頁面設計</li>
+                    <li>📎 上傳設計稿 PDF 讓 AI 分析樣式</li>
+                    <li>⚡ 點擊元素可以直接修改</li>
+                  </ul>
+                  <div style={styles.emptyStateActionGrid}>
+                    {WORKSPACE_QUICK_STARTS.map(item => (
+                      <button key={item.title} type="button" style={styles.emptyStateActionCard} onClick={() => triggerQuickStart(item.mode, item.prompt)}>
+                        <div style={styles.emptyStateActionTitle}>{item.title}</div>
+                        <div style={styles.emptyStateActionDesc}>{item.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={deviceSize === 'mobile' ? styles.deviceFrameMobile : deviceSize === 'tablet' ? styles.deviceFrameTablet : styles.deviceFrameDesktop}>
+                <PreviewPanel
+                  html={html}
+                  deviceSize={deviceSize}
+                  annotationMode={annotationMode}
+                  interactionMode={interactionMode}
+                  onElementClick={handleElementClick}
+                  onElementDeselected={() => {
+                    setSelectedElement(null);
+                    setInteractionMode('browse');
+                  }}
+                  onIndicatorClick={handleIndicatorClick}
+                  annotations={annotationIndicators}
+                  apiBindings={apiBindingIndicators}
+                />
+                {interactionMode === 'visual-edit' && id && (
+                  <VisualEditor
+                    projectId={id}
+                    iframeRef={{ current: iframeContainerRef.current?.querySelector('iframe') as HTMLIFrameElement | null } as React.RefObject<HTMLIFrameElement>}
+                    active={interactionMode === 'visual-edit'}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div style={workspaceContainerStyle}>
       <div style={{ ...tabBarStyle, alignItems: 'center' }}>
@@ -875,8 +1114,8 @@ export default function WorkspacePage() {
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
     <div style={styles.container}>
       {/* Toolbar */}
-      <div style={{ ...styles.toolbar, ...(focusMode ? { display: 'none' } : {}) }}>
-        <div style={styles.toolbarLeft}>
+      <div style={{ ...styles.toolbar, ...(isMobileViewport ? styles.toolbarMobile : {}), ...(focusMode ? { display: 'none' } : {}) }}>
+        <div style={{ ...styles.toolbarLeft, ...(isMobileViewport ? styles.toolbarLeftMobile : {}) }}>
           <button style={styles.homeBtn} onClick={() => navigate('/')} title="首頁" data-testid="home-btn">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7" />
@@ -899,12 +1138,15 @@ export default function WorkspacePage() {
             </span>
           )}
         </div>
-        <div style={styles.toolbarCenter}>
+        <div style={{ ...styles.toolbarCenter, ...(isMobileViewport ? styles.toolbarCenterMobile : {}) }}>
           <div style={styles.viewModeToggle}>
             <button
               type="button"
               style={viewMode === 'preview' ? styles.viewModeBtnActive : styles.viewModeBtn}
-              onClick={() => setViewMode('preview')}
+              onClick={() => {
+                setViewMode('preview');
+                if (isMobileViewport) setMobileDesignSurface('preview');
+              }}
               data-testid="view-mode-preview"
             >
               👁 Preview
@@ -912,7 +1154,10 @@ export default function WorkspacePage() {
             <button
               type="button"
               style={viewMode === 'code' ? styles.viewModeBtnActive : styles.viewModeBtn}
-              onClick={() => setViewMode('code')}
+              onClick={() => {
+                setViewMode('code');
+                if (isMobileViewport) setMobileDesignSurface('code');
+              }}
               data-testid="view-mode-code"
             >
               {'</>'} Code
@@ -921,7 +1166,7 @@ export default function WorkspacePage() {
           <DeviceSizeSelector value={deviceSize} onChange={setDeviceSize} />
           <QueueStatusIndicator />
         </div>
-        <div style={styles.toolbarRight}>
+        <div style={{ ...styles.toolbarRight, ...(isMobileViewport ? styles.toolbarRightMobile : {}) }}>
           {designActive && (
             <span style={styles.designActiveBadge} data-testid="design-active-badge">
               🎨 Design Active
@@ -1408,66 +1653,55 @@ export default function WorkspacePage() {
       )}
 
       {/* Main content */}
-      <div style={styles.body}>
-        <div style={styles.chatPaneWrapper}>
-        {isReadOnly && <div style={styles.readOnlyOverlay} data-testid="readonly-overlay" />}
-        <div style={{ ...styles.chatPane, width: focusMode ? 0 : chatPaneWidth, ...(focusMode ? { overflow: 'hidden', borderRight: 'none' } : {}) }}>
-          {/* Tab switcher */}
-          <div style={styles.tabBar}>
-            <button
-              style={{ ...styles.tabBtn, ...(leftTab === 'chat' ? styles.tabBtnActive : {}) }}
-              onClick={() => setLeftTab('chat')}
-              data-testid="tab-chat"
-            >
-              對話
-            </button>
-            <button
-              style={{ ...styles.tabBtn, ...(leftTab === 'design' ? styles.tabBtnActive : {}) }}
-              onClick={() => setLeftTab('design')}
-              data-testid="tab-design"
-            >
-              設計
-            </button>
-            <button
-              style={{ ...styles.tabBtn, ...(leftTab === 'style' ? styles.tabBtnActive : {}), ...(!html ? styles.tabBtnDisabled : {}) }}
-              onClick={() => html && setLeftTab('style')}
-              disabled={!html}
-              data-testid="tab-style"
-              title={!html ? '請先生成原型' : undefined}
-            >
-              🎨 樣式
-            </button>
-          </div>
-          <div style={styles.tabContent}>
-            {leftTab === 'chat' ? (
-              <ChatPanel
-                projectId={project.id}
-                messages={messages}
-                onNewMessages={handleNewMessages}
-                onHtmlGenerated={handleHtmlGenerated}
-                pendingMessage={pendingChatMessage}
-                onPendingMessageConsumed={() => setPendingChatMessage(null)}
-                hasPrototype={!!html}
-                selectedElement={selectedElement}
-                onClearSelectedElement={() => setSelectedElement(null)}
-              />
-            ) : leftTab === 'design' ? (
-              <DesignPanel
-                projectId={project.id}
-                onSaved={checkDesignActive}
-              />
-            ) : (
-              <StyleTweakerPanel
-                html={html}
-                onInject={injectStyles}
-                onSave={handleSaveStyles}
-              />
-            )}
-          </div>
-        </div>
-        </div>
-        {/* Resize handle for chat pane */}
-        {!focusMode && (
+      <div style={isMobileViewport ? styles.bodyMobile : styles.body}>
+        {isMobileViewport ? (
+          <>
+            <div style={styles.mobileSurfaceBar}>
+              <button type="button" style={mobileSurfaceBtnStyle(mobileDesignSurface === 'chat')} onClick={() => setMobileDesignSurface('chat')}>對話</button>
+              <button type="button" style={mobileSurfaceBtnStyle(mobileDesignSurface === 'preview')} onClick={() => { setViewMode('preview'); setMobileDesignSurface('preview'); }}>預覽</button>
+              <button type="button" style={mobileSurfaceBtnStyle(mobileDesignSurface === 'spec')} onClick={() => setMobileDesignSurface('spec')}>規格</button>
+              <button type="button" style={mobileSurfaceBtnStyle(mobileDesignSurface === 'code')} onClick={() => { setViewMode('code'); setMobileDesignSurface('code'); }} disabled={!html}>程式碼</button>
+            </div>
+            <div style={styles.mobileSurfaceContent}>
+              {mobileDesignSurface === 'chat' ? (
+                <div style={styles.chatPaneMobile}>
+                  {isReadOnly && <div style={styles.readOnlyOverlay} data-testid="readonly-overlay" />}
+                  {renderWorkspaceLeftPane()}
+                </div>
+              ) : mobileDesignSurface === 'spec' ? (
+                <div style={styles.specPanelMobile}>
+                  <SpecPanel
+                    annotations={annotations}
+                    selectedAnnotation={selectedAnnotation}
+                    onSelectAnnotation={setSelectedAnnotation}
+                    onHighlightElement={handleHighlightElement}
+                    onSaveSpec={handleSaveSpec}
+                    collapsed={false}
+                    onToggle={() => {}}
+                    savingSpec={savingSpec}
+                    projectId={project.id}
+                    apiBindings={apiBindingsFull}
+                    onSelectApiBinding={(bridgeId) => {
+                      setApiBindingElement({ bridgeId, tagName: 'element' });
+                      setInteractionMode('api-binding');
+                    }}
+                  />
+                </div>
+              ) : (
+                renderWorkspacePreviewPane()
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={styles.chatPaneWrapper}>
+              {isReadOnly && <div style={styles.readOnlyOverlay} data-testid="readonly-overlay" />}
+              <div style={{ ...styles.chatPane, width: focusMode ? 0 : chatPaneWidth, ...(focusMode ? { overflow: 'hidden', borderRight: 'none' } : {}) }}>
+                {renderWorkspaceLeftPane()}
+              </div>
+            </div>
+            {/* Resize handle for chat pane */}
+            {!focusMode && (
           <div
             style={{ width: 5, cursor: 'col-resize', background: 'transparent', flexShrink: 0, zIndex: 20, transition: 'background 0.15s' }}
             onMouseDown={(e) => {
@@ -1495,177 +1729,27 @@ export default function WorkspacePage() {
             onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--border-primary, #e2e8f0)'; }}
             onMouseLeave={(e) => { if (!chatResizing.current) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
           />
-        )}
-        <div style={styles.previewPane} ref={iframeContainerRef}>
-          {viewMode === 'code' ? (
-            /* Code view */
-            !html ? (
-              <div style={styles.emptyStateContainer}>
-                <div style={{ ...styles.emptyStateCard, backgroundColor: '#1e1e2e', border: '2px dashed #45475a' }}>
-                  <div style={styles.emptyStateIcon}>💻</div>
-                  <div style={{ ...styles.emptyStateTitle, color: '#cdd6f4' }}>尚未生成原型，請先在對話中描述需求</div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                <CodeFileTree
-                  pages={pages}
-                  activePage={activePage || null}
-                  onSelect={handleNavigatePage}
-                  html={html || ''}
-                />
-                <CodePanel
-                  html={html}
-                  pages={pages}
-                  activePage={activePage}
-                  onPageChange={handleNavigatePage}
-                />
-              </div>
-            )
-          ) : (
-            /* Preview view */
-            <>
-              {isMultiPage && pages.length > 1 && (
-                <div style={styles.pageSidebar}>
-                  <div style={styles.pageSidebarLabel}>頁面</div>
-                  {pages.map(page => (
-                    <div key={page} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      <button
-                        type="button"
-                        style={{
-                          ...styles.pageSidebarItem,
-                          ...(activePage === page ? styles.pageSidebarItemActive : {}),
-                          flex: 1,
-                        }}
-                        onClick={() => handleNavigatePage(page)}
-                        data-testid={`page-tab-${page}`}
-                      >
-                        {page}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await fetch(`/api/projects/${id}/generate-variants`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ page }),
-                            });
-                          } catch {}
-                        }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
-                        title="其他方案"
-                      >
-                        🔄
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!confirm(`重新生成「${page}」頁面？`)) return;
-                          try {
-                            const res = await fetch(`/api/projects/${id}/regenerate-page`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ page }),
-                            });
-                            const data = await res.json();
-                            if (res.ok) {
-                              window.location.reload();
-                            } else {
-                              alert(data.error || '重新生成失敗');
-                            }
-                          } catch { alert('重新生成失敗'); }
-                        }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
-                        title="重新生成此頁面"
-                      >
-                        ↻
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div style={deviceSize === 'desktop' ? styles.previewScrollDesktop : styles.previewScroll}>
-                {!html ? (
-                  <div style={styles.emptyStateContainer}>
-                    <div style={styles.emptyStateCard}>
-                      <div style={styles.emptyStateIcon}>🎨</div>
-                      <div style={styles.emptyStateTitle}>尚未生成原型</div>
-                      <div style={styles.emptyStateSubtitle}>
-                        在左側聊天輸入你的需求，或上傳設計稿 PDF，AI 將生成互動式原型
-                      </div>
-                      <ul style={styles.emptyStateHints}>
-                        <li>💡 描述你想要的頁面設計</li>
-                        <li>📎 上傳設計稿 PDF 讓 AI 分析樣式</li>
-                        <li>⚡ 點擊元素可以直接修改</li>
-                      </ul>
-                      <div style={styles.emptyStateActionGrid}>
-                        {WORKSPACE_QUICK_STARTS.map(item => (
-                          <button
-                            key={item.title}
-                            type="button"
-                            style={styles.emptyStateActionCard}
-                            onClick={() => triggerQuickStart(item.mode, item.prompt)}
-                          >
-                            <div style={styles.emptyStateActionTitle}>{item.title}</div>
-                            <div style={styles.emptyStateActionDesc}>{item.description}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={
-                    deviceSize === 'mobile'
-                      ? styles.deviceFrameMobile
-                      : deviceSize === 'tablet'
-                        ? styles.deviceFrameTablet
-                        : styles.deviceFrameDesktop
-                  }>
-                    <PreviewPanel
-                      html={html}
-                      deviceSize={deviceSize}
-                      annotationMode={annotationMode}
-                      interactionMode={interactionMode}
-                      onElementClick={handleElementClick}
-                      onElementDeselected={() => {
-                        setSelectedElement(null);
-                        setInteractionMode('browse');
-                      }}
-                      onIndicatorClick={handleIndicatorClick}
-                      annotations={annotationIndicators}
-                      apiBindings={apiBindingIndicators}
-                    />
-                    {interactionMode === 'visual-edit' && id && (
-                      <VisualEditor
-                        projectId={id}
-                        iframeRef={{ current: iframeContainerRef.current?.querySelector('iframe') as HTMLIFrameElement | null } as React.RefObject<HTMLIFrameElement>}
-                        active={interactionMode === 'visual-edit'}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-        {!focusMode && (
-          <SpecPanel
-            annotations={annotations}
-            selectedAnnotation={selectedAnnotation}
-            onSelectAnnotation={setSelectedAnnotation}
-            onHighlightElement={handleHighlightElement}
-            onSaveSpec={handleSaveSpec}
-            collapsed={specPanelCollapsed}
-            onToggle={() => setSpecPanelCollapsed(!specPanelCollapsed)}
-            savingSpec={savingSpec}
-            projectId={project.id}
-            apiBindings={apiBindingsFull}
-            onSelectApiBinding={(bridgeId) => {
-              setApiBindingElement({ bridgeId, tagName: 'element' });
-              setInteractionMode('api-binding');
-            }}
-          />
+            )}
+            {renderWorkspacePreviewPane()}
+            {!focusMode && (
+              <SpecPanel
+                annotations={annotations}
+                selectedAnnotation={selectedAnnotation}
+                onSelectAnnotation={setSelectedAnnotation}
+                onHighlightElement={handleHighlightElement}
+                onSaveSpec={handleSaveSpec}
+                collapsed={specPanelCollapsed}
+                onToggle={() => setSpecPanelCollapsed(!specPanelCollapsed)}
+                savingSpec={savingSpec}
+                projectId={project.id}
+                apiBindings={apiBindingsFull}
+                onSelectApiBinding={(bridgeId) => {
+                  setApiBindingElement({ bridgeId, tagName: 'element' });
+                  setInteractionMode('api-binding');
+                }}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -1998,19 +2082,40 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: '48px',
     flexShrink: 0,
   },
+  toolbarMobile: {
+    flexWrap: 'wrap' as const,
+    alignItems: 'stretch',
+    gap: '8px',
+    padding: '10px 12px',
+  },
   toolbarLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
   },
+  toolbarLeftMobile: {
+    width: '100%',
+    justifyContent: 'space-between',
+  },
   toolbarCenter: {
     display: 'flex',
     alignItems: 'center',
+  },
+  toolbarCenterMobile: {
+    width: '100%',
+    justifyContent: 'space-between',
+    gap: '8px',
+    flexWrap: 'wrap' as const,
   },
   toolbarRight: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+  },
+  toolbarRightMobile: {
+    width: '100%',
+    gap: '8px',
+    flexWrap: 'wrap' as const,
   },
   viewModeToggle: {
     display: 'flex',
@@ -2124,6 +2229,28 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflow: 'hidden',
   },
+  bodyMobile: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    flex: 1,
+    overflow: 'hidden',
+  },
+  mobileSurfaceBar: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+    gap: '8px',
+    padding: '10px 12px',
+    borderBottom: '1px solid var(--border-primary)',
+    backgroundColor: 'var(--bg-secondary)',
+    flexShrink: 0,
+  },
+  mobileSurfaceContent: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
   chatPaneWrapper: {
     position: 'relative' as const,
     display: 'flex',
@@ -2139,6 +2266,23 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
+  },
+  chatPaneMobile: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    backgroundColor: 'var(--bg-card)',
+    position: 'relative' as const,
+  },
+  specPanelMobile: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    backgroundColor: 'var(--bg-card)',
   },
   tabBar: {
     display: 'flex',
@@ -2200,6 +2344,26 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 6px',
     gap: '4px',
   },
+  pageSidebarMobile: {
+    width: '100%',
+    flexShrink: 0,
+    borderBottom: '1px solid var(--border-primary)',
+    backgroundColor: 'var(--bg-secondary)',
+    display: 'flex',
+    flexDirection: 'row' as const,
+    overflowX: 'auto' as const,
+    overflowY: 'hidden' as const,
+    padding: '8px 6px',
+    gap: '6px',
+    alignItems: 'center',
+  },
+  readOnlyOverlay: {
+    position: 'absolute' as const,
+    inset: 0,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.01)',
+    cursor: 'not-allowed',
+  },
   pageSidebarLabel: {
     fontSize: '10px',
     fontWeight: 600,
@@ -2228,6 +2392,21 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#eff6ff',
     borderColor: '#bfdbfe',
     color: '#1d4ed8',
+  },
+  pageSidebarActionBtnMobile: {
+    width: '30px',
+    height: '30px',
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid var(--border-primary)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--bg-card)',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+    fontSize: '12px',
+    lineHeight: 1,
   },
   quickRegenPopup: {
     position: 'fixed' as const,
