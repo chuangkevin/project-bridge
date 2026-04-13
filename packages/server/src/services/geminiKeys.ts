@@ -77,6 +77,66 @@ const COOLDOWN_MS: Record<string, number> = {
 // In-memory cache of cooldowns (synced with DB)
 const badKeys = new Map<string, number>(); // key → cooldown_until timestamp
 let cooldownsLoaded = false;
+const lastAssignedAt = new Map<string, number>();
+
+function getTodayCallCounts(keys: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (keys.length === 0) return counts;
+
+  const suffixes = keys.map(key => key.slice(-4));
+  if (new Set(suffixes).size !== suffixes.length) return counts;
+
+  try {
+    const placeholders = keys.map(() => '?').join(',');
+    const rows = db.prepare(
+      `SELECT api_key_suffix, COUNT(*) as calls
+       FROM api_key_usage
+       WHERE api_key_suffix IN (${placeholders}) AND date(created_at) = date('now')
+       GROUP BY api_key_suffix`
+    ).all(...suffixes) as Array<{ api_key_suffix: string; calls: number }>;
+
+    for (const row of rows) counts.set(row.api_key_suffix, row.calls || 0);
+  } catch {
+    return counts;
+  }
+
+  return counts;
+}
+
+function shuffleInPlace<T>(arr: T[]): void {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function pickBestKey(keys: string[]): string | null {
+  if (keys.length === 0) return null;
+  const now = Date.now();
+  const todayCalls = getTodayCallCounts(keys);
+  const ranked = [...keys].sort((a, b) => {
+    const aCalls = todayCalls.get(a.slice(-4)) || 0;
+    const bCalls = todayCalls.get(b.slice(-4)) || 0;
+    if (aCalls !== bCalls) return aCalls - bCalls;
+
+    const aLast = lastAssignedAt.get(a) || 0;
+    const bLast = lastAssignedAt.get(b) || 0;
+    return aLast - bLast;
+  });
+
+  const bestCalls = todayCalls.get(ranked[0].slice(-4)) || 0;
+  const bestLast = lastAssignedAt.get(ranked[0]) || 0;
+  const tied = ranked.filter((key) => {
+    const calls = todayCalls.get(key.slice(-4)) || 0;
+    const last = lastAssignedAt.get(key) || 0;
+    return calls === bestCalls && last === bestLast;
+  });
+  shuffleInPlace(tied);
+  const selected = tied[0] || ranked[0];
+  if (!selected) return null;
+  lastAssignedAt.set(selected, now);
+  return selected;
+}
 
 /** Load cooldowns from DB on first access */
 function loadCooldownsFromDb(): void {
@@ -142,27 +202,29 @@ function getAvailableKeys(): string[] {
 /** Assign N unique keys for parallel sub-agents — shuffled to avoid hot-spotting */
 export function assignBatchKeys(count: number): string[] {
   const available = [...getAvailableKeys()];
-  // Fisher-Yates shuffle
-  for (let i = available.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [available[i], available[j]] = [available[j], available[i]];
+  const result: string[] = [];
+  const remaining = [...available];
+  while (result.length < count && remaining.length > 0) {
+    const next = pickBestKey(remaining);
+    if (!next) break;
+    result.push(next);
+    const idx = remaining.indexOf(next);
+    if (idx >= 0) remaining.splice(idx, 1);
   }
-  return available.slice(0, count);
+  return result;
 }
 
 /** Get a random available API key — avoids hot-spotting front keys */
 export function getGeminiApiKey(): string | null {
   const keys = getAvailableKeys();
-  if (keys.length === 0) return null;
-  return keys[Math.floor(Math.random() * keys.length)];
+  return pickBestKey(keys);
 }
 
 /** Get a key excluding a specific failed key */
 export function getGeminiApiKeyExcluding(failedKey: string, reason: string = '429'): string | null {
   markKeyBad(failedKey, reason);
   const keys = getAvailableKeys().filter(k => k !== failedKey);
-  if (keys.length === 0) return null;
-  return keys[Math.floor(Math.random() * keys.length)];
+  return pickBestKey(keys);
 }
 
 /** Get configured model name */

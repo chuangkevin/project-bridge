@@ -20,18 +20,23 @@ export async function withGeminiRetry<T>(
   const initialKey = getGeminiApiKey();
   if (!initialKey) throw new Error("No Gemini API key available");
 
-  return withRetry(fn, initialKey, {
+  let currentKey = initialKey;
+
+  return withRetry((apiKey) => {
+    currentKey = apiKey;
+    return fn(apiKey);
+  }, initialKey, {
     maxRetries: options?.maxRetries ?? 3,
     rotateKey: async () => {
-      const nextKey = getGeminiApiKeyExcluding(initialKey);
+      const nextKey = getGeminiApiKeyExcluding(currentKey);
       if (!nextKey) throw new NoAvailableKeyError();
       return nextKey;
     },
     onRetry: (info) => {
       if (info.errorClass === "quota" || info.errorClass === "rate-limit") {
-        markKeyBad(initialKey, "429");
+        markKeyBad(currentKey, "429");
       } else if (info.errorClass === "fatal") {
-        markKeyBad(initialKey, "403");
+        markKeyBad(currentKey, "403");
       }
       console.warn(
         `[retry] attempt ${info.attempt}/${info.maxRetries + 1}: ${info.errorClass}`
