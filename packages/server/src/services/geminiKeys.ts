@@ -2,6 +2,15 @@ import db from '../db/connection';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 
+db.prepare(
+  `CREATE TABLE IF NOT EXISTS api_key_leases (
+     api_key TEXT PRIMARY KEY,
+     lease_until INTEGER NOT NULL,
+     lease_token TEXT NOT NULL,
+     updated_at TEXT DEFAULT (datetime('now'))
+   )`
+).run();
+
 let cachedKeys: string[] = [];
 let lastLoadTime = 0;
 const CACHE_TTL = 60_000; // reload from DB every 60s
@@ -66,6 +75,21 @@ export function invalidateKeyCache(): void {
   cachedKeys = [];
 }
 
+function loadLeasedKeys(keys: string[], now: number): Set<string> {
+  if (keys.length === 0) return new Set();
+  try {
+    const placeholders = keys.map(() => '?').join(',');
+    const rows = db.prepare(
+      `SELECT api_key, lease_until
+       FROM api_key_leases
+       WHERE api_key IN (${placeholders}) AND lease_until > ?`
+    ).all(...keys, now) as LeaseRow[];
+    return new Set(rows.map((row) => row.api_key));
+  } catch {
+    return new Set();
+  }
+}
+
 // Cooldown durations by reason
 const COOLDOWN_MS: Record<string, number> = {
   '429': 120_000,       // 2 min for rate limit
@@ -78,6 +102,11 @@ const COOLDOWN_MS: Record<string, number> = {
 const badKeys = new Map<string, number>(); // key → cooldown_until timestamp
 let cooldownsLoaded = false;
 const lastAssignedAt = new Map<string, number>();
+
+interface LeaseRow {
+  api_key: string;
+  lease_until: number;
+}
 
 function getTodayCallCounts(keys: string[]): Map<string, number> {
   const counts = new Map<string, number>();
@@ -179,24 +208,48 @@ function getAvailableKeys(): string[] {
   loadCooldownsFromDb();
   const now = Date.now();
   const keys = loadKeys();
+  const leasedKeys = loadLeasedKeys(keys, now);
+  const leaseFreeKeys = keys.filter((key) => !leasedKeys.has(key));
   // Clean up expired cooldowns
   for (const [k, until] of badKeys) {
     if (now >= until) badKeys.delete(k);
   }
-  const available = keys.filter(k => !badKeys.has(k));
+  const available = keys.filter(k => !badKeys.has(k) && !leasedKeys.has(k));
   if (available.length > 0) return available;
-  // All keys on cooldown — clear the oldest cooldown to force one usable key
+  if (leaseFreeKeys.length > 0) {
+    forceClearOldestCooldown();
+  }
+  return keys.filter(k => !leasedKeys.has(k));
+}
+
+export function forceClearOldestCooldown(excludeKey = ''): string | null {
+  loadCooldownsFromDb();
   let oldestKey = '';
   let oldestUntil = Infinity;
-  for (const [k, until] of badKeys) {
-    if (until < oldestUntil) { oldestUntil = until; oldestKey = k; }
+  for (const [key, until] of badKeys) {
+    if (excludeKey && key === excludeKey) continue;
+    if (until < oldestUntil) {
+      oldestUntil = until;
+      oldestKey = key;
+    }
   }
-  if (oldestKey) {
-    badKeys.delete(oldestKey);
-    try { db.prepare('DELETE FROM api_key_cooldowns WHERE api_key_suffix = ?').run(oldestKey.slice(-4)); } catch {}
-    console.warn(`[keys] All keys on cooldown — force-cleared oldest: ...${oldestKey.slice(-4)}`);
-  }
-  return keys;
+
+  if (!oldestKey) return null;
+
+  badKeys.delete(oldestKey);
+  try {
+    db.prepare('DELETE FROM api_key_cooldowns WHERE api_key_suffix = ?').run(oldestKey.slice(-4));
+  } catch {}
+  console.warn(`[keys] Force-cleared oldest cooldown: ...${oldestKey.slice(-4)}`);
+  return oldestKey;
+}
+
+export function clearCooldownForKey(key: string): void {
+  if (!key) return;
+  badKeys.delete(key);
+  try {
+    db.prepare('DELETE FROM api_key_cooldowns WHERE api_key_suffix = ?').run(key.slice(-4));
+  } catch {}
 }
 
 /** Assign N unique keys for parallel sub-agents — shuffled to avoid hot-spotting */
