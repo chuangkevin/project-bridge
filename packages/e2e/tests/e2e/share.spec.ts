@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const API = 'http://localhost:3001';
+const API = process.env.PLAYWRIGHT_API_BASE_URL || 'http://localhost:3001';
 
 test.describe('E2E: Share Page', () => {
   let projectId: string;

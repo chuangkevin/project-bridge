@@ -1,6 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 
-const API = 'http://localhost:3001';
+const API = process.env.PLAYWRIGHT_API_BASE_URL || 'http://localhost:3001';
 const ADMIN_PASSWORD = '1q2w3e4r5t_';
 
 // ─── Auth Helper ─────────────────────────────────────────

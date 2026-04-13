@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const API = 'http://localhost:3001';
+const API = process.env.PLAYWRIGHT_API_BASE_URL || 'http://localhost:3001';
 
 test.describe('E2E: Project Drag-and-Drop Sorting', () => {
   const projectNames = ['E2E Sort AAA', 'E2E Sort BBB', 'E2E Sort CCC'];

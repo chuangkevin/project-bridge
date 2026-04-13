@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const liveBaseURL = process.env.LIVE_BASE_URL || 'https://designbridge.sisihome.org';
+const liveApiBaseURL = process.env.PLAYWRIGHT_API_BASE_URL || liveBaseURL;
 
 export default defineConfig({
   testDir: './tests',
@@ -30,12 +31,8 @@ export default defineConfig({
       dependencies: ['live-smoke'],
     },
   ],
-  webServer: [
-    {
-      command: 'node ./scripts/live-api-proxy.mjs',
-      port: 3001,
-      reuseExistingServer: true,
-      timeout: 30000,
-    },
-  ],
+  metadata: {
+    liveBaseURL,
+    liveApiBaseURL,
+  },
 });
