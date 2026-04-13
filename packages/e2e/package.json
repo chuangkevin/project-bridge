@@ -7,6 +7,7 @@
     "test:ui": "playwright test --ui",
     "test:smoke": "playwright test --project=smoke",
     "test:e2e": "playwright test --project=e2e",
+    "test:live": "playwright test --config=playwright.live.config.ts",
     "test:report": "playwright test && playwright show-report",
     "report": "playwright show-report"
   },
