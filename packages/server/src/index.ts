@@ -87,9 +87,12 @@ app.use('/api/components', componentsRouter);
 app.use('/api/projects', projectComponentsRouter);
 
 // Health check
-app.get('/api/health', (_req, res) => {
+function sendHealth(_req: express.Request, res: express.Response) {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+}
+
+app.get('/health', sendHealth);
+app.get('/api/health', sendHealth);
 
 // Serve client static files in production
 if (process.env.NODE_ENV === 'production') {
