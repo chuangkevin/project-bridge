@@ -19,3 +19,4 @@
 - When typo fallback cannot deterministically resolve a table name, consultant-mode now exposes only a very short high-confidence candidate list (not evidence) for the LLM to judge, instead of dumping loose fuzzy matches.
 - Deployments should no longer rely on Docker `latest`; project-bridge now uses SHA-pinned image tags in CI/CD so the deployed image can be traced back to the exact commit.
 - For schema/table confirmation turns with fresh MCP evidence or candidates, consultant mode now shortens history and injects a per-turn priority block so current lookup results override stale typo-related chat history.
+- project-bridge now consumes ai-core `LeaseHeartbeat` for retry lease renewal and ai-core `StepRunner` for the document-analysis skill step sequence, while keeping project-specific prompts and business logic local.

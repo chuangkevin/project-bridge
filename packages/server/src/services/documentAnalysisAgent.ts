@@ -1,6 +1,7 @@
 import fs from 'fs';
+import { StepRunner } from '@kevinsisi/ai-core';
 import db from '../db/connection';
-import { withGeminiRetry } from './geminiRetry';
+import { createProjectBridgeStepRunner, withGeminiRetry } from './geminiRetry';
 import { classifyDocument, DocumentType } from './documentClassifier';
 import { extractSpecData, SpecPage } from './specExtractor';
 import { extractDesignData, DesignGlobalStyles } from './designExtractor';
@@ -199,47 +200,67 @@ export async function analyzeDocument(
     if (extractedText.length > 100 && (result.documentType === 'spec' || result.documentType === 'mixed')) {
       console.log(`[agent] Step 4: Running skills (explore → uxReview → designProposal)...`);
 
-      // Run skills sequentially with delays to avoid rate limits
-      // Each skill uses withRetry which rotates keys on 429
+      const stepRunner = createProjectBridgeStepRunner(2);
+      const skillDelayMs = 1500;
 
-      // Skill 1: Explore — understand domain, users, flow
       try {
-        result.explore = await withRetry(key => skillExplore(extractedText, key));
-        console.log(`[agent] Explore: domain="${result.explore.domain}", ${result.explore.edgeCases.length} edge cases`);
+        const exploreStep = await stepRunner.runStep({
+          id: 'skill-explore',
+          name: 'skill-explore',
+          allowSharedFallback: true,
+          run: async (apiKey: string) => skillExplore(extractedText, apiKey),
+        });
+        result.explore = exploreStep.value;
+        const explore = result.explore;
+        console.log(`[agent] Explore: domain="${explore.domain}", ${explore.edgeCases.length} edge cases`);
       } catch (e: any) {
         console.warn(`[agent] Explore skill failed:`, e.message);
       }
 
-      await new Promise(r => setTimeout(r, 1500)); // Rate limit buffer
+      await new Promise(r => setTimeout(r, skillDelayMs));
 
-      // Skill 2: UX Review — evaluate quality
       try {
-        result.uxReview = await withRetry(key => skillUxReview(extractedText, result.pages, key));
-        console.log(`[agent] UX Review: score=${result.uxReview.overallScore}/10, ${result.uxReview.issues.length} issues`);
+        const uxReviewStep = await stepRunner.runStep({
+          id: 'skill-ux-review',
+          name: 'skill-ux-review',
+          allowSharedFallback: true,
+          run: async (apiKey: string) => skillUxReview(extractedText, result.pages, apiKey),
+        });
+        result.uxReview = uxReviewStep.value;
+        const uxReview = result.uxReview;
+        console.log(`[agent] UX Review: score=${uxReview.overallScore}/10, ${uxReview.issues.length} issues`);
       } catch (e: any) {
         console.warn(`[agent] UX Review skill failed:`, e.message);
       }
 
-      await new Promise(r => setTimeout(r, 1500)); // Rate limit buffer
+      await new Promise(r => setTimeout(r, skillDelayMs));
 
-      // Skill 3: Design Proposal — generate design direction (uses explore output)
       try {
-        result.designProposal = await withRetry(key =>
-          skillDesignProposal(extractedText, result.pages, result.explore || null, key)
-        );
-        console.log(`[agent] Design Proposal: "${(result.designProposal.designDirection || '').slice(0, 80)}..."`);
+        const designProposalStep = await stepRunner.runStep({
+          id: 'skill-design-proposal',
+          name: 'skill-design-proposal',
+          allowSharedFallback: true,
+          run: async (apiKey: string) => skillDesignProposal(extractedText, result.pages, result.explore || null, apiKey),
+        });
+        result.designProposal = designProposalStep.value;
+        const designProposal = result.designProposal;
+        console.log(`[agent] Design Proposal: "${(designProposal.designDirection || '').slice(0, 80)}..."`);
       } catch (e: any) {
         console.warn(`[agent] Design Proposal skill failed:`, e.message);
       }
 
-      await new Promise(r => setTimeout(r, 1500)); // Rate limit buffer
+      await new Promise(r => setTimeout(r, skillDelayMs));
 
-      // Skill 4: Business Context — internal domain knowledge from company skills
       try {
-        result.businessContext = await withRetry(key =>
-          skillBusinessContext(extractedText, result.pages, key)
-        );
-        console.log(`[agent] Business Context: ${result.businessContext.matchedSkills.length} skills matched, ${result.businessContext.businessRules.length} rules, ${result.businessContext.internalTerms.length} terms`);
+        const businessContextStep = await stepRunner.runStep({
+          id: 'skill-business-context',
+          name: 'skill-business-context',
+          allowSharedFallback: true,
+          run: async (apiKey: string) => skillBusinessContext(extractedText, result.pages, apiKey),
+        });
+        result.businessContext = businessContextStep.value;
+        const businessContext = result.businessContext;
+        console.log(`[agent] Business Context: ${businessContext.matchedSkills.length} skills matched, ${businessContext.businessRules.length} rules, ${businessContext.internalTerms.length} terms`);
       } catch (e: any) {
         console.warn(`[agent] Business Context skill failed:`, e.message);
       }

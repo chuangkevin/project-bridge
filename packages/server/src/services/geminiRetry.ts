@@ -4,7 +4,8 @@
  * Keeps the same public API as the old implementation.
  */
 
-import { withRetry, NoAvailableKeyError } from "@kevinsisi/ai-core";
+import { withRetry, NoAvailableKeyError, LeaseHeartbeat, StepRunner } from "@kevinsisi/ai-core";
+import type { ErrorClass } from "@kevinsisi/ai-core";
 import { clearCooldownForKey, getGeminiApiKey, markKeyBad } from "./geminiKeys.js";
 import { forceClearOldestAdapterCooldown, getProjectBridgeKeyPool } from "./projectBridgeAdapter.js";
 
@@ -33,16 +34,15 @@ export async function withGeminiRetry<T>(
   let currentAttemptAuthFailure = false;
   let shouldCooldownCurrent = false;
   let heartbeatKey = initialKey;
-  let heartbeat = startLeaseHeartbeat(pool, initialKey);
+  let heartbeat = new LeaseHeartbeat(pool, initialKey);
 
   try {
     return await withRetry(async (apiKey) => {
-      currentKey = apiKey;
-      if (apiKey !== heartbeatKey) {
-        heartbeat.stop();
-        heartbeat = startLeaseHeartbeat(pool, apiKey);
-        heartbeatKey = apiKey;
-      }
+        currentKey = apiKey;
+        if (apiKey !== heartbeatKey) {
+          heartbeat.switchKey(apiKey);
+          heartbeatKey = apiKey;
+        }
       const leaseError = heartbeat.getError();
       if (leaseError) throw leaseError;
       const result = await fn(apiKey);
@@ -131,33 +131,86 @@ export function createBatchCaller(_count: number) {
   };
 }
 
-function startLeaseHeartbeat(pool: ReturnType<typeof getProjectBridgeKeyPool>, apiKey: string) {
-  let leaseError: Error | null = null;
-  const intervalMs = Math.max(
-    250,
-    Math.min(60_000, Math.floor(pool.getAllocationLeaseMs() / 2))
-  );
-  const timer = setInterval(() => {
-    pool
-      .renewLease(apiKey)
-      .then((renewed) => {
-        if (!renewed) {
-          leaseError = new Error(`Lost key lease for ${apiKey}`);
-          clearInterval(timer);
-        }
-      })
-      .catch((error) => {
-        leaseError = error instanceof Error ? error : new Error(String(error));
-        clearInterval(timer);
-      });
-  }, intervalMs);
+export function createProjectBridgeStepRunner(maxRetries = 2): StepRunner {
+  const pool = getProjectBridgeKeyPool();
 
-  if (typeof timer.unref === "function") timer.unref();
+  return new StepRunner(pool, {
+    maxRetries,
+    acquireInitialKey: async ({ preferredKey, step }) => {
+      try {
+        const allocation = await pool.allocatePreferred(preferredKey, {
+          allowFallback: step.allowSharedFallback ?? false,
+        });
+        return {
+          key: allocation.key,
+          usedPreferred: allocation.usedPreferred,
+          sharedFallbackUsed: Boolean(preferredKey) && !allocation.usedPreferred,
+        };
+      } catch (error) {
+        if (!(error instanceof NoAvailableKeyError)) throw error;
+        const key = await retryAfterCooldownClear(pool, error);
+        return {
+          key,
+          usedPreferred: preferredKey === key,
+          sharedFallbackUsed: true,
+        };
+      }
+    },
+    rotateKey: async ({ currentKey, step, errorClass }) => {
+      const effectiveError = errorClass ?? "quota";
 
-  return {
-    stop: () => clearInterval(timer),
-    getError: () => leaseError,
-  };
+      if (effectiveError === "quota" || effectiveError === "rate-limit") {
+        markKeyBad(currentKey, "429");
+        await pool.release(currentKey, true, false);
+      } else if (effectiveError === "fatal") {
+        markKeyBad(currentKey, "403");
+        await pool.release(currentKey, true, true);
+      } else {
+        await pool.releaseLease(currentKey);
+      }
+
+      if (!(step.allowSharedFallback ?? false)) {
+        throw new NoAvailableKeyError(
+          `Step \"${step.name}\" requires key rotation, but shared fallback is disabled`
+        );
+      }
+
+      try {
+        const allocation = await pool.allocatePreferred(null, { allowFallback: true });
+        return {
+          key: allocation.key,
+          sharedFallbackUsed: true,
+        };
+      } catch (error) {
+        if (!(error instanceof NoAvailableKeyError)) throw error;
+        const clearedKey = await retryAfterCooldownClear(pool, error, currentKey);
+        return {
+          key: clearedKey,
+          sharedFallbackUsed: true,
+        };
+      }
+    },
+    releaseKey: async ({ key, failed, authFailure, errorClass }) => {
+      if (!failed) {
+        await pool.release(key, false);
+        return;
+      }
+
+      if (authFailure || errorClass === "fatal") {
+        markKeyBad(key, "403");
+        await pool.release(key, true, true);
+        return;
+      }
+
+      if (errorClass === "quota" || errorClass === "rate-limit") {
+        markKeyBad(key, "429");
+        await pool.release(key, true, false);
+        return;
+      }
+
+      await pool.releaseLease(key);
+    },
+  });
 }
 
 async function retryAfterCooldownClear(
