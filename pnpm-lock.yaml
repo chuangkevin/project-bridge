@@ -85,8 +85,8 @@ importers:
         specifier: ^0.24.1
         version: 0.24.1
       '@kevinsisi/ai-core':
-        specifier: github:kevinsisi/ai-core#114d965
-        version: https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965(better-sqlite3@11.10.0)
+        specifier: git+https://github.com/kevinsisi/ai-core.git#114d965659c218abbabcb8802a4bca0066ae937e
+        version: https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965659c218abbabcb8802a4bca0066ae937e(better-sqlite3@11.10.0)
       '@napi-rs/canvas':
         specifier: ^0.1.97
         version: 0.1.97
@@ -576,8 +576,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@kevinsisi/ai-core@https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965':
-    resolution: {tarball: https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965}
+  '@kevinsisi/ai-core@https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965659c218abbabcb8802a4bca0066ae937e':
+    resolution: {tarball: https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965659c218abbabcb8802a4bca0066ae937e}
     version: 2.1.0
     peerDependencies:
       better-sqlite3: '>=11.0.0'
@@ -3332,7 +3332,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@kevinsisi/ai-core@https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965(better-sqlite3@11.10.0)':
+  '@kevinsisi/ai-core@https://codeload.github.com/kevinsisi/ai-core/tar.gz/114d965659c218abbabcb8802a4bca0066ae937e(better-sqlite3@11.10.0)':
     dependencies:
       '@google/generative-ai': 0.21.0
     optionalDependencies:

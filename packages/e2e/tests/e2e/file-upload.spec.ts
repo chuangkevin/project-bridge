@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
-const API = 'http://localhost:3001';
+const API = process.env.PLAYWRIGHT_API_BASE_URL || 'http://localhost:3001';
 
 test.describe('E2E: File Upload in Chat', () => {
   let projectId: string;
