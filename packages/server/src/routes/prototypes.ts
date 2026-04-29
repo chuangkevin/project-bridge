@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import db from '../db/connection';
 import { extractComponent, replaceComponent } from '../services/componentExtractor';
-import { getProvider, defaultModel, trackProviderUsage } from '../services/provider';
+import { getProvider, defaultModel, trackProviderUsage, streamWithRetry } from '../services/provider';
 import { validateNavigation } from '../services/prototypeValidator';
 
 const router = Router();
@@ -166,13 +166,18 @@ RULES:
   res.flushHeaders();
 
   try {
-    const streamExec = getProvider().streamWithSelection({
+    let newComponentHtml = '';
+    const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
       model: defaultModel(),
       systemInstruction: systemPrompt,
       prompt: `Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`,
       maxOutputTokens: 4096,
+    }), {
+      onReset: ({ attempt, chunksEmitted }) => {
+        newComponentHtml = '';
+        res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
+      },
     });
-    let newComponentHtml = '';
     for await (const text of streamExec.stream) {
       if (text) {
         newComponentHtml += text;

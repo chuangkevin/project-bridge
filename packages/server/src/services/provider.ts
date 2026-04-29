@@ -237,30 +237,108 @@ export function isOverloadedError(err: unknown): boolean {
     || /overloaded/i.test(msg);
 }
 
-/** Stream with automatic 503/overloaded retries.
+/** True for any error class where re-issuing the same request (with key
+ * rotation) is reasonable: 503 overloaded, 429/quota/rate-limit (key pool
+ * will pick a different key), transient network errors, AND mid-stream parse
+ * errors from the Google SDK ("Failed to parse stream") which manifest as
+ * StreamInterruptedError after some chunks already emitted. */
+export function isRetryableStreamError(err: unknown): boolean {
+  if (isOverloadedError(err)) return true;
+  const msg = ((err as any)?.message ?? String(err ?? '')).toLowerCase();
+  const status = ((err as any)?.status ?? (err as any)?.httpStatusCode ?? 0) as number;
+  // 401/403/400 are never retried — they indicate bad creds or bad request.
+  if (status === 400 || status === 401 || status === 403) return false;
+  if (msg.includes('api_key_invalid') || msg.includes('permission denied') || msg.includes('invalid argument') || msg.includes('invalid_argument')) return false;
+  // Rate limit / quota — key pool rotates on retry.
+  if (status === 429
+    || msg.includes('429')
+    || msg.includes('resource_exhausted')
+    || msg.includes('quota')
+    || msg.includes('rate_limit')
+    || msg.includes('rate limit')
+    || msg.includes('過於繁忙')
+    || msg.includes('too busy')
+    || msg.includes('too many requests')) return true;
+  // Mid-stream parse failures (Google SDK) — the stream got corrupted; rotate key and try again.
+  if (msg.includes('failed to parse stream')
+    || msg.includes('streaminterruptederror')
+    || msg.includes('stream interrupted')
+    || msg.includes('unexpected end of json')
+    || msg.includes('unexpected token')) return true;
+  // Transient network / 5xx.
+  if (status >= 500
+    || msg.includes('econnrefused')
+    || msg.includes('econnreset')
+    || msg.includes('etimedout')
+    || msg.includes('fetch failed')
+    || msg.includes('socket hang up')
+    || msg.includes('network')
+    || msg.includes('500')
+    || msg.includes('502')
+    || msg.includes('504')
+    || msg.includes('unavailable')) return true;
+  return false;
+}
+
+export interface StreamRetryOptions {
+  maxAttempts?: number;
+  baseDelayMs?: number;
+  /** Called BEFORE each retry attempt that follows a partial stream — the
+   * caller MUST discard any output already emitted (e.g. clear an
+   * accumulator buffer + emit a reset event over SSE) because the next
+   * attempt restarts the request from scratch and will re-emit content
+   * from the beginning. */
+  onReset?: (info: { attempt: number; chunksEmitted: number; error: unknown }) => void;
+}
+
+/** Stream with automatic retries on transient errors (503/429/network/parse-stream).
  *
- * Buffers the FIRST chunk before handing back. If the first chunk throws with
- * an overloaded error we retry with backoff. Once we have the first chunk no
- * more retries are attempted — we cannot safely re-emit partial output.
+ * This wrapper:
+ *  1. Retries `start()` itself on retryable errors (key allocation failures, etc.)
+ *  2. Retries on the FIRST chunk failing — common for 429/503 at request start.
+ *  3. Retries even on MID-STREAM failures (e.g. "Failed to parse stream" after
+ *     some chunks emitted). When this happens, `onReset()` is called so the
+ *     caller can clear their accumulated output buffer; the next attempt
+ *     restarts the underlying Gemini stream from scratch on a fresh key.
+ *
+ * Each retry fires `start()` again, which calls `streamWithSelection()`, which
+ * calls the underlying `GeminiClient.streamContent()` — that allocates a new
+ * key from the pool. The previous (failed) key is already on cooldown via
+ * `pool.release(key, failed=true)` inside ai-core.
  *
  * Pattern (caller side):
- *   const exec = await streamWithRetry(() => provider.streamWithSelection({...}));
+ *   const exec = await streamWithRetry(() => provider.streamWithSelection({...}), {
+ *     onReset: ({ attempt }) => {
+ *       fullResponse = '';
+ *       res.write(`data: ${JSON.stringify({ type: 'reset', attempt })}\n\n`);
+ *     },
+ *   });
  *   for await (const chunk of exec.stream) { ... }
  */
 export async function streamWithRetry<T extends { stream: AsyncIterable<string>; selection: RoutedProviderSelection }>(
   start: () => T,
-  options: { maxAttempts?: number; baseDelayMs?: number } = {},
+  options: StreamRetryOptions = {},
 ): Promise<T> {
-  const maxAttempts = options.maxAttempts ?? 4;
+  const maxAttempts = options.maxAttempts ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 800;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  const onReset = options.onReset;
+
+  // Acquire the first stream (with retries on start() / first chunk failures).
+  // We hold onto the leftover iterator + first chunk and hand it back wrapped
+  // in a generator that itself can retry on mid-stream failures.
+  let firstExec: T | null = null;
+  let firstIter: AsyncIterator<string> | null = null;
+  let firstChunk: IteratorResult<string> | null = null;
+  let startAttempt = 0;
+  while (startAttempt < maxAttempts) {
+    startAttempt++;
     let exec: T;
     try {
       exec = start();
     } catch (err) {
-      if (!isOverloadedError(err) || attempt === maxAttempts) throw err;
-      const wait = baseDelayMs * Math.pow(2, attempt - 1);
-      console.warn(`[provider] overloaded on start (attempt ${attempt}/${maxAttempts}) — retrying in ${wait}ms`);
+      if (!isRetryableStreamError(err) || startAttempt >= maxAttempts) throw err;
+      const wait = baseDelayMs * Math.pow(2, startAttempt - 1);
+      console.warn(`[provider] retryable error on start (attempt ${startAttempt}/${maxAttempts}): ${(err as Error)?.message?.slice(0, 120)} — retrying in ${wait}ms`);
       await new Promise((r) => setTimeout(r, wait));
       continue;
     }
@@ -269,25 +347,82 @@ export async function streamWithRetry<T extends { stream: AsyncIterable<string>;
     try {
       first = await iter.next();
     } catch (err) {
-      if (!isOverloadedError(err) || attempt === maxAttempts) throw err;
-      const wait = baseDelayMs * Math.pow(2, attempt - 1);
-      console.warn(`[provider] overloaded on first chunk (attempt ${attempt}/${maxAttempts}) — retrying in ${wait}ms`);
+      if (!isRetryableStreamError(err) || startAttempt >= maxAttempts) throw err;
+      const wait = baseDelayMs * Math.pow(2, startAttempt - 1);
+      console.warn(`[provider] retryable error on first chunk (attempt ${startAttempt}/${maxAttempts}): ${(err as Error)?.message?.slice(0, 120)} — retrying in ${wait}ms`);
       await new Promise((r) => setTimeout(r, wait));
       continue;
     }
-    const wrapped = (async function* () {
-      if (!first.done) yield first.value;
-      while (true) {
-        const next = await iter.next();
-        if (next.done) return;
-        yield next.value;
-      }
-    })();
-    return { ...exec, stream: wrapped } as T;
+    firstExec = exec;
+    firstIter = iter;
+    firstChunk = first;
+    break;
   }
-  // Loop exits via `continue`s only when retrying, so this is unreachable —
-  // the last attempt either returns or throws.
-  throw new Error('streamWithRetry: exhausted retries without resolution');
+
+  if (!firstExec || !firstIter || !firstChunk) {
+    throw new Error('streamWithRetry: exhausted start retries without resolution');
+  }
+
+  const initialExec = firstExec;
+  const initialIter = firstIter;
+  const initialFirst = firstChunk;
+  const initialAttempt = startAttempt;
+
+  const wrapped = (async function* () {
+    let chunksEmitted = 0;
+    let activeIter: AsyncIterator<string> = initialIter;
+    let pendingFirst: IteratorResult<string> | null = initialFirst;
+    let attempt = initialAttempt;
+
+    while (true) {
+      try {
+        if (pendingFirst) {
+          if (!pendingFirst.done) {
+            chunksEmitted++;
+            yield pendingFirst.value;
+          } else {
+            return;
+          }
+          pendingFirst = null;
+        }
+        while (true) {
+          const next = await activeIter.next();
+          if (next.done) return;
+          chunksEmitted++;
+          yield next.value;
+        }
+      } catch (err) {
+        if (!isRetryableStreamError(err) || attempt >= maxAttempts) throw err;
+        attempt++;
+        const wait = baseDelayMs * Math.pow(2, attempt - 1);
+        console.warn(`[provider] mid-stream error after ${chunksEmitted} chunks (attempt ${attempt}/${maxAttempts}): ${(err as Error)?.message?.slice(0, 120)} — restarting in ${wait}ms`);
+        await new Promise((r) => setTimeout(r, wait));
+        if (onReset) {
+          try {
+            onReset({ attempt, chunksEmitted, error: err });
+          } catch (resetErr) {
+            console.warn('[provider] onReset threw:', (resetErr as Error)?.message);
+          }
+        }
+        // Restart the entire stream from scratch. New key from the pool.
+        let nextExec: T;
+        try {
+          nextExec = start();
+        } catch (startErr) {
+          if (!isRetryableStreamError(startErr) || attempt >= maxAttempts) throw startErr;
+          // Loop back to retry start()
+          attempt--; // un-increment so the outer loop tries again
+          continue;
+        }
+        const nextIter = (nextExec.stream as AsyncIterable<string>)[Symbol.asyncIterator]();
+        activeIter = nextIter;
+        chunksEmitted = 0;
+        pendingFirst = null;
+      }
+    }
+  })();
+
+  return { ...initialExec, stream: wrapped } as T;
 }
 
 /** Convenience: re-export the underlying types for call sites. */

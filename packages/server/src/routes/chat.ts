@@ -722,7 +722,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           systemInstruction: microPrompt,
           prompt: `使用者要求: ${userContent}\n\n以下是目前的完整 HTML prototype:\n${protoHtml}`,
           maxOutputTokens: 32768,
-        }));
+        }), {
+          onReset: ({ attempt, chunksEmitted }) => {
+            fullResponse = '';
+            res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
+          },
+        });
 
         for await (const text of streamExec.stream) {
           if (text) {
@@ -1001,7 +1006,12 @@ This turn is a DB schema/table confirmation request with fresh MCP lookup result
           history: qaHistory,
           ...(visionImagesQa.length > 0 ? { images: visionImagesQa } : {}),
           maxOutputTokens: 8192,
-        }));
+        }), {
+          onReset: ({ attempt, chunksEmitted }) => {
+            fullResponse = '';
+            res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
+          },
+        });
 
         for await (const text of streamExec.stream) {
           if (text) {
@@ -1865,7 +1875,12 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
         prompt: userContent,
         history: aiCoreHistory,
         maxOutputTokens: 65536,
-      }));
+      }), {
+        onReset: ({ attempt, chunksEmitted }) => {
+          fullResponse = '';
+          res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
+        },
+      });
 
       for await (const text of streamExec.stream) {
         if (text) {

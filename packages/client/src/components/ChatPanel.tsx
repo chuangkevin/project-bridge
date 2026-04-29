@@ -595,6 +595,18 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               setConfirmDialog({ message: data.message, options: data.options, originalText: text });
               return; // stop processing, wait for user choice
             }
+            // Server restarted the underlying AI stream (e.g. 429/parse-stream
+            // recovered via key rotation) — discard accumulated content and
+            // surface a brief notice in the thinking pane so the user knows.
+            if (data.type === 'reset') {
+              fullContent = '';
+              setStreamingContent('');
+              setTokenCount(0);
+              const note = `\n\n♻️ ${data.message || '連線中斷，重新生成中…'}\n`;
+              accThinking += note;
+              setThinkingContent(prev => prev + note);
+              continue;
+            }
             // Handle thinking transparency events
             if (data.type === 'thinking' && data.content) {
               // Format PAGES: line into a nice display
