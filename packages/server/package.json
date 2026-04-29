@@ -1,10 +1,10 @@
 {
   "name": "server",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc"
+    "build": "tsc && node -e \"require('fs').cpSync('src/assets', 'dist/assets', { recursive: true, force: true })\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

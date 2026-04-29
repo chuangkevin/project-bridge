@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -121,12 +121,12 @@ export default function SettingsPage() {
   const [ctdSaving, setCtdSaving] = useState(false);
   const [ctdMsg, setCtdMsg] = useState('');
 
-  // OpenAI OAuth
+  // OpenAI OAuth (local helper flow)
   const [openaiOAuthConnected, setOpenaiOAuthConnected] = useState(false);
   const [openaiOAuthExpiresAt, setOpenaiOAuthExpiresAt] = useState<string | null>(null);
-  const [openaiOAuthClientIdConfigured, setOpenaiOAuthClientIdConfigured] = useState(false);
   const [openaiOAuthBusy, setOpenaiOAuthBusy] = useState(false);
   const [openaiOAuthMsg, setOpenaiOAuthMsg] = useState('');
+  const [openaiHelperCmdCopied, setOpenaiHelperCmdCopied] = useState(false);
 
   // MCP management
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
@@ -552,56 +552,60 @@ export default function SettingsPage() {
       const data = await res.json();
       setOpenaiOAuthConnected(!!data.connected);
       setOpenaiOAuthExpiresAt(data.expiresAt || null);
-      setOpenaiOAuthClientIdConfigured(!!data.clientIdConfigured);
     } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
     fetchOpenaiOAuthStatus();
+    const id = setInterval(fetchOpenaiOAuthStatus, 5000);
+    return () => clearInterval(id);
   }, [fetchOpenaiOAuthStatus]);
 
-  useEffect(() => {
-    function onMessage(ev: MessageEvent) {
-      if (!ev.data || ev.data.source !== 'openai-oauth') return;
-      setOpenaiOAuthBusy(false);
-      if (ev.data.ok) {
-        setOpenaiOAuthMsg('已連結 OpenAI 帳號');
-        fetchOpenaiOAuthStatus();
-      } else {
-        setOpenaiOAuthMsg(`授權失敗：${ev.data.error || '未知錯誤'}`);
-      }
-      setTimeout(() => setOpenaiOAuthMsg(''), 4000);
-    }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [fetchOpenaiOAuthStatus]);
+  const platformIsWindows = useMemo(() => {
+    if (typeof navigator === 'undefined') return true;
+    const ua = (navigator.userAgent || '') + ' ' + (navigator.platform || '');
+    return /win/i.test(ua) && !/mac/i.test(navigator.platform || '');
+  }, []);
 
-  const handleOpenaiOAuthConnect = async () => {
-    if (!openaiOAuthClientIdConfigured) {
-      setOpenaiOAuthMsg('需先設定 OPENAI_OAUTH_CLIENT_ID 環境變數或在設定中儲存 openai_oauth_client_id');
-      return;
+  const helperRunCommand = useMemo(() => 'node openai-auth-helper.js', []);
+
+  const triggerDownload = (url: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadHelper = () => {
+    setOpenaiOAuthMsg('已開始下載 openai-auth-helper.js — 在下載資料夾雙擊或執行 `node openai-auth-helper.js`');
+    triggerDownload('/api/openai-oauth/helper', 'openai-auth-helper.js');
+    setTimeout(() => setOpenaiOAuthMsg(''), 6000);
+  };
+
+  const handleDownloadWrapper = () => {
+    if (platformIsWindows) {
+      triggerDownload('/api/openai-oauth/helper', 'openai-auth-helper.js');
+      setTimeout(() => triggerDownload('/api/openai-oauth/helper.cmd', 'openai-auth-helper.cmd'), 400);
+      setOpenaiOAuthMsg('已下載 openai-auth-helper.js + .cmd — 把兩個檔案放在同一資料夾，雙擊 .cmd 即可。');
+    } else {
+      triggerDownload('/api/openai-oauth/helper', 'openai-auth-helper.js');
+      setTimeout(() => triggerDownload('/api/openai-oauth/helper.sh', 'openai-auth-helper.sh'), 400);
+      setOpenaiOAuthMsg('已下載 openai-auth-helper.js + .sh — chmod +x openai-auth-helper.sh 後執行即可。');
     }
-    setOpenaiOAuthBusy(true);
-    setOpenaiOAuthMsg('');
+    setTimeout(() => setOpenaiOAuthMsg(''), 8000);
+  };
+
+  const handleCopyHelperCommand = async () => {
     try {
-      const res = await fetch('/api/openai-oauth/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
-      });
-      const data = await res.json();
-      if (!res.ok || !data.authorizeUrl) {
-        setOpenaiOAuthBusy(false);
-        setOpenaiOAuthMsg(data.error || '無法啟動 OAuth 流程');
-        return;
-      }
-      const popup = window.open(data.authorizeUrl, 'openai-oauth', 'width=560,height=720');
-      if (!popup) {
-        setOpenaiOAuthBusy(false);
-        setOpenaiOAuthMsg('彈跳視窗被擋住，請允許後再試');
-      }
-    } catch (err: any) {
-      setOpenaiOAuthBusy(false);
-      setOpenaiOAuthMsg(err?.message || '啟動 OAuth 失敗');
+      await navigator.clipboard.writeText(helperRunCommand);
+      setOpenaiHelperCmdCopied(true);
+      setTimeout(() => setOpenaiHelperCmdCopied(false), 2000);
+    } catch {
+      setOpenaiOAuthMsg('複製失敗，請手動複製指令');
+      setTimeout(() => setOpenaiOAuthMsg(''), 3000);
     }
   };
 
@@ -1326,7 +1330,7 @@ export default function SettingsPage() {
           )}
         </section>
 
-        {/* ── Section: OpenAI OAuth ───────────────────── */}
+        {/* ── Section: OpenAI OAuth (local helper flow) ───────────────────── */}
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
             <h2 style={styles.sectionTitle}>OpenAI 授權連結</h2>
@@ -1335,29 +1339,23 @@ export default function SettingsPage() {
           </div>
 
           <p style={styles.hint}>
-            透過 OAuth 授權，將 OpenAI 帳號連到 project-bridge。完成後 MultiProviderClient 會優先使用 OpenAI，再以 Gemini pool 作為 fallback。
-            client_id 由 <code>OPENAI_OAUTH_CLIENT_ID</code> 環境變數提供（或於設定中儲存 <code>openai_oauth_client_id</code>）。
+            OpenAI 的 OAuth client_id（Codex CLI 公用）只接受 <code>http://localhost:1455/auth/callback</code> 作為 redirect_uri，
+            因此遠端伺服器無法直接收 callback。請按下方按鈕下載授權程式，在<strong>你的本機</strong>執行：
+            程式會自動開瀏覽器授權、收 callback、換 token，然後把 token 傳回這台 project-bridge。
           </p>
-
-          {!openaiOAuthClientIdConfigured && (
-            <p style={styles.errorText}>尚未設定 OPENAI_OAUTH_CLIENT_ID — 請先設定後再授權。</p>
-          )}
 
           {openaiOAuthConnected && openaiOAuthExpiresAt && (
             <p style={styles.hint}>access_token 到期時間：{new Date(openaiOAuthExpiresAt).toLocaleString()}</p>
           )}
 
-          <div style={styles.inputRow}>
-            {!openaiOAuthConnected ? (
-              <button
-                type="button"
-                style={{ ...styles.primaryBtn, ...(openaiOAuthBusy ? styles.btnDisabled : {}) }}
-                onClick={handleOpenaiOAuthConnect}
-                disabled={openaiOAuthBusy || !openaiOAuthClientIdConfigured}
-              >
-                {openaiOAuthBusy ? '授權中…' : '使用 OpenAI 授權'}
-              </button>
-            ) : (
+          <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" style={styles.primaryBtn} onClick={handleDownloadHelper}>
+              下載 openai-auth-helper.js
+            </button>
+            <button type="button" style={styles.primaryBtn} onClick={handleDownloadWrapper}>
+              {platformIsWindows ? '下載 .js + .cmd（雙擊執行）' : '下載 .js + .sh'}
+            </button>
+            {openaiOAuthConnected && (
               <button
                 type="button"
                 style={{ ...styles.primaryBtn, ...(openaiOAuthBusy ? styles.btnDisabled : {}) }}
@@ -1369,8 +1367,41 @@ export default function SettingsPage() {
             )}
           </div>
 
+          <div style={{ marginTop: 12 }}>
+            <label style={styles.label}>下載後執行</label>
+            <pre
+              style={{
+                background: '#0f172a',
+                color: '#e2e8f0',
+                padding: '12px 14px',
+                borderRadius: 6,
+                fontSize: 13,
+                overflowX: 'auto',
+                margin: '6px 0',
+              }}
+            >{helperRunCommand}</pre>
+            <button type="button" style={styles.primaryBtn} onClick={handleCopyHelperCommand}>
+              {openaiHelperCmdCopied ? '已複製' : '複製指令'}
+            </button>
+          </div>
+
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 13, color: '#475569' }}>步驟說明</summary>
+            <ol style={{ ...styles.hint, paddingLeft: 20, marginTop: 8 }}>
+              <li>下載 <code>openai-auth-helper.js</code>（伺服器網址已內建），或下載含 wrapper（<code>.cmd</code> / <code>.sh</code>）的版本可直接雙擊執行。</li>
+              <li>在你的本機（有 Node.js 的環境）執行 <code>node openai-auth-helper.js</code>。</li>
+              <li>瀏覽器會自動打開 <code>auth.openai.com/authorize</code>；登入並按 Allow。</li>
+              <li>callback 回 <code>http://localhost:1455/auth/callback</code>；helper 換 token 後 POST 回伺服器。</li>
+              <li>本頁每 5 秒自動刷新狀態，看到「已連結」即完成。</li>
+              <li>之後所有 AI 呼叫優先走 OpenAI，失敗才 fallback 到 Gemini key-pool。</li>
+            </ol>
+            <p style={styles.hint}>
+              進階選項：<code>--no-open</code> 不自動開瀏覽器；<code>--auth-token &lt;bearer&gt;</code> 若伺服器需要驗證可帶 token；<code>--server &lt;url&gt;</code> 覆寫內建 server URL。
+            </p>
+          </details>
+
           {openaiOAuthMsg && (
-            <p style={openaiOAuthMsg.includes('失敗') || openaiOAuthMsg.includes('被擋住') || openaiOAuthMsg.includes('需先') ? styles.errorText : styles.successText}>
+            <p style={openaiOAuthMsg.includes('失敗') ? styles.errorText : styles.successText}>
               {openaiOAuthMsg}
             </p>
           )}

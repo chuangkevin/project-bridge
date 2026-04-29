@@ -76,6 +76,7 @@ COPY --from=builder /app/packages/server/dist packages/server/dist
 COPY --from=builder /app/packages/server/package.json packages/server/
 COPY --from=builder /app/packages/server/src/db/migrations packages/server/dist/db/migrations
 COPY --from=builder /app/packages/server/src/prompts packages/server/dist/prompts
+COPY --from=builder /app/packages/server/src/assets packages/server/dist/assets
 COPY --from=builder /app/packages/server/data packages/server/data
 
 # Copy client build output
