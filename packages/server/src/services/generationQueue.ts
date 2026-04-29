@@ -33,8 +33,16 @@ class GenerationQueue {
   private totalDurationMs: number = 0;
 
   constructor(maxConcurrent?: number) {
-    // Default to number of API keys available
-    this.maxConcurrent = maxConcurrent || Math.max(1, getKeyCount());
+    // Default to number of API keys available. On a fresh DB the settings table
+    // does not exist yet (import order vs. runMigrations); fall back to 1 so the
+    // process can boot, then runMigrations() in index.ts populates the schema.
+    let keyCount = 1;
+    try {
+      keyCount = getKeyCount();
+    } catch {
+      keyCount = 1;
+    }
+    this.maxConcurrent = maxConcurrent || Math.max(1, keyCount);
   }
 
   /** Add a new task to the queue */
