@@ -61,8 +61,15 @@ jobs:
           cd argo-app
           git config user.email "gitea-actions@gitea.local"
           git config user.name "Gitea Bot"
+          # ArgoCD treats this app as Directory source (no kustomize render), so
+          # editing kustomization.yaml alone never changes the rendered manifest.
+          # Update deployment.yaml directly — both the image tag and the deploy
+          # annotation — to guarantee a template diff and trigger a rollout.
+          sed -i "s|image: srvhpgit1:32050/project-bridge:.*|image: srvhpgit1:32050/project-bridge:$IMAGE_TAG|" project-bridge/deployment.yaml
+          sed -i "s|deploy.gitea/sha: \".*\"|deploy.gitea/sha: \"$IMAGE_TAG\"|" project-bridge/deployment.yaml
+          # Keep kustomization in sync for visibility / future kustomize mode.
           sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" project-bridge/kustomization.yaml
-          git add project-bridge/kustomization.yaml
+          git add project-bridge/deployment.yaml project-bridge/kustomization.yaml
           git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
           git push http://${GIT_USER}:${GIT_TOKEN}@srvhpgit:32000/HF_RD/argo-app.git HEAD:main
 

@@ -16,3 +16,7 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 export default db;
+
+// Run migrations eagerly so any module that imports `db` sees a populated schema.
+// Lazy require breaks the import cycle with ./migrate (which imports `db` from here).
+require('./migrate').runMigrations();
