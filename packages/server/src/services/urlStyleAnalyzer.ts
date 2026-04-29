@@ -1,6 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel } from './geminiKeys';
-import { withGeminiRetry } from './geminiRetry';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody } from './provider';
 
 export async function analyzeUrlStyles(urls: string[]): Promise<{
   tokens: Record<string, any>;
@@ -95,18 +93,14 @@ ${siteData.join('\n\n')}
   "convention": "用繁體中文寫一份設計規範（300+ 字）：色彩使用規則、字體層級、元件風格（按鈕/卡片/表單）、間距慣例、禁止事項"
 }`;
 
-  const parsed = await withGeminiRetry(async (key) => {
-    const genai = new GoogleGenerativeAI(key);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      generationConfig: { maxOutputTokens: 8192, temperature: 0.2, responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const data = JSON.parse(text);
-    console.log('[url-analyzer] AI analysis complete, primary:', data.tokens?.primaryColor);
-    return data;
-  }, { callType: 'url-style-analysis', maxRetries: 5 });
+  const resp = await getProvider().generateContent({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt,
+    maxOutputTokens: 8192,
+  });
+  const parsed = JSON.parse(extractJsonBody(resp.text));
+  console.log('[url-analyzer] AI analysis complete, primary:', parsed.tokens?.primaryColor);
 
   return { ...parsed, warnings };
 }

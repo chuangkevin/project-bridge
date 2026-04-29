@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel } from './geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody } from './provider';
 
 export interface QualityScore {
   overall: number;       // 0-100
@@ -20,24 +19,18 @@ const SCORING_PROMPT = `Analyze this HTML prototype and score it 0-100 on these 
 Return JSON only: {"html": N, "accessibility": N, "responsive": N, "consistency": N, "design": N}
 where N is an integer 0-100.`;
 
-export async function scorePrototype(html: string, apiKey: string): Promise<QualityScore> {
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: {
-      maxOutputTokens: 200,
-      temperature: 0,
-      responseMimeType: 'application/json',
-    },
-  });
-
-  // Truncate HTML to avoid token limits — 5000 chars is enough for quality assessment
+export async function scorePrototype(html: string, _apiKey?: string): Promise<QualityScore> {
   const truncatedHtml = html.slice(0, 5000);
-  const result = await model.generateContent(SCORING_PROMPT + '\n\nHTML:\n' + truncatedHtml);
-  const text = result.response.text();
-  const scores = JSON.parse(text) as { html: number; accessibility: number; responsive: number; consistency: number; design: number };
+  const response = await getProvider().generateContent({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: SCORING_PROMPT + '\n\nHTML:\n' + truncatedHtml,
+    maxOutputTokens: 200,
+  });
+  const scores = JSON.parse(extractJsonBody(response.text)) as {
+    html: number; accessibility: number; responsive: number; consistency: number; design: number;
+  };
 
-  // Clamp values to 0-100
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
   return {

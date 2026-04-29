@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export interface SpecPage {
   name: string;
@@ -55,39 +54,25 @@ Rules:
 export async function extractSpecData(
   fullText: string,
   images: Buffer[],
-  apiKey: string
+  _apiKey?: string
 ): Promise<SpecExtractionResult> {
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: {
-      maxOutputTokens: 16384,
-      temperature: 0,
-      responseMimeType: 'application/json',
-    },
+  const visionImages = images.slice(0, 4).map((img) => ({
+    type: 'inline' as const,
+    mimeType: 'image/png',
+    data: img.toString('base64'),
+  }));
+
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 80000)}\n=== END ===`,
+    images: visionImages,
+    maxOutputTokens: 16384,
   });
-
-  const parts: any[] = [];
-
-  // Include up to 4 page images for visual context
-  for (const img of images.slice(0, 4)) {
-    parts.push({
-      inlineData: { mimeType: 'image/png', data: img.toString('base64') },
-    });
-  }
-
-  // Send the FULL text (gemini-2.5-flash has 1M context)
-  // Cap at 80K chars — model supports 1M tokens, 80K chars is well within limits
-  parts.push({
-    text: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 80000)}\n=== END ===`,
-  });
-
-  const result = await model.generateContent(parts);
-  try { trackUsage(apiKey, getGeminiModel(), 'extract-spec', result.response.usageMetadata); } catch {}
-  const text = result.response.text();
+  try { trackProviderUsage(selection, 'extract-spec', response); } catch {}
 
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(extractJsonBody(response.text));
     const pages: SpecPage[] = (parsed.pages || []).map((p: any) => ({
       name: p.name || 'Unknown',
       viewport: p.viewport || 'both',
@@ -104,7 +89,6 @@ export async function extractSpecData(
       summary: parsed.summary || '',
     };
   } catch {
-    // JSON parse failed — return minimal result
     console.warn('[specExtractor] Failed to parse full extraction JSON');
     return {
       pages: [{ name: '主頁面', viewport: 'both', components: [], interactions: [], dataFields: [], businessRules: [], navigationTo: [] }],

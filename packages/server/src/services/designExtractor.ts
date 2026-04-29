@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export interface DesignPage {
   name: string;
@@ -58,37 +57,29 @@ Rules:
  */
 export async function extractDesignData(
   images: Buffer[],
-  apiKey: string
+  _apiKey?: string
 ): Promise<DesignExtractionResult> {
-  const genai = new GoogleGenerativeAI(apiKey);
+  const visionImages = images.slice(0, 6).map((img) => ({
+    type: 'inline' as const,
+    mimeType: 'image/png',
+    data: img.toString('base64'),
+  }));
 
-  // Structured extraction
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: {
-      maxOutputTokens: 3000,
-      temperature: 0,
-      responseMimeType: 'application/json',
-    },
+  const client = getProvider();
+  const exec = await client.generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: DESIGN_EXTRACTION_PROMPT,
+    images: visionImages,
+    maxOutputTokens: 3000,
   });
-
-  const parts: any[] = [];
-  for (const img of images.slice(0, 6)) {
-    parts.push({
-      inlineData: { mimeType: 'image/png', data: img.toString('base64') },
-    });
-  }
-  parts.push({ text: DESIGN_EXTRACTION_PROMPT });
-
-  const result = await model.generateContent(parts);
-  try { trackUsage(apiKey, getGeminiModel(), 'extract-design', result.response.usageMetadata); } catch {}
-  const text = result.response.text();
+  try { trackProviderUsage(exec.selection, 'extract-design', exec.response); } catch {}
+  const text = exec.response.text;
 
   let parsed: any;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(extractJsonBody(text));
   } catch {
-    // Fallback: return minimal result
     return {
       pages: [{ name: 'Main', viewport: 'desktop', components: [], layout: '' }],
       globalStyles: {
@@ -99,26 +90,22 @@ export async function extractDesignData(
         fontFamily: 'sans-serif',
         borderRadius: '8px',
       },
-      rawAnalysis: text, // Keep raw text even if JSON failed
+      rawAnalysis: text,
     };
   }
 
-  // Also get a raw freeform analysis for backward compatibility (visual_analysis field)
-  const rawModel = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: { maxOutputTokens: 3000 },
-  });
-
   let rawAnalysis = '';
   try {
-    const rawResult = await rawModel.generateContent([
-      ...parts.slice(0, -1), // Same images
-      { text: `Analyze this UI design for a developer. Describe: device type, color palette (hex), all visible components, layout structure, typography, spacing. Be precise and detailed.` },
-    ]);
-    try { trackUsage(apiKey, getGeminiModel(), 'extract-design', rawResult.response.usageMetadata); } catch {}
-    rawAnalysis = rawResult.response.text();
+    const rawExec = await client.generateWithSelection({
+      model: defaultModel(),
+      prompt: 'Analyze this UI design for a developer. Describe: device type, color palette (hex), all visible components, layout structure, typography, spacing. Be precise and detailed.',
+      images: visionImages,
+      maxOutputTokens: 3000,
+    });
+    try { trackProviderUsage(rawExec.selection, 'extract-design', rawExec.response); } catch {}
+    rawAnalysis = rawExec.response.text;
   } catch {
-    rawAnalysis = text; // Use JSON text as fallback
+    rawAnalysis = text;
   }
 
   return {

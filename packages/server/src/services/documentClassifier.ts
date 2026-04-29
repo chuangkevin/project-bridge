@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export type DocumentType = 'spec' | 'design' | 'screenshot' | 'mixed';
 
@@ -23,50 +22,45 @@ Return JSON only:
 export async function classifyDocument(
   images: Buffer[],
   textHint: string,
-  apiKey: string
+  _apiKey?: string
 ): Promise<ClassificationResult> {
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: {
-      maxOutputTokens: 1024,
-      temperature: 0,
-      responseMimeType: 'application/json',
-    },
-  });
-
-  const parts: any[] = [];
-
-  // Add first 2 images for visual classification
-  for (const img of images.slice(0, 2)) {
-    parts.push({
-      inlineData: { mimeType: 'image/png', data: img.toString('base64') },
-    });
-  }
-
-  // Add text hint
-  parts.push({
-    text: `${CLASSIFICATION_PROMPT}\n\nText excerpt (first 1000 chars):\n${textHint.slice(0, 1000)}`,
-  });
-
-  const result = await model.generateContent(parts);
-  try { trackUsage(apiKey, getGeminiModel(), 'classify', result.response.usageMetadata); } catch {}
-  const text = result.response.text();
-
+  const client = getProvider();
+  const visionImages = images.slice(0, 2).map((img) => ({
+    type: 'inline' as const,
+    mimeType: 'image/png',
+    data: img.toString('base64'),
+  }));
   try {
-    const parsed = JSON.parse(text);
-    return {
-      documentType: parsed.documentType || 'spec',
-      confidence: parsed.confidence || 0.5,
-      reasoning: parsed.reasoning || '',
-    };
+    const { selection, response } = await client.generateWithSelection({
+      model: defaultModel(),
+      systemInstruction: withJsonInstruction(),
+      prompt: `${CLASSIFICATION_PROMPT}\n\nText excerpt (first 1000 chars):\n${textHint.slice(0, 1000)}`,
+      images: visionImages,
+      maxOutputTokens: 1024,
+    });
+    try { trackProviderUsage(selection, 'classify', response); } catch {}
+
+    try {
+      const parsed = JSON.parse(extractJsonBody(response.text));
+      return {
+        documentType: parsed.documentType || 'spec',
+        confidence: parsed.confidence || 0.5,
+        reasoning: parsed.reasoning || '',
+      };
+    } catch {
+      const isSpec = /規格|規則|流程|欄位|功能說明|大綱/.test(textHint);
+      return {
+        documentType: isSpec ? 'spec' : 'design',
+        confidence: 0.3,
+        reasoning: 'JSON parse failed, fallback classification',
+      };
+    }
   } catch {
-    // Fallback: if text contains spec keywords, assume spec
     const isSpec = /規格|規則|流程|欄位|功能說明|大綱/.test(textHint);
     return {
       documentType: isSpec ? 'spec' : 'design',
       confidence: 0.3,
-      reasoning: 'JSON parse failed, fallback classification',
+      reasoning: 'AI call failed, fallback classification',
     };
   }
 }

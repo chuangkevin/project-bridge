@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { assignBatchKeys, getGeminiModel, markKeyBad, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody } from './provider';
 import { getPreferences, formatPreferencesForPrompt } from './preferenceTracker';
 
 export interface GenerationPlan {
@@ -83,32 +82,26 @@ export async function planAndReview(
   history: { role: string; content: string }[] = [],
   lessons: string[] = [],
 ): Promise<GenerationPlan> {
-  const keys = assignBatchKeys(6);
-  let keyIdx = 0;
-  const getKey = () => keys[keyIdx++ % keys.length];
+  const client = getProvider();
 
   async function callAIStream(prompt: string, agentName: string, maxTokens: number = 8000): Promise<string> {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const key = getKey();
       try {
-        const genai = new GoogleGenerativeAI(key);
-        const model = genai.getGenerativeModel({
-          model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.5 },
+        const stream = client.streamContent({
+          model: defaultModel(),
+          prompt,
+          maxOutputTokens: maxTokens,
         });
-        const result = await model.generateContentStream(prompt);
         let text = '';
-        for await (const chunk of result.stream) {
-          const t = chunk.text();
-          if (t) {
-            text += t;
-            onThinking(t); // stream each chunk to client
+        for await (const chunk of stream) {
+          if (chunk) {
+            text += chunk;
+            onThinking(chunk);
           }
         }
         return text;
       } catch (e: any) {
         console.warn(`[${agentName}] Failed (attempt ${attempt + 1}):`, e.message?.slice(0, 50));
-        markKeyBad(key);
       }
     }
     throw new Error(`${agentName} failed after 3 attempts`);
@@ -116,19 +109,16 @@ export async function planAndReview(
 
   async function callAIJSON(prompt: string, agentName: string): Promise<any> {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const key = getKey();
       try {
-        const genai = new GoogleGenerativeAI(key);
-        const model = genai.getGenerativeModel({
-          model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: 4096, temperature: 0.3, responseMimeType: 'application/json' },
+        const resp = await client.generateContent({
+          model: defaultModel(),
+          systemInstruction: withJsonInstruction(),
+          prompt,
+          maxOutputTokens: 4096,
         });
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
-        return JSON.parse(text);
+        return JSON.parse(extractJsonBody(resp.text));
       } catch (e: any) {
         console.warn(`[${agentName}] JSON failed (attempt ${attempt + 1}):`, e.message?.slice(0, 50));
-        markKeyBad(key);
       }
     }
     throw new Error(`${agentName} JSON failed after 3 attempts`);

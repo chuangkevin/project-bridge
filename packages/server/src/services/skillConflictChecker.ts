@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiApiKey, getGeminiModel, markKeyBad, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export interface SkillConflict {
   rule: string;
@@ -28,12 +27,6 @@ export async function checkSkillConflicts(
   skills: { name: string; description: string; content: string }[],
 ): Promise<ConflictReport> {
   if (skills.length === 0) {
-    return { conflicts: [] };
-  }
-
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    console.warn('[conflict-check] No API key available, skipping');
     return { conflicts: [] };
   }
 
@@ -73,29 +66,27 @@ ${skillsText}
 如果沒有衝突，回傳 {"conflicts": []}。只回傳 JSON，不要其他文字。`;
 
   try {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      generationConfig: { maxOutputTokens: 2048, temperature: 0.3, responseMimeType: 'application/json' },
-    });
-
-    const result = await Promise.race([
-      model.generateContent(prompt),
+    const client = getProvider();
+    const exec = await Promise.race([
+      client.generateWithSelection({
+        model: defaultModel(),
+        systemInstruction: withJsonInstruction(),
+        prompt,
+        maxOutputTokens: 2048,
+      }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000)),
     ]);
 
-    const text = result.response.text().trim();
-    try { trackUsage(apiKey, getGeminiModel(), 'skill-conflict-check', result.response.usageMetadata); } catch {}
+    const { selection, response } = exec;
+    try { trackProviderUsage(selection, 'skill-conflict-check', response); } catch {}
 
-    const parsed = JSON.parse(text) as ConflictReport;
+    const parsed = JSON.parse(extractJsonBody(response.text)) as ConflictReport;
 
-    // Validate structure
     if (!Array.isArray(parsed.conflicts)) {
       console.warn('[conflict-check] Invalid response structure, skipping');
       return { conflicts: [] };
     }
 
-    // Filter valid severities
     parsed.conflicts = parsed.conflicts.filter(c =>
       c.rule && c.skillName && c.severity &&
       ['info', 'warning', 'critical'].includes(c.severity)
@@ -105,7 +96,6 @@ ${skillsText}
     return parsed;
   } catch (err: any) {
     console.warn('[conflict-check] Failed, skipping:', err.message?.slice(0, 100));
-    if (apiKey) markKeyBad(apiKey);
     return { conflicts: [] };
   }
 }

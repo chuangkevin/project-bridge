@@ -1,6 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
-import { withGeminiRetry } from './geminiRetry';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export interface ReviewSkillInput {
   name: string;
@@ -202,32 +200,25 @@ export async function reviewSpecDocuments(
   const usableDocs = documents.filter(doc => doc.extractedText.trim().length > 50);
   if (usableDocs.length === 0) return null;
 
-  return withGeminiRetry(async apiKey => {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      generationConfig: {
-        maxOutputTokens: 8192,
-        temperature: 0,
-        responseMimeType: 'application/json',
-      },
-    });
+  const prompt = [
+    SPEC_REVIEW_PROMPT,
+    '=== DOCUMENTS ===',
+    buildDocumentBlock(usableDocs),
+    '=== DOMAIN SKILLS ===',
+    buildSkillBlock(skills),
+    '=== END ===',
+  ].join('\n\n');
 
-    const prompt = [
-      SPEC_REVIEW_PROMPT,
-      '=== DOCUMENTS ===',
-      buildDocumentBlock(usableDocs),
-      '=== DOMAIN SKILLS ===',
-      buildSkillBlock(skills),
-      '=== END ===',
-    ].join('\n\n');
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt,
+    maxOutputTokens: 8192,
+  });
+  try { trackProviderUsage(selection, 'spec-review', response); } catch {}
 
-    const result = await model.generateContent(prompt);
-    try { trackUsage(apiKey, getGeminiModel(), 'spec-review', result.response.usageMetadata); } catch {}
-
-    const parsed = safeJsonParse<any>(result.response.text());
-    return parsed ? normalizeReviewResult(parsed) : null;
-  }, { callType: 'spec-review', maxRetries: 2 });
+  const parsed = safeJsonParse<any>(extractJsonBody(response.text));
+  return parsed ? normalizeReviewResult(parsed) : null;
 }
 
 export function formatSpecReviewForPrompt(review: SpecReviewResult): string {

@@ -1,6 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
-import { withGeminiRetry } from './geminiRetry';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 import { DesignTokens, tokensToCssVariables } from './designTokenCompiler';
 
 export interface PageAssignment {
@@ -107,23 +105,15 @@ RULES:
 6. If pages have mobile viewport, navType should be "bottom-tab"
 7. Return ONLY JSON — no markdown, no explanation`;
 
-  const text = await withGeminiRetry(async (apiKey) => {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    try { trackUsage(apiKey, getGeminiModel(), 'master-agent-plan', result.response.usageMetadata); } catch {}
-    return result.response.text();
-  }, { callType: 'master-agent-plan', maxRetries: 3 });
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt,
+    maxOutputTokens: 8192,
+  });
+  try { trackProviderUsage(selection, 'master-agent-plan', response); } catch {}
 
-  // Parse JSON (strip markdown fences if present)
-  let json: string = text;
-  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenceMatch) json = fenceMatch[1];
-
-  const plan: GenerationPlan = JSON.parse(json.trim());
+  const plan: GenerationPlan = JSON.parse(extractJsonBody(response.text));
 
   // Inject cssVariables
   plan.cssVariables = cssVariables;

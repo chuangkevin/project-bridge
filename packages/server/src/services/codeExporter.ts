@@ -5,8 +5,7 @@
  * using Gemini AI for per-page conversion.
  */
 
-import { getGeminiModel, trackUsage } from './geminiKeys';
-import { withGeminiRetry } from './geminiRetry';
+import { getProvider, defaultModel, trackProviderUsage } from './provider';
 
 export type Framework = 'react' | 'vue3' | 'nextjs' | 'nuxt3' | 'html';
 
@@ -509,20 +508,14 @@ RULES:
 HTML TO CONVERT:
 ${pageHtml}`;
 
-  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  const exec = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    prompt,
+    maxOutputTokens: 8192,
+  });
+  try { trackProviderUsage(exec.selection, 'code-export', exec.response, projectId); } catch {}
 
-  const response = await withGeminiRetry(async (currentKey) => {
-    const genai = new GoogleGenerativeAI(currentKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      generationConfig: { maxOutputTokens: 8192 },
-    });
-    const result = await model.generateContent(prompt);
-    try { trackUsage(currentKey, getGeminiModel(), 'code-export', result.response.usageMetadata, projectId); } catch {}
-    return result.response;
-  }, { callType: 'code-export', maxRetries: 3 });
-
-  let text = response.text().trim();
+  let text = exec.response.text.trim();
 
   // Strip markdown fences
   const fenceMatch = text.match(/```(?:\w+)?\s*([\s\S]*?)```/);

@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, trackProviderUsage } from './provider';
 import { TtlCache } from '../utils/cache';
 
 const intentCache = new TtlCache<string>('intent', 5 * 60 * 1000); // 5 min
@@ -8,11 +7,10 @@ export type Intent = 'full-page' | 'in-shell' | 'component' | 'question' | 'micr
 
 export async function classifyIntent(
   message: string,
-  apiKey: string,
+  _apiKey?: string,
   hasShell: boolean = false,
   imageData?: { mimeType: string; base64: string } | null,
 ): Promise<Intent> {
-  // Cache key: first 100 chars of message + context flags + has image
   const cacheKey = `${message.slice(0, 100)}|${hasShell}|${imageData ? 'img' : ''}`;
   const cached = intentCache.get(cacheKey);
   if (cached) {
@@ -24,11 +22,7 @@ export async function classifyIntent(
     ? `This project has a platform shell (existing nav/sidebar/header). When the user asks to add a page, sub-page, detail page, list page, or feature, prefer "in-shell". Only use "full-page" if the user explicitly asks for a complete standalone page.`
     : `This project has NO platform shell, so "in-shell" is not available.`;
 
-  try {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      systemInstruction: `Classify the user message into one of five intents. Reply with ONLY one word.
+  const systemInstruction = `Classify the user message into one of five intents. Reply with ONLY one word.
 
 Intents:
 - "question": asking about specs, design, existing prototype, or general questions
@@ -54,18 +48,19 @@ IMPORTANT:
 - Messages with attached images/screenshots are usually full-page requests (they want to recreate what's in the image)
 - Only classify as "question" if the message is clearly asking for information (contains ?, 什麼, 如何, explain, what, how) with NO fix/generate intent.
 
-Reply ONLY with: question, component, micro-adjust, full-page, or in-shell`,
-      generationConfig: { maxOutputTokens: 5, temperature: 0 },
-    });
+Reply ONLY with: question, component, micro-adjust, full-page, or in-shell`;
 
-    // Use vision multimodal when image is attached — AI sees the screenshot to judge intent
-    const parts: any[] = [{ text: message }];
-    if (imageData) {
-      parts.push({ inlineData: { mimeType: imageData.mimeType, data: imageData.base64 } });
-    }
-    const result = await model.generateContent(parts);
-    try { trackUsage(apiKey, getGeminiModel(), 'intent-classify', result.response.usageMetadata); } catch {}
-    const text = result.response.text().trim().toLowerCase();
+  try {
+    const client = getProvider();
+    const { selection, response } = await client.generateWithSelection({
+      model: defaultModel(),
+      systemInstruction,
+      prompt: message,
+      maxOutputTokens: 5,
+      ...(imageData ? { images: [{ type: 'inline', mimeType: imageData.mimeType, data: imageData.base64 }] } : {}),
+    });
+    try { trackProviderUsage(selection, 'intent-classify', response); } catch {}
+    const text = response.text.trim().toLowerCase();
 
     let intent: Intent;
     if (text === 'question') intent = 'question';

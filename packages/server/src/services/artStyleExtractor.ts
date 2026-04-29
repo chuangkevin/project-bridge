@@ -1,5 +1,5 @@
 import yauzl from 'yauzl';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, trackProviderUsage } from './provider';
 
 export async function extractImagesFromDocument(filePath: string, mimeType: string): Promise<Buffer[]> {
   const ext = mimeType.toLowerCase();
@@ -56,26 +56,19 @@ export async function extractImagesFromDocument(filePath: string, mimeType: stri
   });
 }
 
-export async function analyzeArtStyle(images: Buffer[], apiKey: string): Promise<string> {
-  const { GoogleGenerativeAI } = await import('@google/generative-ai');
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: { maxOutputTokens: 150 },
-  });
-
-  const imageParts = images.map(buf => ({
-    inlineData: {
-      mimeType: 'image/png' as const,
-      data: buf.toString('base64'),
-    },
+export async function analyzeArtStyle(images: Buffer[], _apiKey?: string): Promise<string> {
+  const visionImages = images.map(buf => ({
+    type: 'inline' as const,
+    mimeType: 'image/png',
+    data: buf.toString('base64'),
   }));
 
-  const result = await model.generateContent([
-    ...imageParts,
-    { text: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.' },
-  ]);
-  try { trackUsage(apiKey, getGeminiModel(), 'art-style', result.response.usageMetadata); } catch {}
-
-  return result.response.text().trim() || '';
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    prompt: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.',
+    images: visionImages,
+    maxOutputTokens: 150,
+  });
+  try { trackProviderUsage(selection, 'art-style', response); } catch {}
+  return (response.text || '').trim();
 }

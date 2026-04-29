@@ -2,10 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import fs from 'fs';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import db from '../db/connection';
 import upload from '../middleware/upload';
-import { getGeminiApiKey, getGeminiModel, trackUsage } from '../services/geminiKeys';
+import { getProvider, defaultModel, trackProviderUsage } from '../services/provider';
 
 const router = Router();
 
@@ -107,22 +106,16 @@ router.post('/:id/design/summarize-direction', async (req: Request, res: Respons
       return res.status(400).json({ error: 'analyses array is required' });
     }
 
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) {
-      return res.status(400).json({ error: 'Gemini API key not configured.' });
-    }
-
     const combined = analyses.map((a, i) => `參考圖 ${i + 1}:\n${a}`).join('\n\n---\n\n');
 
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
+    const { selection, response } = await getProvider().generateWithSelection({
+      model: defaultModel(),
       systemInstruction: '你是一位設計顧問。根據提供的視覺參考圖分析，用繁體中文寫出 2-4 句精簡的設計方向描述，涵蓋：整體風格、主色調、排版感受、元件風格。語氣簡潔專業，像在給設計師的 brief。',
-      generationConfig: { maxOutputTokens: 300, temperature: 0.3 },
+      prompt: `以下是視覺參考圖的分析結果，請總結成設計方向：\n\n${combined}`,
+      maxOutputTokens: 300,
     });
-    const result = await model.generateContent(`以下是視覺參考圖的分析結果，請總結成設計方向：\n\n${combined}`);
-    try { trackUsage(apiKey, getGeminiModel(), 'design-direction', result.response.usageMetadata); } catch {}
-    const direction = result.response.text().trim() || '';
+    try { trackProviderUsage(selection, 'design-direction', response); } catch {}
+    const direction = (response.text || '').trim();
     return res.json({ direction });
   } catch (err: any) {
     console.error('Error summarizing design direction:', err);
@@ -154,28 +147,21 @@ router.post('/:id/design/analyze-reference', (req: Request, res: Response, next:
         return res.status(400).json({ error: 'No file provided' });
       }
 
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return res.status(400).json({ error: 'Gemini API key not configured.' });
-      }
-
       const { path: storagePath, mimetype } = req.file;
 
-      // Enforce 10MB limit for vision
       if (req.file.size > 10 * 1024 * 1024) {
         return res.status(400).json({ error: 'Image must be 10MB or less' });
       }
 
       const base64data = fs.readFileSync(storagePath).toString('base64');
 
-      const genai = new GoogleGenerativeAI(apiKey);
-      const model = genai.getGenerativeModel({ model: getGeminiModel() });
-      const result = await model.generateContent([
-        { inlineData: { mimeType: mimetype, data: base64data } },
-        { text: 'Analyze this design reference image and describe in detail: 1) Color palette (list main colors with hex codes if visible), 2) Typography style (serif/sans-serif/mono, weight, size impression), 3) Spacing density (compact/normal/spacious), 4) Border radius style (sharp: 0-2px / medium: 4-8px / rounded: 12px+), 5) Shadow style (flat/subtle/prominent), 6) Overall aesthetic (minimalist/modern/playful/corporate/colorful/dark/light/etc.), 7) Any other distinctive design characteristics. Be specific and actionable so an AI can reproduce this style.' },
-      ]);
-      try { trackUsage(apiKey, getGeminiModel(), 'design-direction', result.response.usageMetadata); } catch {}
-      const analysis = result.response.text() || '';
+      const { selection, response } = await getProvider().generateWithSelection({
+        model: defaultModel(),
+        prompt: 'Analyze this design reference image and describe in detail: 1) Color palette (list main colors with hex codes if visible), 2) Typography style (serif/sans-serif/mono, weight, size impression), 3) Spacing density (compact/normal/spacious), 4) Border radius style (sharp: 0-2px / medium: 4-8px / rounded: 12px+), 5) Shadow style (flat/subtle/prominent), 6) Overall aesthetic (minimalist/modern/playful/corporate/colorful/dark/light/etc.), 7) Any other distinctive design characteristics. Be specific and actionable so an AI can reproduce this style.',
+        images: [{ type: 'inline', mimeType: mimetype, data: base64data }],
+      });
+      try { trackProviderUsage(selection, 'design-direction', response); } catch {}
+      const analysis = response.text || '';
 
       // Delete temp file after analysis
       fs.unlink(storagePath, (unlinkErr) => {

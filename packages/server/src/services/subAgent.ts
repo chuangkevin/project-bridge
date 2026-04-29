@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, trackProviderUsage } from './provider';
 import { PageAssignment } from './masterAgent';
 
 /**
@@ -13,7 +12,7 @@ export interface SkillForSubAgent {
 }
 
 export async function generatePageFragment(
-  apiKey: string,
+  _apiKey: string | undefined,
   page: PageAssignment,
   cssVariables: string,
   sharedCss: string,
@@ -118,22 +117,22 @@ ${page.constraints}
 Generate the complete page fragment now. Return ONLY the <div class="page"> element with all content inside.`;
 
   try {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
-      systemInstruction: systemPrompt,
-      generationConfig: { maxOutputTokens: 8192 },
-    });
-
-    // 60 second timeout per page
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Timeout generating ${pageName}`)), 60000)
     );
-    const result = await Promise.race([model.generateContent(userPrompt), timeoutPromise]);
-    const response = result.response;
-    try { trackUsage(apiKey, getGeminiModel(), `sub-agent-${pageName}`, response.usageMetadata); } catch {}
+    const exec = await Promise.race([
+      getProvider().generateWithSelection({
+        model: defaultModel(),
+        systemInstruction: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: 8192,
+      }),
+      timeoutPromise,
+    ]);
+    const { selection, response } = exec;
+    try { trackProviderUsage(selection, `sub-agent-${pageName}`, response); } catch {}
 
-    let html = response.text().trim();
+    let html = response.text.trim();
 
     // Strip markdown fences if present
     const fenceMatch = html.match(/```(?:html)?\s*([\s\S]*?)```/);

@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 import db from '../db/connection';
@@ -8,6 +7,8 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from '../services/provider';
+import type { ChatMessage } from '@kevinsisi/ai-core';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
 import { validateDesignSystem, autoFixDesignViolations } from '../services/designSystemValidator';
@@ -562,17 +563,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           let modification: string = userContent;
 
           try {
-            const genai = new GoogleGenerativeAI(apiKey);
-            const identifyModel = genai.getGenerativeModel({
-              model: getGeminiModel(),
-              generationConfig: { maxOutputTokens: 500, temperature: 0, responseMimeType: 'application/json' },
+            const exec = await getProvider().generateWithSelection({
+              model: defaultModel(),
+              systemInstruction: withJsonInstruction(),
+              prompt: identifyPrompt,
+              images: [{ type: 'inline', mimeType: imageMimeType || 'image/png', data: imageBase64 }],
+              maxOutputTokens: 500,
             });
-            const identifyResult = await identifyModel.generateContent([
-              { text: identifyPrompt },
-              { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
-            ]);
-            try { trackUsage(apiKey, getGeminiModel(), 'vision-identify', identifyResult.response.usageMetadata); } catch {}
-            const identified = JSON.parse(identifyResult.response.text());
+            try { trackProviderUsage(exec.selection, 'vision-identify', exec.response); } catch {}
+            const identified = JSON.parse(extractJsonBody(exec.response.text));
             targetBridgeIdFromAI = identified.bridgeId;
             targetPage = identified.page;
             modification = identified.modification || userContent;
@@ -598,17 +597,15 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
                 .replace('{targetHtml}', elementResult.outerHtml)
                 .replace('{instruction}', modification);
 
-              const modifyModel = new GoogleGenerativeAI(apiKey).getGenerativeModel({
-                model: getGeminiModel(),
-                generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
+              const modifyExec = await getProvider().generateWithSelection({
+                model: defaultModel(),
+                prompt: elementPrompt,
+                images: [{ type: 'inline', mimeType: imageMimeType || 'image/png', data: imageBase64 }],
+                maxOutputTokens: 8192,
               });
-              const modifyResult = await modifyModel.generateContent([
-                { text: elementPrompt },
-                { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
-              ]);
-              try { trackUsage(apiKey, getGeminiModel(), 'vision-element-adjust', modifyResult.response.usageMetadata); } catch {}
+              try { trackProviderUsage(modifyExec.selection, 'vision-element-adjust', modifyExec.response); } catch {}
 
-              let newElementHtml = modifyResult.response.text().trim();
+              let newElementHtml = modifyExec.response.text.trim();
               // Strip markdown fences if present
               const fenceMatch2 = newElementHtml.match(/```(?:html)?\s*([\s\S]*?)```/);
               if (fenceMatch2) newElementHtml = fenceMatch2[1].trim();
@@ -650,21 +647,17 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
             if (truncatedHtml.length > 20000) truncatedHtml = truncatedHtml.slice(0, 20000) + '\n<!-- truncated -->';
           }
 
-          const genai = new GoogleGenerativeAI(apiKey);
-          const model = genai.getGenerativeModel({
-            model: getGeminiModel(),
-            systemInstruction: visionPrompt,
-            generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json', temperature: generationTemperature },
+          const visionExec = await getProvider().generateWithSelection({
+            model: defaultModel(),
+            systemInstruction: withJsonInstruction(visionPrompt),
+            prompt: `使用者指示: ${userContent}\n\n目前的 prototype HTML:\n${truncatedHtml}`,
+            images: [{ type: 'inline', mimeType: imageMimeType || 'image/png', data: imageBase64 }],
+            maxOutputTokens: 8192,
           });
 
-          const result = await model.generateContent([
-            { inlineData: { mimeType: imageMimeType || 'image/png', data: imageBase64 } },
-            { text: `使用者指示: ${userContent}\n\n目前的 prototype HTML:\n${truncatedHtml}` },
-          ]);
+          try { trackProviderUsage(visionExec.selection, 'vision-micro-adjust', visionExec.response); } catch {}
 
-          try { trackUsage(apiKey, getGeminiModel(), 'vision-micro-adjust', result.response.usageMetadata); } catch {}
-
-          let responseText = result.response.text().trim();
+          let responseText = visionExec.response.text.trim();
           const fallbackFenceMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
           if (fallbackFenceMatch) responseText = fallbackFenceMatch[1].trim();
 
@@ -718,53 +711,31 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'analyzing', message: '分析需求中...' })}\n\n`);
       const microPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/micro-adjust.txt'), 'utf-8');
 
-      // Micro-adjust with auto-retry on 429
-      let maKey = apiKey;
-      let maRetries = 0;
-      while (maRetries <= 2) {
-        try {
-          const genai = new GoogleGenerativeAI(maKey);
-          const model = genai.getGenerativeModel({
-            model: getGeminiModel(),
-            systemInstruction: microPrompt,
-            generationConfig: { maxOutputTokens: 32768, temperature: generationTemperature },
-          });
+      // Micro-adjust streaming via MultiProviderClient — adapter handles key rotation internally.
+      try {
+        const protoHtml = currentPrototype.html.length > 200000
+          ? currentPrototype.html.slice(0, 200000) + '\n<!-- [truncated] -->'
+          : currentPrototype.html;
 
-          // Truncate HTML if too large (>200K chars) to avoid API limits
-          const protoHtml = currentPrototype.html.length > 200000
-            ? currentPrototype.html.slice(0, 200000) + '\n<!-- [truncated] -->'
-            : currentPrototype.html;
+        const streamExec = getProvider().streamWithSelection({
+          model: defaultModel(),
+          systemInstruction: microPrompt,
+          prompt: `使用者要求: ${userContent}\n\n以下是目前的完整 HTML prototype:\n${protoHtml}`,
+          maxOutputTokens: 32768,
+        });
 
-          const result = await model.generateContentStream(
-            `使用者要求: ${userContent}\n\n以下是目前的完整 HTML prototype:\n${protoHtml}`
-          );
-
-          for await (const chunk of result.stream) {
-            const text = chunk.text();
-            if (text) {
-              fullResponse += text;
-              res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-            }
+        for await (const text of streamExec.stream) {
+          if (text) {
+            fullResponse += text;
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
           }
-          try { const resp = await result.response; trackUsage(maKey, getGeminiModel(), 'micro-adjust', resp.usageMetadata); } catch {}
-          break;
-        } catch (err: any) {
-          const msg = err?.message || '';
-          const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-          if (isRateLimit && maRetries < 2) {
-            const altKey = getGeminiApiKeyExcluding(maKey);
-            if (altKey) {
-              console.warn(`[micro-adjust] 429 on key ...${maKey.slice(-4)}, retrying with ...${altKey.slice(-4)}`);
-              maKey = altKey;
-              maRetries++;
-              continue;
-            }
-          }
-          console.error('Micro-adjust error:', err);
-          res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-          res.end();
-          return;
         }
+        console.log(`[micro-adjust] provider=${streamExec.selection.provider} model=${streamExec.selection.model}`);
+      } catch (err: any) {
+        console.error('Micro-adjust error:', err);
+        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+        res.end();
+        return;
       }
 
       // Extract HTML
@@ -850,44 +821,25 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         .replace('{targetHtml}', elementResult.outerHtml)
         .replace('{instruction}', instruction);
 
-      // Call Gemini with auto-retry on 429
-      let eaKey = apiKey;
-      let eaRetries = 0;
+      // Element-adjust via MultiProviderClient (adapter handles key rotation)
       let modifiedElement = '';
-      while (eaRetries <= 2) {
-        try {
-          const genai = new GoogleGenerativeAI(eaKey);
-          const model = genai.getGenerativeModel({
-            model: getGeminiModel(),
-            systemInstruction: elementPrompt,
-            generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
-          });
+      try {
+        const exec = await getProvider().generateWithSelection({
+          model: defaultModel(),
+          systemInstruction: elementPrompt,
+          prompt: instruction,
+          maxOutputTokens: 8192,
+        });
+        try { trackProviderUsage(exec.selection, 'element-adjust', exec.response); } catch {}
 
-          const result = await model.generateContent(instruction);
-          try { trackUsage(eaKey, getGeminiModel(), 'element-adjust', result.response.usageMetadata); } catch {}
-
-          modifiedElement = result.response.text().trim();
-          // Strip markdown fences if present
-          const fenceMatch = modifiedElement.match(/```(?:html)?\s*([\s\S]*?)```/i);
-          if (fenceMatch) modifiedElement = fenceMatch[1].trim();
-          break;
-        } catch (err: any) {
-          const msg = err?.message || '';
-          const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-          if (isRateLimit && eaRetries < 2) {
-            const altKey = getGeminiApiKeyExcluding(eaKey);
-            if (altKey) {
-              console.warn(`[element-adjust] 429 on key ...${eaKey.slice(-4)}, retrying with ...${altKey.slice(-4)}`);
-              eaKey = altKey;
-              eaRetries++;
-              continue;
-            }
-          }
-          console.error('Element-adjust error:', err);
-          res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-          res.end();
-          return;
-        }
+        modifiedElement = exec.response.text.trim();
+        const fenceMatch = modifiedElement.match(/```(?:html)?\s*([\s\S]*?)```/i);
+        if (fenceMatch) modifiedElement = fenceMatch[1].trim();
+      } catch (err: any) {
+        console.error('Element-adjust error:', err);
+        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+        res.end();
+        return;
       }
 
       if (!modifiedElement) {
@@ -1029,152 +981,40 @@ This turn is a DB schema/table confirmation request with fresh MCP lookup result
         }
       }
 
-      let qaKey = apiKey;
-      let qaRetries = 0;
-      while (qaRetries <= 4) {
-        try {
-          const genai = new GoogleGenerativeAI(qaKey);
-          const model = genai.getGenerativeModel({
-            model: getGeminiModel(),
-            systemInstruction: richQaPrompt,
-            generationConfig: { maxOutputTokens: 8192, temperature: generationTemperature },
-          });
-          const qaHistory = (hasCurrentSchemaLookup ? history.slice(-2) : history.slice(-10));
-          const chatSession = model.startChat({
-            history: qaHistory.map(h => ({
-              role: h.role === 'assistant' ? 'model' as const : 'user' as const,
-              parts: [{ text: h.content.startsWith('<') ? '[前一次生成的原型]' : h.content.slice(0, 2000) }],
-            })),
-          });
-          // Auto-continue loop: if response was truncated (MAX_TOKENS), keep going
-          // First turn: include images if any (vision multimodal)
-          const firstTurnParts: any[] = [{ text: userContent }, ...qaImageParts];
-          let continuePrompt: string | any[] = qaImageParts.length > 0 ? firstTurnParts : userContent;
-          const buildRecoveryPrompt = (sentText: string, originalPrompt: string | any[]): string | any[] => {
-            if (!sentText.trim()) return originalPrompt;
-            const tail = sentText.slice(-800);
-            return [
-              '你剛剛的回答因串流中斷而停止。',
-              '請直接從最後已成功輸出的內容往下接續，不要重複前面已經輸出的段落。',
-              '不要重講開頭，不要重新列整份答案。',
-              `最後已輸出的內容片段：\n"""\n${tail}\n"""`,
-            ].join('\n\n');
-          };
-          const handleNonStreamFallback = async (fallbackPrompt: string | any[], continueTurn: number): Promise<'break' | 'continue'> => {
-            const fallback = await chatSession.sendMessage(fallbackPrompt as any);
-            const fallbackText = fallback.response.text();
-            if (fallbackText) {
-              fullResponse += fallbackText;
-              res.write(`data: ${JSON.stringify({ content: fallbackText })}\n\n`);
-            }
-            try {
-              trackUsage(qaKey, getGeminiModel(), 'chat-qa', fallback.response.usageMetadata);
-            } catch {}
-            const fallbackFinishReason = fallback.response.candidates?.[0]?.finishReason || 'STOP';
-            if (fallbackFinishReason === 'MAX_TOKENS') {
-              const tail = fullResponse.slice(-200);
-              const garbageRatio = (tail.match(/[-\s\n]/g) || []).length / Math.max(tail.length, 1);
-              if (garbageRatio > 0.8) {
-                console.log(`[chat-qa] Fallback auto-continue stopped — tail is ${Math.round(garbageRatio * 100)}% garbage`);
-                return 'break';
-              }
-              console.log(`[chat-qa] Fallback response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
-              continuePrompt = '繼續。不要加分隔線，不要重複前面的內容，直接從斷掉的地方往下寫。';
-              return 'continue';
-            }
-            return 'break';
-          };
-          for (let continueTurn = 0; continueTurn < 5; continueTurn++) {
-            let result: any;
-            try {
-              result = await chatSession.sendMessageStream(continuePrompt as any);
-            } catch (streamErr: any) {
-              const streamMsg = streamErr?.message || '';
-              if (streamMsg.includes('Failed to parse stream')) {
-                console.warn('[chat-qa] Stream parse failed, retrying stream once before non-stream fallback');
-                try {
-                  result = await chatSession.sendMessageStream(continuePrompt as any);
-                } catch (retryErr: any) {
-                  const retryMsg = retryErr?.message || '';
-                  if (!retryMsg.includes('Failed to parse stream')) throw retryErr;
-                  console.warn('[chat-qa] Stream parse retry failed, falling back to non-stream response');
-                  const fallbackOutcome = await handleNonStreamFallback(buildRecoveryPrompt(fullResponse, continuePrompt), continueTurn);
-                  if (fallbackOutcome === 'continue') continue;
-                  break;
-                }
-                // stream retry succeeded — continue with normal stream handling below
-              } else {
-                throw streamErr;
-              }
-            }
-            // Subsequent turns are text-only
-            if (continueTurn === 0) continuePrompt = '' as any;
-            try {
-              for await (const chunk of result.stream) {
-                const text = chunk.text();
-                if (text) {
-                  fullResponse += text;
-                  res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-                }
-              }
-            } catch (iterErr: any) {
-              const iterMsg = iterErr?.message || '';
-              if (!iterMsg.includes('Failed to parse stream')) throw iterErr;
-              console.warn('[chat-qa] Stream parse failed during iteration, falling back to non-stream continuation');
-              const fallbackOutcome = await handleNonStreamFallback(buildRecoveryPrompt(fullResponse, continuePrompt), continueTurn);
-              if (fallbackOutcome === 'continue') continue;
-              break;
-            }
-            // Check if response was truncated
-            let finishReason = 'STOP';
-            try {
-              const resp = await result.response;
-              trackUsage(qaKey, getGeminiModel(), 'chat-qa', resp.usageMetadata);
-              finishReason = resp.candidates?.[0]?.finishReason || 'STOP';
-            } catch {}
+      try {
+        const qaHistorySrc = (hasCurrentSchemaLookup ? history.slice(-2) : history.slice(-10));
+        const qaHistory: ChatMessage[] = qaHistorySrc.map(h => ({
+          role: h.role === 'assistant' ? 'model' as const : 'user' as const,
+          parts: h.content.startsWith('<') ? '[前一次生成的原型]' : h.content.slice(0, 2000),
+        }));
 
-            if (finishReason === 'MAX_TOKENS') {
-              // Check if AI is just spitting garbage (dashes, empty lines)
-              const tail = fullResponse.slice(-200);
-              const garbageRatio = (tail.match(/[-\s\n]/g) || []).length / Math.max(tail.length, 1);
-              if (garbageRatio > 0.8) {
-                console.log(`[chat-qa] Auto-continue stopped — tail is ${Math.round(garbageRatio * 100)}% garbage`);
-                break; // AI has nothing left to say
-              }
-              console.log(`[chat-qa] Response truncated (MAX_TOKENS), auto-continuing turn ${continueTurn + 2}...`);
-              continuePrompt = '繼續。不要加分隔線，不要重複前面的內容，直接從斷掉的地方往下寫。';
-            } else {
-              break; // response complete
-            }
+        const visionImagesQa = qaImageParts.map((p: any) => ({
+          type: 'inline' as const,
+          mimeType: p.inlineData.mimeType,
+          data: p.inlineData.data,
+        }));
+
+        const streamExec = getProvider().streamWithSelection({
+          model: defaultModel(),
+          systemInstruction: richQaPrompt,
+          prompt: userContent,
+          history: qaHistory,
+          ...(visionImagesQa.length > 0 ? { images: visionImagesQa } : {}),
+          maxOutputTokens: 8192,
+        });
+
+        for await (const text of streamExec.stream) {
+          if (text) {
+            fullResponse += text;
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
           }
-          break;
-        } catch (err: any) {
-          const msg = err?.message || '';
-          const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-          const isServiceUnavailable = msg.includes('503') || msg.toLowerCase().includes('service unavailable') || msg.toLowerCase().includes('high demand');
-          if (isRateLimit && qaRetries < 4) {
-            const altKey = getGeminiApiKeyExcluding(qaKey);
-            if (altKey) { qaKey = altKey; }
-            qaRetries++;
-            // Wait before retry — let rate limit cool down
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            console.log(`[chat-qa] 429, retrying ${qaRetries}/4 with key ...${qaKey.slice(-4)}`);
-            continue;
-          }
-          if (isServiceUnavailable && qaRetries < 4) {
-            const altKey = getGeminiApiKeyExcluding(qaKey, 'server_error');
-            if (altKey) { qaKey = altKey; }
-            qaRetries++;
-            const waitMs = Math.min(8000, 2000 * qaRetries);
-            await new Promise(resolve => setTimeout(resolve, waitMs));
-            console.log(`[chat-qa] 503/high-demand, retrying ${qaRetries}/4 after ${waitMs}ms with key ...${qaKey.slice(-4)}`);
-            continue;
-          }
-          console.error('Gemini QA error:', err);
-          res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-          res.end();
-          return;
         }
+        console.log(`[chat-qa] provider=${streamExec.selection.provider} model=${streamExec.selection.model}`);
+      } catch (err: any) {
+        console.error('Gemini QA error:', err);
+        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+        res.end();
+        return;
       }
       res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'done' })}\n\n`);
 
@@ -2010,46 +1850,35 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
     // ── Phase 2: Actual generation ──
     res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'generating', message: '生成程式碼...' })}\n\n`);
 
-    let currentKey = apiKey;
-    let retries = 0;
-    const maxRetries = 2;
-    while (retries <= maxRetries) {
-      try {
-        const genai = new GoogleGenerativeAI(currentKey);
-        const model = genai.getGenerativeModel({
-          model: getGeminiModel(),
-          systemInstruction: effectiveSystemPrompt,
-          generationConfig: { maxOutputTokens: 65536, temperature: generationTemperature },
-        });
-        const chatSession = model.startChat({ history: trimmedHistory });
-        const result = await chatSession.sendMessageStream(userContent);
+    try {
+      // Convert Gemini-shape history (parts: [{text}]) to ai-core ChatMessage[]
+      const aiCoreHistory: ChatMessage[] = trimmedHistory.map((h: any) => ({
+        role: h.role,
+        parts: typeof h.parts === 'string'
+          ? h.parts
+          : Array.isArray(h.parts) ? (h.parts.map((p: any) => p.text || '').join('')) : '',
+      }));
 
-        for await (const chunk of result.stream) {
-          const text = chunk.text();
-          if (text) {
-            fullResponse += text;
-            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-          }
+      const streamExec = getProvider().streamWithSelection({
+        model: defaultModel(),
+        systemInstruction: effectiveSystemPrompt,
+        prompt: userContent,
+        history: aiCoreHistory,
+        maxOutputTokens: 65536,
+      });
+
+      for await (const text of streamExec.stream) {
+        if (text) {
+          fullResponse += text;
+          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
         }
-        try { const resp = await result.response; trackUsage(currentKey, getGeminiModel(), 'chat-generate', resp.usageMetadata); } catch {}
-        break; // success
-      } catch (err: any) {
-        const msg = err?.message || '';
-        const isRateLimit = msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('Too Many Requests');
-        if (isRateLimit && retries < maxRetries) {
-          const altKey = getGeminiApiKeyExcluding(currentKey);
-          if (altKey) {
-            console.warn(`[chat] 429 on key ...${currentKey.slice(-4)}, retrying with ...${altKey.slice(-4)} (attempt ${retries + 1})`);
-            currentKey = altKey;
-            retries++;
-            continue;
-          }
-        }
-        console.error('Gemini API error:', err);
-        res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
-        res.end();
-        return;
       }
+      console.log(`[chat-generate] provider=${streamExec.selection.provider} model=${streamExec.selection.model}`);
+    } catch (err: any) {
+      console.error('Gemini API error:', err);
+      res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+      res.end();
+      return;
     }
 
     // Emit done phase before the done event
@@ -2270,7 +2099,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
         }
       }
 
-      triggerQualityScoring(versionId, html, currentKey);
+      triggerQualityScoring(versionId, html, apiKey);
 
       // Send page list as separate event before done
       if (finalPages.length > 0) {
@@ -2283,11 +2112,6 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       // Quick summary call (after generation completes)
       let generationSummary = '';
       try {
-        const summaryGenai = new GoogleGenerativeAI(currentKey);
-        const summaryModel = summaryGenai.getGenerativeModel({
-          model: getGeminiModel(),
-          generationConfig: { maxOutputTokens: 800, temperature: 0.3 },
-        });
         const summaryPrompt = `你是 UI 設計助手。以下是剛生成的 HTML prototype。請用繁體中文描述（8-15 行）。
 
 格式要求：
@@ -2298,8 +2122,12 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
 
 直接回答，不要加 markdown 標題。HTML 如下（前3000字）：
 ${html.slice(0, 3000)}`;
-        const summaryResult = await summaryModel.generateContent(summaryPrompt);
-        generationSummary = summaryResult.response.text();
+        const summaryResp = await getProvider().generateContent({
+          model: defaultModel(),
+          prompt: summaryPrompt,
+          maxOutputTokens: 800,
+        });
+        generationSummary = summaryResp.text;
       } catch { /* API summary failed — build local summary */ }
       // Fallback: build local summary if API call failed
       if (!generationSummary && finalPages.length > 0) {

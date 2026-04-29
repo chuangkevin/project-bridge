@@ -35,6 +35,7 @@ import promptTemplatesRouter from './routes/promptTemplates';
 import queueRouter from './routes/queue';
 import designPresetsRouter from './routes/designPresets';
 import componentsRouter, { projectComponentsRouter } from './routes/components';
+import openaiOAuthRouter from './routes/openaiOAuth';
 import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
 import { HOUSEPRICE_DESIGN_SYSTEM_V2 } from './services/designSystemV2';
@@ -85,6 +86,7 @@ app.use('/api/queue', queueRouter);
 app.use('/api/design-presets', designPresetsRouter);
 app.use('/api/components', componentsRouter);
 app.use('/api/projects', projectComponentsRouter);
+app.use('/api/openai-oauth', openaiOAuthRouter);
 
 // Health check
 function sendHealth(_req: express.Request, res: express.Response) {

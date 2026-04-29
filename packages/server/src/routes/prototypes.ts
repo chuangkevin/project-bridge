@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import db from '../db/connection';
 import { extractComponent, replaceComponent } from '../services/componentExtractor';
-import { getGeminiApiKey, getGeminiModel, trackUsage } from '../services/geminiKeys';
+import { getProvider, defaultModel, trackProviderUsage } from '../services/provider';
 import { validateNavigation } from '../services/prototypeValidator';
 
 const router = Router();
@@ -71,10 +71,6 @@ router.post('/:id/prototype/regenerate-component', async (req: Request, res: Res
 
   const componentHtml = extractComponent(version.html, bridgeId);
   if (!componentHtml) return res.status(404).json({ error: 'Component not found' });
-
-  // Get API key
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) return res.status(400).json({ error: 'Gemini API key not configured' });
 
   // Build surrounding context (200 chars before/after)
   const idx = version.html.indexOf(componentHtml);
@@ -170,23 +166,23 @@ RULES:
   res.flushHeaders();
 
   try {
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: getGeminiModel(),
+    const streamExec = getProvider().streamWithSelection({
+      model: defaultModel(),
       systemInstruction: systemPrompt,
-      generationConfig: { maxOutputTokens: 4096 },
+      prompt: `Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`,
+      maxOutputTokens: 4096,
     });
-    const result = await model.generateContentStream(`Instruction: ${instruction}\n\nExisting component HTML:\n${componentHtml}`);
     let newComponentHtml = '';
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
+    for await (const text of streamExec.stream) {
       if (text) {
         newComponentHtml += text;
         res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
       }
     }
-    try { const resp = await result.response; trackUsage(apiKey, getGeminiModel(), 'component-regen', resp.usageMetadata); } catch {}
+    try {
+      // streaming responses don't carry usage metadata in ai-core; selection is enough for routing telemetry
+      console.log(`[component-regen] provider=${streamExec.selection.provider} model=${streamExec.selection.model}`);
+    } catch {}
 
     // Strip markdown fences if AI wrapped in code block
     newComponentHtml = newComponentHtml.trim();

@@ -121,6 +121,13 @@ export default function SettingsPage() {
   const [ctdSaving, setCtdSaving] = useState(false);
   const [ctdMsg, setCtdMsg] = useState('');
 
+  // OpenAI OAuth
+  const [openaiOAuthConnected, setOpenaiOAuthConnected] = useState(false);
+  const [openaiOAuthExpiresAt, setOpenaiOAuthExpiresAt] = useState<string | null>(null);
+  const [openaiOAuthClientIdConfigured, setOpenaiOAuthClientIdConfigured] = useState(false);
+  const [openaiOAuthBusy, setOpenaiOAuthBusy] = useState(false);
+  const [openaiOAuthMsg, setOpenaiOAuthMsg] = useState('');
+
   // MCP management
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
   const [mcpLoading, setMcpLoading] = useState(false);
@@ -536,6 +543,89 @@ export default function SettingsPage() {
         alert(data.error || '刪除失敗');
       }
     } catch { /* ignore */ }
+  };
+
+  const fetchOpenaiOAuthStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/openai-oauth/status', { headers: bridgeAuthHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      setOpenaiOAuthConnected(!!data.connected);
+      setOpenaiOAuthExpiresAt(data.expiresAt || null);
+      setOpenaiOAuthClientIdConfigured(!!data.clientIdConfigured);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    fetchOpenaiOAuthStatus();
+  }, [fetchOpenaiOAuthStatus]);
+
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!ev.data || ev.data.source !== 'openai-oauth') return;
+      setOpenaiOAuthBusy(false);
+      if (ev.data.ok) {
+        setOpenaiOAuthMsg('已連結 OpenAI 帳號');
+        fetchOpenaiOAuthStatus();
+      } else {
+        setOpenaiOAuthMsg(`授權失敗：${ev.data.error || '未知錯誤'}`);
+      }
+      setTimeout(() => setOpenaiOAuthMsg(''), 4000);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [fetchOpenaiOAuthStatus]);
+
+  const handleOpenaiOAuthConnect = async () => {
+    if (!openaiOAuthClientIdConfigured) {
+      setOpenaiOAuthMsg('需先設定 OPENAI_OAUTH_CLIENT_ID 環境變數或在設定中儲存 openai_oauth_client_id');
+      return;
+    }
+    setOpenaiOAuthBusy(true);
+    setOpenaiOAuthMsg('');
+    try {
+      const res = await fetch('/api/openai-oauth/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.authorizeUrl) {
+        setOpenaiOAuthBusy(false);
+        setOpenaiOAuthMsg(data.error || '無法啟動 OAuth 流程');
+        return;
+      }
+      const popup = window.open(data.authorizeUrl, 'openai-oauth', 'width=560,height=720');
+      if (!popup) {
+        setOpenaiOAuthBusy(false);
+        setOpenaiOAuthMsg('彈跳視窗被擋住，請允許後再試');
+      }
+    } catch (err: any) {
+      setOpenaiOAuthBusy(false);
+      setOpenaiOAuthMsg(err?.message || '啟動 OAuth 失敗');
+    }
+  };
+
+  const handleOpenaiOAuthDisconnect = async () => {
+    if (!confirm('確定要中斷 OpenAI 連結嗎？')) return;
+    setOpenaiOAuthBusy(true);
+    setOpenaiOAuthMsg('');
+    try {
+      const res = await fetch('/api/openai-oauth', {
+        method: 'DELETE',
+        headers: bridgeAuthHeaders(),
+      });
+      if (res.ok) {
+        setOpenaiOAuthConnected(false);
+        setOpenaiOAuthExpiresAt(null);
+        setOpenaiOAuthMsg('已中斷連結');
+        setTimeout(() => setOpenaiOAuthMsg(''), 2000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setOpenaiOAuthMsg(data.error || '中斷失敗');
+      }
+    } finally {
+      setOpenaiOAuthBusy(false);
+    }
   };
 
   const handleSaveCtdKey = async () => {
@@ -1233,6 +1323,56 @@ export default function SettingsPage() {
           </div>
           {ctdMsg && (
             <p style={ctdMsg === '已儲存' ? styles.successText : styles.errorText}>{ctdMsg}</p>
+          )}
+        </section>
+
+        {/* ── Section: OpenAI OAuth ───────────────────── */}
+        <section style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>OpenAI 授權連結</h2>
+            <div style={styles.sectionDivider} />
+            {openaiOAuthConnected && <span style={styles.badge}>已連結</span>}
+          </div>
+
+          <p style={styles.hint}>
+            透過 OAuth 授權，將 OpenAI 帳號連到 project-bridge。完成後 MultiProviderClient 會優先使用 OpenAI，再以 Gemini pool 作為 fallback。
+            client_id 由 <code>OPENAI_OAUTH_CLIENT_ID</code> 環境變數提供（或於設定中儲存 <code>openai_oauth_client_id</code>）。
+          </p>
+
+          {!openaiOAuthClientIdConfigured && (
+            <p style={styles.errorText}>尚未設定 OPENAI_OAUTH_CLIENT_ID — 請先設定後再授權。</p>
+          )}
+
+          {openaiOAuthConnected && openaiOAuthExpiresAt && (
+            <p style={styles.hint}>access_token 到期時間：{new Date(openaiOAuthExpiresAt).toLocaleString()}</p>
+          )}
+
+          <div style={styles.inputRow}>
+            {!openaiOAuthConnected ? (
+              <button
+                type="button"
+                style={{ ...styles.primaryBtn, ...(openaiOAuthBusy ? styles.btnDisabled : {}) }}
+                onClick={handleOpenaiOAuthConnect}
+                disabled={openaiOAuthBusy || !openaiOAuthClientIdConfigured}
+              >
+                {openaiOAuthBusy ? '授權中…' : '使用 OpenAI 授權'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                style={{ ...styles.primaryBtn, ...(openaiOAuthBusy ? styles.btnDisabled : {}) }}
+                onClick={handleOpenaiOAuthDisconnect}
+                disabled={openaiOAuthBusy}
+              >
+                {openaiOAuthBusy ? '處理中…' : '中斷連結'}
+              </button>
+            )}
+          </div>
+
+          {openaiOAuthMsg && (
+            <p style={openaiOAuthMsg.includes('失敗') || openaiOAuthMsg.includes('被擋住') || openaiOAuthMsg.includes('需先') ? styles.errorText : styles.successText}>
+              {openaiOAuthMsg}
+            </p>
           )}
         </section>
 

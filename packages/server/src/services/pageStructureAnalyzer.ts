@@ -1,19 +1,11 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
-import { withGeminiRetry } from './geminiRetry';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export interface PageStructure {
   multiPage: boolean;
   pages: string[];
 }
 
-export async function analyzePageStructure(message: string, apiKey: string): Promise<PageStructure> {
-  try {
-    return await withGeminiRetry(async (currentKey) => {
-      const genai = new GoogleGenerativeAI(currentKey);
-      const model = genai.getGenerativeModel({
-        model: getGeminiModel(),
-        systemInstruction: `You are analyzing a UI generation request to detect if it describes multiple pages/screens.
+const SYSTEM_PROMPT = `You are analyzing a UI generation request to detect if it describes multiple pages/screens.
 
 Return JSON only: {"multiPage": boolean, "pages": string[]}
 
@@ -35,24 +27,23 @@ Examples:
 - "做一個有登入、首頁、個人設定的系統" → {"multiPage": true, "pages": ["登入", "首頁", "個人設定"]}
 - "購物網站 包含購物車、結帳頁面 要多頁面" → {"multiPage": true, "pages": ["商品列表", "商品詳情", "購物車", "結帳"]}
 - "部落格系統 要有文章管理" → {"multiPage": true, "pages": ["文章列表", "文章詳情", "新增文章"]}
-- "create a dashboard with analytics and settings" → {"multiPage": true, "pages": ["Dashboard", "Analytics", "Settings"]}`,
-        generationConfig: {
-          maxOutputTokens: 200,
-          temperature: 0,
-          responseMimeType: 'application/json',
-        },
-      });
+- "create a dashboard with analytics and settings" → {"multiPage": true, "pages": ["Dashboard", "Analytics", "Settings"]}`;
 
-      const result = await model.generateContent(message.slice(0, 8000));
-      try { trackUsage(currentKey, getGeminiModel(), 'page-structure', result.response.usageMetadata); } catch {}
-      const content = result.response.text();
-      console.log('[pageStructure] Raw response:', content);
-      const parsed = JSON.parse(content);
-      return {
-        multiPage: !!parsed.multiPage,
-        pages: Array.isArray(parsed.pages) ? parsed.pages : [],
-      };
-    }, { callType: 'page-structure', maxRetries: 3 });
+export async function analyzePageStructure(message: string, _apiKey?: string): Promise<PageStructure> {
+  try {
+    const { selection, response } = await getProvider().generateWithSelection({
+      model: defaultModel(),
+      systemInstruction: withJsonInstruction(SYSTEM_PROMPT),
+      prompt: message.slice(0, 8000),
+      maxOutputTokens: 200,
+    });
+    try { trackProviderUsage(selection, 'page-structure', response); } catch {}
+    console.log('[pageStructure] Raw response:', response.text);
+    const parsed = JSON.parse(extractJsonBody(response.text));
+    return {
+      multiPage: !!parsed.multiPage,
+      pages: Array.isArray(parsed.pages) ? parsed.pages : [],
+    };
   } catch (err: any) {
     console.error('[pageStructure] Failed:', (err?.message || '').slice(0, 100));
     return { multiPage: false, pages: [] };

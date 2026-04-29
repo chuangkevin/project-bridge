@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, trackProviderUsage } from './provider';
 
 const COMPONENT_EXTRACTION_PROMPT = `You are analyzing a UI design reference image. A developer will use your analysis to recreate this design in HTML/CSS. Be precise and only describe what you actually see.
 
@@ -44,27 +43,21 @@ If no constraints are found, omit this section entirely.
 
 Be specific with hex colors — do not guess. If a color looks purple, say purple and give the closest hex. Do not invent components that are not visible.`;
 
-export async function analyzeDesignSpec(images: Buffer[], apiKey: string): Promise<string> {
+export async function analyzeDesignSpec(images: Buffer[], _apiKey?: string): Promise<string> {
   if (images.length === 0) return '';
 
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: { maxOutputTokens: 3000 },
-  });
-
-  const imageParts = images.map(buf => ({
-    inlineData: {
-      mimeType: 'image/png' as const,
-      data: buf.toString('base64'),
-    },
+  const visionImages = images.map(buf => ({
+    type: 'inline' as const,
+    mimeType: 'image/png',
+    data: buf.toString('base64'),
   }));
 
-  const result = await model.generateContent([
-    ...imageParts,
-    { text: COMPONENT_EXTRACTION_PROMPT },
-  ]);
-  try { trackUsage(apiKey, getGeminiModel(), 'visual-analysis', result.response.usageMetadata); } catch {}
-
-  return result.response.text() || '';
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    prompt: COMPONENT_EXTRACTION_PROMPT,
+    images: visionImages,
+    maxOutputTokens: 3000,
+  });
+  try { trackProviderUsage(selection, 'visual-analysis', response); } catch {}
+  return response.text || '';
 }

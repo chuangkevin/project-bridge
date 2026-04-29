@@ -11,8 +11,7 @@
  *   review   → evaluate quality against best practices
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getGeminiModel, trackUsage } from './geminiKeys';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 // ─────────────────────────────────────────────
 // Skill 1: EXPLORE — Deep understanding
@@ -54,25 +53,18 @@ Rules:
 
 export async function skillExplore(
   fullText: string,
-  apiKey: string
+  _apiKey?: string
 ): Promise<ExploreResult> {
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: {
-      maxOutputTokens: 4096,
-      temperature: 0.2,
-      responseMimeType: 'application/json',
-    },
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: `${EXPLORE_PROMPT}\n\n=== DOCUMENT ===\n${fullText.slice(0, 60000)}\n=== END ===`,
+    maxOutputTokens: 4096,
   });
-
-  const result = await model.generateContent(
-    `${EXPLORE_PROMPT}\n\n=== DOCUMENT ===\n${fullText.slice(0, 60000)}\n=== END ===`
-  );
-  try { trackUsage(apiKey, getGeminiModel(), 'skill-explore', result.response.usageMetadata); } catch {}
+  try { trackProviderUsage(selection, 'skill-explore', response); } catch {}
 
   try {
-    return JSON.parse(result.response.text());
+    return JSON.parse(extractJsonBody(response.text));
   } catch {
     return {
       domain: 'unknown',
@@ -135,29 +127,22 @@ Review criteria:
 export async function skillUxReview(
   fullText: string,
   pages: any[],
-  apiKey: string
+  _apiKey?: string
 ): Promise<UxReviewResult> {
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: {
-      maxOutputTokens: 4096,
-      temperature: 0.3,
-      responseMimeType: 'application/json',
-    },
-  });
-
   const pagesContext = pages.map(p =>
     `Page: ${p.name} | Components: ${(p.components || []).join(', ')} | Rules: ${(p.businessRules || []).join('; ')}`
   ).join('\n');
 
-  const result = await model.generateContent(
-    `${UX_REVIEW_PROMPT}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n\n=== EXTRACTED PAGES ===\n${pagesContext}\n=== END ===`
-  );
-  try { trackUsage(apiKey, getGeminiModel(), 'skill-ux-review', result.response.usageMetadata); } catch {}
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: `${UX_REVIEW_PROMPT}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n\n=== EXTRACTED PAGES ===\n${pagesContext}\n=== END ===`,
+    maxOutputTokens: 4096,
+  });
+  try { trackProviderUsage(selection, 'skill-ux-review', response); } catch {}
 
   try {
-    return JSON.parse(result.response.text());
+    return JSON.parse(extractJsonBody(response.text));
   } catch {
     return { overallScore: 5, strengths: [], issues: [], accessibilityNotes: [], mobileConsiderations: [] };
   }
@@ -224,18 +209,8 @@ export async function skillDesignProposal(
   fullText: string,
   pages: any[],
   explore: ExploreResult | null,
-  apiKey: string
+  _apiKey?: string
 ): Promise<DesignProposalResult> {
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: {
-      maxOutputTokens: 4096,
-      temperature: 0.4,
-      responseMimeType: 'application/json',
-    },
-  });
-
   let context = `${DESIGN_PROPOSAL_PROMPT}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n`;
   context += `\n=== PAGES ===\n${pages.map(p => `${p.name}: ${(p.components || []).join(', ')}`).join('\n')}\n`;
   if (explore) {
@@ -248,11 +223,16 @@ export async function skillDesignProposal(
   }
   context += `\n=== END ===`;
 
-  const result = await model.generateContent(context);
-  try { trackUsage(apiKey, getGeminiModel(), 'skill-design-proposal', result.response.usageMetadata); } catch {}
+  const { selection, response } = await getProvider().generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: context,
+    maxOutputTokens: 4096,
+  });
+  try { trackProviderUsage(selection, 'skill-design-proposal', response); } catch {}
 
   try {
-    return JSON.parse(result.response.text());
+    return JSON.parse(extractJsonBody(response.text));
   } catch {
     return {
       designDirection: '',
@@ -332,33 +312,29 @@ Return JSON:
 export async function skillBusinessContext(
   fullText: string,
   pages: any[],
-  apiKey: string
+  _apiKey?: string
 ): Promise<BusinessContextResult> {
   const skills = loadSkillFiles();
   if (skills.length === 0) {
     return { matchedSkills: [], businessRules: [], dataFlows: [], relatedSystems: [], internalTerms: [], implementationNotes: [] };
   }
 
-  const genai = new GoogleGenerativeAI(apiKey);
-
-  // Step 1: Classify which skills are relevant (lightweight call)
-  const classifierModel = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: { maxOutputTokens: 512, temperature: 0, responseMimeType: 'application/json' },
-  });
+  const client = getProvider();
 
   const skillList = skills.map((s, i) => `${i}: ${s.name} — ${s.description.slice(0, 150)}`).join('\n');
-  const classifyResult = await classifierModel.generateContent(
-    `Given this spec text, which skill indices are relevant? Return JSON: {"indices": [0, 2]}\n\nSkills:\n${skillList}\n\nSpec (first 10000 chars):\n${fullText.slice(0, 10000)}`
-  );
-  try { trackUsage(apiKey, getGeminiModel(), 'skill-biz-classify', classifyResult.response.usageMetadata); } catch {}
+  const classifyExec = await client.generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: `Given this spec text, which skill indices are relevant? Return JSON: {"indices": [0, 2]}\n\nSkills:\n${skillList}\n\nSpec (first 10000 chars):\n${fullText.slice(0, 10000)}`,
+    maxOutputTokens: 512,
+  });
+  try { trackProviderUsage(classifyExec.selection, 'skill-biz-classify', classifyExec.response); } catch {}
 
   let matchedIndices: number[] = [];
   try {
-    const parsed = JSON.parse(classifyResult.response.text());
+    const parsed = JSON.parse(extractJsonBody(classifyExec.response.text));
     matchedIndices = (parsed.indices || []).filter((i: number) => i >= 0 && i < skills.length);
   } catch {
-    // If classification fails, use all skills
     matchedIndices = skills.map((_, i) => i);
   }
 
@@ -366,7 +342,6 @@ export async function skillBusinessContext(
     return { matchedSkills: [], businessRules: [], dataFlows: [], relatedSystems: [], internalTerms: [], implementationNotes: [] };
   }
 
-  // Step 2: Load matched skills and analyze
   const matchedSkillContent = matchedIndices
     .map(i => `=== SKILL: ${skills[i].name} ===\n${skills[i].content.slice(0, 20000)}\n=== END ===`)
     .join('\n\n');
@@ -375,18 +350,16 @@ export async function skillBusinessContext(
     `Page: ${p.name} | Components: ${(p.components || []).join(', ')}`
   ).join('\n');
 
-  const model = genai.getGenerativeModel({
-    model: getGeminiModel(),
-    generationConfig: { maxOutputTokens: 4096, temperature: 0.2, responseMimeType: 'application/json' },
+  const exec = await client.generateWithSelection({
+    model: defaultModel(),
+    systemInstruction: withJsonInstruction(),
+    prompt: `${BUSINESS_CONTEXT_PROMPT}\n\n=== INTERNAL SKILLS ===\n${matchedSkillContent}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n\n=== PAGES ===\n${pagesContext}\n=== END ===`,
+    maxOutputTokens: 4096,
   });
-
-  const result = await model.generateContent(
-    `${BUSINESS_CONTEXT_PROMPT}\n\n=== INTERNAL SKILLS ===\n${matchedSkillContent}\n\n=== SPEC TEXT ===\n${fullText.slice(0, 60000)}\n\n=== PAGES ===\n${pagesContext}\n=== END ===`
-  );
-  try { trackUsage(apiKey, getGeminiModel(), 'skill-biz-context', result.response.usageMetadata); } catch {}
+  try { trackProviderUsage(exec.selection, 'skill-biz-context', exec.response); } catch {}
 
   try {
-    const parsed = JSON.parse(result.response.text());
+    const parsed = JSON.parse(extractJsonBody(exec.response.text));
     return {
       matchedSkills: matchedIndices.map(i => skills[i].name),
       businessRules: parsed.businessRules || [],
