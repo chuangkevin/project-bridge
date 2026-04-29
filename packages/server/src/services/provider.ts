@@ -27,6 +27,8 @@ import type {
   GenerateResponse,
   ChatMessage,
   RoutedProviderSelection,
+  ModelDefinition,
+  KeyPool,
 } from "@kevinsisi/ai-core";
 import db from "../db/connection";
 import { getProjectBridgeKeyPool } from "./projectBridgeAdapter";
@@ -37,6 +39,45 @@ const DEFAULT_ROUTE_POLICY: RoutePolicy = {
   fallbackProviders: ["gemini"],
   allowCrossProviderFallback: true,
 };
+
+/**
+ * ai-core's built-in `gemini` provider only registers `gemini-2.5-flash`,
+ * but our settings UI lets users pick `gemini-2.5-pro` and `gemini-2.0-flash`
+ * too — and the Gemini REST API accepts any valid model id verbatim.
+ *
+ * Without this wrapper, any non-flash selection makes the router throw
+ * "No provider/model combination matches the routing policy" — which the
+ * user reads as "Gemini 不可用".
+ *
+ * We synthesise a `ModelDefinition` for every `gemini-*` id by cloning the
+ * baseline (gemini-2.5-flash), so the router accepts the selection and the
+ * actual id flows through to GenerativeAI.
+ */
+class ExtendedGeminiAdapter implements ProviderAdapter {
+  private readonly inner: GeminiProviderAdapter;
+  constructor(pool: KeyPool) {
+    this.inner = new GeminiProviderAdapter(pool);
+  }
+  get provider() { return this.inner.provider; }
+  get credential() { return this.inner.credential; }
+  supports(modelID: string): boolean {
+    return this.inner.supports(modelID) || modelID.startsWith("gemini-");
+  }
+  getModel(modelID: string): ModelDefinition | undefined {
+    const built = this.inner.getModel(modelID);
+    if (built) return built;
+    if (!modelID.startsWith("gemini-")) return undefined;
+    const baseline = this.inner.getModel("gemini-2.5-flash");
+    if (!baseline) return undefined;
+    return { ...baseline, id: modelID };
+  }
+  generateContent(params: GenerateParams): Promise<GenerateResponse> {
+    return this.inner.generateContent(params);
+  }
+  streamContent(params: GenerateParams): AsyncGenerator<string, void, unknown> {
+    return this.inner.streamContent(params);
+  }
+}
 
 let cachedClient: MultiProviderClient | null = null;
 let cachedSnapshot = "";
@@ -95,8 +136,9 @@ export function getProvider(): MultiProviderClient {
       }),
     );
   }
-  // Gemini pool is always present.
-  adapters.push(new GeminiProviderAdapter(getProjectBridgeKeyPool()));
+  // Gemini pool is always present. Use the extended wrapper so that
+  // gemini-2.5-pro / gemini-2.0-flash (and any future gemini-*) route correctly.
+  adapters.push(new ExtendedGeminiAdapter(getProjectBridgeKeyPool()));
 
   cachedClient = new MultiProviderClient({
     adapters,
