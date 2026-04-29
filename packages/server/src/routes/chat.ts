@@ -7,7 +7,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
-import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from '../services/provider';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry } from '../services/provider';
 import type { ChatMessage } from '@kevinsisi/ai-core';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
@@ -717,12 +717,12 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           ? currentPrototype.html.slice(0, 200000) + '\n<!-- [truncated] -->'
           : currentPrototype.html;
 
-        const streamExec = getProvider().streamWithSelection({
+        const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
           model: defaultModel(),
           systemInstruction: microPrompt,
           prompt: `使用者要求: ${userContent}\n\n以下是目前的完整 HTML prototype:\n${protoHtml}`,
           maxOutputTokens: 32768,
-        });
+        }));
 
         for await (const text of streamExec.stream) {
           if (text) {
@@ -994,14 +994,14 @@ This turn is a DB schema/table confirmation request with fresh MCP lookup result
           data: p.inlineData.data,
         }));
 
-        const streamExec = getProvider().streamWithSelection({
+        const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
           model: defaultModel(),
           systemInstruction: richQaPrompt,
           prompt: userContent,
           history: qaHistory,
           ...(visionImagesQa.length > 0 ? { images: visionImagesQa } : {}),
           maxOutputTokens: 8192,
-        });
+        }));
 
         for await (const text of streamExec.stream) {
           if (text) {
@@ -1859,13 +1859,13 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
           : Array.isArray(h.parts) ? (h.parts.map((p: any) => p.text || '').join('')) : '',
       }));
 
-      const streamExec = getProvider().streamWithSelection({
+      const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
         model: defaultModel(),
         systemInstruction: effectiveSystemPrompt,
         prompt: userContent,
         history: aiCoreHistory,
         maxOutputTokens: 65536,
-      });
+      }));
 
       for await (const text of streamExec.stream) {
         if (text) {

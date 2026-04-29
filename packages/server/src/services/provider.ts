@@ -184,5 +184,69 @@ export function trackProviderUsage(
   );
 }
 
+/** Recognise Google "model is overloaded" 503 responses. Streaming SDK wraps this
+ * as StreamInterruptedError with the raw upstream message in `.message`. */
+export function isOverloadedError(err: unknown): boolean {
+  const msg = (err as any)?.message ?? String(err ?? '');
+  if (!msg) return false;
+  return /\b503\b/.test(msg)
+    || /Service Unavailable/i.test(msg)
+    || /experiencing high demand/i.test(msg)
+    || /overloaded/i.test(msg);
+}
+
+/** Stream with automatic 503/overloaded retries.
+ *
+ * Buffers the FIRST chunk before handing back. If the first chunk throws with
+ * an overloaded error we retry with backoff. Once we have the first chunk no
+ * more retries are attempted — we cannot safely re-emit partial output.
+ *
+ * Pattern (caller side):
+ *   const exec = await streamWithRetry(() => provider.streamWithSelection({...}));
+ *   for await (const chunk of exec.stream) { ... }
+ */
+export async function streamWithRetry<T extends { stream: AsyncIterable<string>; selection: RoutedProviderSelection }>(
+  start: () => T,
+  options: { maxAttempts?: number; baseDelayMs?: number } = {},
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? 4;
+  const baseDelayMs = options.baseDelayMs ?? 800;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let exec: T;
+    try {
+      exec = start();
+    } catch (err) {
+      if (!isOverloadedError(err) || attempt === maxAttempts) throw err;
+      const wait = baseDelayMs * Math.pow(2, attempt - 1);
+      console.warn(`[provider] overloaded on start (attempt ${attempt}/${maxAttempts}) — retrying in ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    const iter = (exec.stream as AsyncIterable<string>)[Symbol.asyncIterator]();
+    let first: IteratorResult<string>;
+    try {
+      first = await iter.next();
+    } catch (err) {
+      if (!isOverloadedError(err) || attempt === maxAttempts) throw err;
+      const wait = baseDelayMs * Math.pow(2, attempt - 1);
+      console.warn(`[provider] overloaded on first chunk (attempt ${attempt}/${maxAttempts}) — retrying in ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    const wrapped = (async function* () {
+      if (!first.done) yield first.value;
+      while (true) {
+        const next = await iter.next();
+        if (next.done) return;
+        yield next.value;
+      }
+    })();
+    return { ...exec, stream: wrapped } as T;
+  }
+  // Loop exits via `continue`s only when retrying, so this is unreachable —
+  // the last attempt either returns or throws.
+  throw new Error('streamWithRetry: exhausted retries without resolution');
+}
+
 /** Convenience: re-export the underlying types for call sites. */
 export type { GenerateParams, GenerateResponse, ChatMessage, RoutedProviderSelection };
