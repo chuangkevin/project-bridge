@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@kevinsisi/ai-core": "git+https://github.com/kevinsisi/ai-core.git#6b36218b2a8af01d397ff71a91fbafaf38f5d4ee",
+    "@kevinsisi/ai-core": "git+https://github.com/kevinsisi/ai-core.git#0e94858243aff078c48fbe5127575ce7bcb0d207",
     "@napi-rs/canvas": "^0.1.97",
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^3.0.0",
