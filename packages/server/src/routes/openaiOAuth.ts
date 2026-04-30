@@ -58,12 +58,58 @@ function getClientId(): string | null {
   return configValue('OPENAI_OAUTH_CLIENT_ID', 'openai_oauth_client_id');
 }
 
+function originFromForwardedHeaders(req: Request): string | null {
+  const protoRaw = req.headers['x-forwarded-proto'];
+  const hostRaw = req.headers['x-forwarded-host'];
+  const proto = (Array.isArray(protoRaw) ? protoRaw[0] : protoRaw)?.split(',')[0]?.trim();
+  const host = (Array.isArray(hostRaw) ? hostRaw[0] : hostRaw)?.split(',')[0]?.trim();
+  if (!proto || !host) return null;
+  if (proto !== 'http' && proto !== 'https') return null;
+  return `${proto}://${host}`;
+}
+
+function originFromUrlHeader(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== 'string' || !/^https?:\/\//i.test(raw)) return null;
+  try {
+    const u = new URL(raw);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the public URL the user's browser used to reach this server, so it
+ * can be baked into the downloadable helper. The helper runs on the user's
+ * local machine and POSTs tokens back here, so the URL must be reachable from
+ * outside this process — `req.get('host')` alone is wrong behind a reverse
+ * proxy (it'll return the upstream HTTP loopback like `localhost:3001`).
+ */
 function resolveServerUrl(req: Request): string {
+  // 1. Explicit override wins. Set PUBLIC_BASE_URL in prod to bypass sniffing.
   const explicit = configValue('PUBLIC_BASE_URL', 'public_base_url');
   if (explicit) return explicit.replace(/\/+$/, '');
-  const origin = req.headers.origin;
-  if (typeof origin === 'string' && origin.startsWith('http')) return origin.replace(/\/+$/, '');
-  const host = req.get('host');
+
+  // 2. Reverse-proxy headers. nginx/traefik terminate TLS and forward as HTTP;
+  //    these carry the user-facing scheme + host.
+  const forwarded = originFromForwardedHeaders(req);
+  if (forwarded) return forwarded.replace(/\/+$/, '');
+
+  // 3. Origin header — set on fetch/XHR from the SPA settings page.
+  const origin = originFromUrlHeader(req.headers.origin);
+  if (origin) return origin.replace(/\/+$/, '');
+
+  // 4. Referer — set by browsers on plain anchor clicks (the helper download
+  //    link is a top-level navigation that doesn't get Origin, but does get
+  //    Referer pointing back at the settings page).
+  const referer = originFromUrlHeader(req.headers.referer);
+  if (referer) return referer.replace(/\/+$/, '');
+
+  // 5. Last resort: the request as-received. Correct for local dev; in prod
+  //    without any of the above it'll bake the upstream loopback URL — that's
+  //    a deploy misconfiguration (set PUBLIC_BASE_URL).
+  const host = req.get('host') || 'localhost';
   return `${req.protocol}://${host}`.replace(/\/+$/, '');
 }
 
