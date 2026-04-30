@@ -23,6 +23,7 @@ import fs from 'fs';
 import path from 'path';
 import db from '../db/connection';
 import { invalidateProvider } from '../services/provider';
+import { extractAccountIdFromJwt } from '../services/codexResponsesAdapter';
 
 const router = Router();
 
@@ -226,7 +227,7 @@ router.get('/helper.sh', (req: Request, res: Response) => {
 });
 
 router.post('/token', (req: Request, res: Response) => {
-  const { access_token, refresh_token, expires_in, expires_at } = req.body || {};
+  const { access_token, refresh_token, expires_in, expires_at, id_token } = req.body || {};
   if (!access_token || typeof access_token !== 'string') {
     return res.status(400).json({ error: 'Missing access_token' });
   }
@@ -244,18 +245,33 @@ router.post('/token', (req: Request, res: Response) => {
     deleteSetting('openai_oauth_expires_at');
   }
 
+  // Capture ChatGPT-Account-Id from the JWT claims. The codex/responses
+  // endpoint requires this header for org/team subscriptions and for
+  // disambiguating personal vs business plans. Try id_token first (richer
+  // claims), then fall back to access_token.
+  const accountId =
+    extractAccountIdFromJwt(typeof id_token === 'string' ? id_token : null) ||
+    extractAccountIdFromJwt(access_token);
+  if (accountId) {
+    setSetting('openai_oauth_account_id', accountId);
+  } else {
+    deleteSetting('openai_oauth_account_id');
+  }
+
   invalidateProvider();
-  return res.json({ ok: true });
+  return res.json({ ok: true, accountIdCaptured: !!accountId });
 });
 
 router.get('/status', (_req: Request, res: Response) => {
   const accessToken = getSetting('openai_oauth_access_token');
   const expiresAt = getSetting('openai_oauth_expires_at');
   const clientIdConfigured = !!getClientId();
+  const accountId = getSetting('openai_oauth_account_id');
   return res.json({
     connected: !!accessToken,
     expiresAt,
     clientIdConfigured,
+    accountId, // for UI diagnostics — null if JWT didn't carry the claim
   });
 });
 
@@ -263,6 +279,7 @@ router.delete('/', (_req: Request, res: Response) => {
   deleteSetting('openai_oauth_access_token');
   deleteSetting('openai_oauth_refresh_token');
   deleteSetting('openai_oauth_expires_at');
+  deleteSetting('openai_oauth_account_id');
   invalidateProvider();
   return res.json({ ok: true });
 });

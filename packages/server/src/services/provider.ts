@@ -33,6 +33,7 @@ import type {
 import db from "../db/connection";
 import { getProjectBridgeKeyPool } from "./projectBridgeAdapter";
 import { getGeminiModel, trackUsage } from "./geminiKeys";
+import { CodexResponsesAdapter, extractAccountIdFromJwt } from "./codexResponsesAdapter";
 
 const DEFAULT_ROUTE_POLICY: RoutePolicy = {
   preferredProviders: ["openai"],
@@ -159,14 +160,37 @@ export function getProvider(): MultiProviderClient {
   const adapters: ProviderAdapter[] = [];
   const openai = loadOpenAICredential();
   if (openai) {
-    adapters.push(
-      new ExtendedOpenAIAdapter({
-        type: "api",
-        provider: "openai",
-        apiKey: openai.apiKey,
-        credentialLabel: openai.source === "oauth" ? "openai-oauth" : "openai-api",
-      }),
-    );
+    if (openai.source === "oauth") {
+      // Codex CLI OAuth tokens are scoped to ChatGPT subscription endpoints,
+      // NOT api.openai.com. Hitting /v1/chat/completions with one of these
+      // tokens returns `insufficient_quota` because the token has zero
+      // API-platform quota. We have to call chatgpt.com/backend-api/codex/
+      // responses instead — see codexResponsesAdapter.ts.
+      adapters.push(
+        new CodexResponsesAdapter({
+          credentialLabel: "openai-codex-oauth",
+          getAccessToken: () => readSetting("openai_oauth_access_token"),
+          getAccountId: () => {
+            const stored = readSetting("openai_oauth_account_id");
+            if (stored) return stored;
+            // Fallback: parse on the fly from access_token JWT. Older OAuth
+            // helpers didn't capture account_id explicitly.
+            const access = readSetting("openai_oauth_access_token");
+            return extractAccountIdFromJwt(access) ?? null;
+          },
+        }),
+      );
+    } else {
+      // API key path: regular OpenAI SDK against api.openai.com.
+      adapters.push(
+        new ExtendedOpenAIAdapter({
+          type: "api",
+          provider: "openai",
+          apiKey: openai.apiKey,
+          credentialLabel: "openai-api",
+        }),
+      );
+    }
   }
   // Gemini pool is always present. Use the extended wrapper so that
   // gemini-2.5-pro / gemini-2.0-flash (and any future gemini-*) route correctly.
@@ -308,7 +332,7 @@ async function performOpenAITokenRefresh(): Promise<void> {
     return;
   }
 
-  let data: { access_token?: string; refresh_token?: string; expires_in?: number };
+  let data: { access_token?: string; refresh_token?: string; expires_in?: number; id_token?: string };
   try {
     data = (await resp.json()) as typeof data;
   } catch (err) {
@@ -326,6 +350,13 @@ async function performOpenAITokenRefresh(): Promise<void> {
   if (typeof data.expires_in === "number" && data.expires_in > 0) {
     const newAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
     writeSetting("openai_oauth_expires_at", newAt);
+  }
+
+  // Re-extract account_id in case it changed (e.g., user switched workspace).
+  const refreshedAccountId =
+    extractAccountIdFromJwt(data.id_token) || extractAccountIdFromJwt(data.access_token);
+  if (refreshedAccountId) {
+    writeSetting("openai_oauth_account_id", refreshedAccountId);
   }
 
   invalidateProvider();

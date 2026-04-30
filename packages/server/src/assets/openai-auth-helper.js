@@ -142,10 +142,14 @@ async function exchangeCodeForToken(opts) {
 
 async function postTokensToServer(opts) {
   const url = new URL('/api/openai-oauth/token', opts.server).toString();
+  // Forward id_token too so the server can extract ChatGPT-Account-Id from
+  // its JWT claims. Without the account id, requests against
+  // chatgpt.com/backend-api/codex/responses fail for org/team subscriptions.
   const body = JSON.stringify({
     access_token: opts.tokens.access_token,
     refresh_token: opts.tokens.refresh_token,
     expires_in: opts.tokens.expires_in,
+    id_token: opts.tokens.id_token,
   });
   const headers = {
     'Content-Type': 'application/json',

@@ -82,16 +82,28 @@ function authHeaders(): Record<string, string> {
 const bridgeAuthHeaders = authHeaders;
 
 /**
- * Canonical model ids shown in the dropdown. Anything else triggers the
- * "custom model id" mode so users can keep up with new releases (or pick a
- * codex-flavored id their ChatGPT subscription happens to allow) without
- * waiting for a UI update. The server-side adapter accepts any `gpt-*` /
- * `gemini-*` id verbatim.
+ * Canonical model ids shown in the dropdown. Two distinct OpenAI lists:
+ *
+ *   - "OpenAI (Codex / OAuth)" — model ids the ChatGPT-subscription token
+ *     can actually invoke against chatgpt.com/backend-api/codex/responses.
+ *     Mirrors opencode's plugin/codex.ts allowlist.
+ *   - "OpenAI (API key)" — anything that runs against api.openai.com/v1/
+ *     chat/completions, only reachable when the user supplies an API key
+ *     instead of OAuth (Codex OAuth tokens get `insufficient_quota` here).
+ *
+ * Anything not in this list flips the dropdown into "custom model id" mode
+ * so users can pick newer releases without a UI bump.
  */
 const CANONICAL_MODELS: string[] = [
-  'gpt-5.5-pro', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini',
+  // Codex / OAuth scope
+  'gpt-5.5-pro', 'gpt-5.5',
+  'gpt-5.4', 'gpt-5.4-mini',
   'gpt-5.3-codex', 'gpt-5.3-codex-spark',
+  'gpt-5.2', 'gpt-5.2-codex',
+  'gpt-5.1-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini',
+  // API key scope (chat completions on api.openai.com)
   'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini',
+  // Gemini
   'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash',
 ];
 
@@ -1626,10 +1638,13 @@ export default function SettingsPage() {
             <div style={styles.prefField}>
               <label style={styles.label}>AI Model</label>
               <p style={styles.hint}>
-                所有 AI 呼叫使用的模型。選 OpenAI 需先在上方完成 OpenAI 授權連結。
-                Codex CLI OAuth token 是 ChatGPT 訂閱型憑證，不一定能用所有模型 —
-                若回應 <code>insufficient_quota</code> 或 <code>model_not_found</code> 表示這顆模型不在你的訂閱範圍，請換一顆試試。
-                若 OpenAI 完全無法使用，請手動切回 Gemini（不會自動 fallback）。
+                選 OpenAI 需先在上方完成 OpenAI 授權連結。
+                <strong>OAuth 連結會走 ChatGPT Codex 端點（chatgpt.com/backend-api/codex/responses），不走 api.openai.com</strong> —
+                這是因為 Codex CLI 的 OAuth token 是 ChatGPT 訂閱型憑證，
+                打 api.openai.com 會拿到 <code>insufficient_quota</code>。
+                所以「Codex 區」的模型才是 OAuth 真正能用的；
+                「API key only」區只有自行貼上 OpenAI API key 才能用（目前還沒做這條 UI，先放著）。
+                OpenAI 失敗時不會自動 fallback 到 Gemini，請手動切換。
               </p>
               <select
                 style={styles.select}
@@ -1644,7 +1659,7 @@ export default function SettingsPage() {
                   }
                 }}
               >
-                <optgroup label="OpenAI (GPT-5 family)">
+                <optgroup label="OpenAI Codex (ChatGPT 訂閱 / OAuth)">
                   <option value="gpt-5.5-pro" disabled={!openaiOAuthConnected}>
                     gpt-5.5-pro (品質優先){openaiOAuthConnected ? '' : ' — 未連線'}
                   </option>
@@ -1652,7 +1667,7 @@ export default function SettingsPage() {
                     gpt-5.5{openaiOAuthConnected ? '' : ' — 未連線'}
                   </option>
                   <option value="gpt-5.4" disabled={!openaiOAuthConnected}>
-                    gpt-5.4{openaiOAuthConnected ? '' : ' — 未連線'}
+                    gpt-5.4 (推薦){openaiOAuthConnected ? '' : ' — 未連線'}
                   </option>
                   <option value="gpt-5.4-mini" disabled={!openaiOAuthConnected}>
                     gpt-5.4-mini{openaiOAuthConnected ? '' : ' — 未連線'}
@@ -1663,19 +1678,34 @@ export default function SettingsPage() {
                   <option value="gpt-5.3-codex-spark" disabled={!openaiOAuthConnected}>
                     gpt-5.3-codex-spark{openaiOAuthConnected ? '' : ' — 未連線'}
                   </option>
+                  <option value="gpt-5.2" disabled={!openaiOAuthConnected}>
+                    gpt-5.2{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.2-codex" disabled={!openaiOAuthConnected}>
+                    gpt-5.2-codex{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.1-codex" disabled={!openaiOAuthConnected}>
+                    gpt-5.1-codex{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.1-codex-max" disabled={!openaiOAuthConnected}>
+                    gpt-5.1-codex-max{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.1-codex-mini" disabled={!openaiOAuthConnected}>
+                    gpt-5.1-codex-mini{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
                 </optgroup>
-                <optgroup label="OpenAI (legacy)">
+                <optgroup label="OpenAI API key only (api.openai.com)">
                   <option value="gpt-4o" disabled={!openaiOAuthConnected}>
-                    gpt-4o{openaiOAuthConnected ? '' : ' — 未連線'}
+                    gpt-4o — 需 API key{openaiOAuthConnected ? '' : '（OAuth 不適用）'}
                   </option>
                   <option value="gpt-4o-mini" disabled={!openaiOAuthConnected}>
-                    gpt-4o-mini{openaiOAuthConnected ? '' : ' — 未連線'}
+                    gpt-4o-mini — 需 API key
                   </option>
                   <option value="gpt-4.1" disabled={!openaiOAuthConnected}>
-                    gpt-4.1{openaiOAuthConnected ? '' : ' — 未連線'}
+                    gpt-4.1 — 需 API key
                   </option>
                   <option value="gpt-4.1-mini" disabled={!openaiOAuthConnected}>
-                    gpt-4.1-mini{openaiOAuthConnected ? '' : ' — 未連線'}
+                    gpt-4.1-mini — 需 API key
                   </option>
                 </optgroup>
                 <optgroup label="Gemini">
