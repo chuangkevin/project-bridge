@@ -152,8 +152,8 @@ node packages/server/dist/index.js
 | Key | 必填 | 說明 |
 | --- | --- | --- |
 | `OPENAI_OAUTH_CLIENT_ID` | ✅（OAuth button） | OpenAI OAuth public client id（內建預設 `app_EMoamEEZ73f0CkXaXp7hrann`，docker-compose 已預填） |
-| `OPENAI_OAUTH_AUTHORIZE_URL` | — | 預設 `https://auth.openai.com/authorize` |
-| `OPENAI_OAUTH_TOKEN_URL` | — | 預設 `https://auth.openai.com/token` |
+| `OPENAI_OAUTH_AUTHORIZE_URL` | — | 預設 `https://auth.openai.com/oauth/authorize` |
+| `OPENAI_OAUTH_TOKEN_URL` | — | 預設 `https://auth.openai.com/oauth/token` |
 | `OPENAI_OAUTH_SCOPE` | — | 預設 `openid profile email offline_access` |
 | `OPENAI_OAUTH_REDIRECT_URI` | — | 不填則用 `<PUBLIC_BASE_URL>/api/openai-oauth/callback` |
 | `PUBLIC_BASE_URL` | 建議 | redirect_uri 用得到；K8s/Docker 環境必填 |
@@ -163,7 +163,7 @@ node packages/server/dist/index.js
 ### 五、OpenAI OAuth 流程（使用者視角）
 1. 使用者進入「設定」分頁。
 2. 點「OpenAI 授權連結 → 連線」按鈕。Client 呼叫 `POST /api/openai-oauth/start`，server 產 PKCE verifier/challenge + state，回傳 `authorizeUrl`。
-3. Client 開 popup 視窗到 `https://auth.openai.com/authorize?...`。
+3. Client 開 popup 視窗到 `https://auth.openai.com/oauth/authorize?...`。
 4. 使用者授權後，OpenAI redirect 到 `/api/openai-oauth/callback?code=...&state=...`。
 5. Server 驗 state CSRF、用 verifier 換 token → 寫入 settings → `invalidateProvider()` → popup `postMessage({ source: 'openai-oauth', ok: true })` → 自動關閉。
 6. 主視窗收到訊息後刷新狀態（`GET /api/openai-oauth/status`）顯示已連線。
@@ -201,8 +201,8 @@ docker compose up -d   # Full stack
 | `GEMINI_API_KEY` | optional | server | comma-separated; merged with `settings.gemini_api_keys` |
 | `OPENAI_API_KEY` | optional | server | direct OpenAI key — alternative to OAuth |
 | `OPENAI_OAUTH_CLIENT_ID` | required for OAuth button | server | defaults to `app_EMoamEEZ73f0CkXaXp7hrann` (Codex CLI public client_id); see `packages/server/.env` |
-| `OPENAI_OAUTH_AUTHORIZE_URL` | optional | server | defaults to `https://auth.openai.com/authorize` |
-| `OPENAI_OAUTH_TOKEN_URL` | optional | server | defaults to `https://auth.openai.com/token` |
+| `OPENAI_OAUTH_AUTHORIZE_URL` | optional | server | defaults to `https://auth.openai.com/oauth/authorize` |
+| `OPENAI_OAUTH_TOKEN_URL` | optional | server | defaults to `https://auth.openai.com/oauth/token` |
 | `OPENAI_OAUTH_SCOPE` | optional | server | defaults to `openid profile email offline_access` |
 | `OPENAI_OAUTH_REDIRECT_URI` | optional | server | defaults to `${PUBLIC_BASE_URL}/api/openai-oauth/callback` |
 | `PUBLIC_BASE_URL` | required for prod OAuth | server | e.g. `https://designbridge.housefun.com.tw` |

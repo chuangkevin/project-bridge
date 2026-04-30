@@ -32,9 +32,10 @@ const DEFAULTS = {
       : (process.env.PROJECT_BRIDGE_SERVER || 'http://localhost:3003'),
   clientId: process.env.OPENAI_OAUTH_CLIENT_ID || 'app_EMoamEEZ73f0CkXaXp7hrann',
   port: 1455,
-  authorizeUrl: process.env.OPENAI_OAUTH_AUTHORIZE_URL || 'https://auth.openai.com/authorize',
-  tokenUrl: process.env.OPENAI_OAUTH_TOKEN_URL || 'https://auth.openai.com/token',
+  authorizeUrl: process.env.OPENAI_OAUTH_AUTHORIZE_URL || 'https://auth.openai.com/oauth/authorize',
+  tokenUrl: process.env.OPENAI_OAUTH_TOKEN_URL || 'https://auth.openai.com/oauth/token',
   scope: process.env.OPENAI_OAUTH_SCOPE || 'openid profile email offline_access',
+  originator: process.env.OPENAI_OAUTH_ORIGINATOR || 'project-bridge',
 };
 
 function parseArgs(argv) {
@@ -166,14 +167,21 @@ async function run() {
   const state = base64Url(crypto.randomBytes(16));
   const redirectUri = 'http://localhost:' + args.port + '/auth/callback';
 
+  // Mirror the Codex CLI authorize request. The `id_token_add_organizations`
+  // and `codex_cli_simplified_flow` flags are required by the public Codex
+  // client_id; without them auth.openai.com short-circuits to its generic
+  // "session expired" page instead of starting the OAuth consent flow.
   const authParams = new URLSearchParams({
     response_type: 'code',
     client_id: args.clientId,
     redirect_uri: redirectUri,
     scope: args.scope,
-    state: state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
+    id_token_add_organizations: 'true',
+    codex_cli_simplified_flow: 'true',
+    state: state,
+    originator: args.originator,
   });
   const authorizeUrl = args.authorizeUrl + '?' + authParams.toString();
 

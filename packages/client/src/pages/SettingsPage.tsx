@@ -1390,7 +1390,7 @@ export default function SettingsPage() {
             <ol style={{ ...styles.hint, paddingLeft: 20, marginTop: 8 }}>
               <li>下載 <code>openai-auth-helper.js</code>（伺服器網址已內建），或下載含 wrapper（<code>.cmd</code> / <code>.sh</code>）的版本可直接雙擊執行。</li>
               <li>在你的本機（有 Node.js 的環境）執行 <code>node openai-auth-helper.js</code>。</li>
-              <li>瀏覽器會自動打開 <code>auth.openai.com/authorize</code>；登入並按 Allow。</li>
+              <li>瀏覽器會自動打開 <code>auth.openai.com/oauth/authorize</code>；登入並按 Allow。</li>
               <li>callback 回 <code>http://localhost:1455/auth/callback</code>；helper 換 token 後 POST 回伺服器。</li>
               <li>本頁每 5 秒自動刷新狀態，看到「已連結」即完成。</li>
               <li>之後所有 AI 呼叫優先走 OpenAI，失敗才 fallback 到 Gemini key-pool。</li>

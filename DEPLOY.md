@@ -45,8 +45,8 @@ Place these in `packages/server/.env` for dev, or in `docker-compose.yml` `envir
 | Variable | Purpose | Default |
 |---|---|---|
 | `OPENAI_OAUTH_CLIENT_ID` | OAuth PKCE public client_id | `app_EMoamEEZ73f0CkXaXp7hrann` (Codex CLI) |
-| `OPENAI_OAUTH_AUTHORIZE_URL` | OAuth authorize endpoint | `https://auth.openai.com/authorize` |
-| `OPENAI_OAUTH_TOKEN_URL` | OAuth token exchange endpoint | `https://auth.openai.com/token` |
+| `OPENAI_OAUTH_AUTHORIZE_URL` | OAuth authorize endpoint | `https://auth.openai.com/oauth/authorize` |
+| `OPENAI_OAUTH_TOKEN_URL` | OAuth token exchange endpoint | `https://auth.openai.com/oauth/token` |
 | `OPENAI_OAUTH_SCOPE` | Requested scopes | `openid profile email offline_access` |
 | `OPENAI_OAUTH_REDIRECT_URI` | Where OpenAI sends the user back | `${PUBLIC_BASE_URL}/api/openai-oauth/callback` (auto-built) |
 | `PUBLIC_BASE_URL` | Used to build the default redirect_uri | required for prod OAuth |

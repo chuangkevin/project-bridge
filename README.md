@@ -158,7 +158,7 @@ docker compose up -d   # 對外 port 5123 → 容器內 3001
 ### OpenAI OAuth 使用者流程
 1. 使用者進入「設定」分頁。
 2. 點「OpenAI 授權連結 → 連線」。
-3. 開啟 popup 跳到 `https://auth.openai.com/authorize`。
+3. 開啟 popup 跳到 `https://auth.openai.com/oauth/authorize`。
 4. 授權後 callback 回 `/api/openai-oauth/callback`，server 用 PKCE 換 token、寫入 settings 表。
 5. Popup `postMessage` 通知主視窗 → 自動關閉 → 主視窗顯示已連線。
 6. 之後 AI 呼叫優先走 OpenAI，失敗才 fallback 到 Gemini key-pool。
