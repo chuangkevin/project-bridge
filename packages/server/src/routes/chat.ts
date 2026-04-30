@@ -7,7 +7,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
-import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry } from '../services/provider';
+import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry, isOpenAIModelSelected, hasOpenAICredential } from '../services/provider';
 import type { ChatMessage } from '@kevinsisi/ai-core';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
@@ -331,10 +331,42 @@ function getIntentPreamble(intent: string | null | undefined): string {
 
 function formatGeminiError(err: any): string {
   const msg: string = err?.message || '';
+  const status: number = err?.status ?? err?.httpStatusCode ?? 0;
+  const lower = msg.toLowerCase();
+
+  // ── Router-level failures (selection-time) ─────────────────────────────
+  if (msg.includes('No provider/model combination matches')) {
+    return '目前選擇的 AI 模型沒有可用的憑證。請至設定頁切換模型，或重新完成 OpenAI 授權連結。';
+  }
+
+  // ── OpenAI errors (Codex CLI OAuth / API key) ──────────────────────────
+  // The Codex CLI OAuth token is a ChatGPT-subscription token — it doesn't
+  // share API-key quota and not every model id is reachable through it.
+  if (lower.includes('insufficient_quota') || lower.includes('exceeded your current quota')) {
+    return '這個模型超出你目前的 OpenAI 訂閱配額。請至設定頁換一個模型試試（例如 gpt-4o-mini），或檢查你的 ChatGPT 訂閱狀態。';
+  }
+  if (lower.includes('model_not_found') || lower.includes('does not exist or you do not have access')) {
+    return '這個模型不在你的 OpenAI 訂閱範圍內。請至設定頁換一個模型試試（OpenAI Codex CLI token 不一定能用所有模型）。';
+  }
+  if (lower.includes('invalid_api_key') || lower.includes('incorrect api key')) {
+    return 'OpenAI API key 無效。請至設定頁重新設定 API key 或重新完成 OAuth 授權。';
+  }
+  // OpenAI 401 with OAuth token usually means token expired or got revoked
+  // before our refresh scheduler caught it.
+  if ((status === 401 || msg.includes('401')) && lower.includes('openai')) {
+    return 'OpenAI 授權已過期。請至設定頁重新完成 OpenAI 授權連結。';
+  }
+  if (lower.includes('rate_limit_exceeded')) {
+    return 'OpenAI API 請求過於頻繁，請稍後再試（或換一個模型）。';
+  }
+
+  // ── Gemini errors (key-pool) ───────────────────────────────────────────
   if (msg.includes('API_KEY_INVALID') || msg.includes('401')) return 'Gemini API 金鑰無效，請至設定頁面重新輸入。';
   if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')) return 'Gemini API 請求過於頻繁，請稍後再試。';
   if (msg.includes('503') || msg.includes('unavailable')) return 'Gemini 服務暫時不可用，請稍後再試。';
-  return msg || 'Gemini API 發生錯誤，請稍後再試。';
+
+  // ── Generic / unknown ──────────────────────────────────────────────────
+  return msg || 'AI 服務發生錯誤，請稍後再試。';
 }
 
 // POST /api/projects/:id/chat — SSE chat with AI
@@ -372,10 +404,25 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     const generationTemperature: number = (project as any).generation_temperature ?? 0.3;
     const seedPrompt: string = ((project as any).seed_prompt || '').trim();
 
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) {
+    // Precondition: at least ONE provider must be configured. The exact one
+    // depends on the user's `default_ai_model` selection — we re-check inside
+    // each generation path via the provider router, but a fast-fail here keeps
+    // the SSE stream from opening on a doomed request.
+    const hasGemini = !!getGeminiApiKey();
+    const hasOpenAI = hasOpenAICredential();
+    const wantsOpenAI = isOpenAIModelSelected();
+    if (wantsOpenAI && !hasOpenAI) {
+      return res.status(400).json({
+        error: '已選擇 OpenAI 模型但未連線。請至設定頁完成 OpenAI 授權連結，或切換到 Gemini 模型。',
+      });
+    }
+    if (!wantsOpenAI && !hasGemini) {
       return res.status(400).json({ error: 'Gemini API key not configured. Set GEMINI_API_KEY env var or configure in settings.' });
     }
+    // Legacy parameter — most downstream services that take `apiKey` ignore it
+    // and route through the provider client instead. Pass empty string when
+    // Gemini isn't configured so the type stays `string`.
+    const apiKey = (hasGemini ? getGeminiApiKey() : null) ?? '';
 
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');

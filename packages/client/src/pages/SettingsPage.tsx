@@ -81,6 +81,20 @@ function authHeaders(): Record<string, string> {
 // Alias for backward compat within this file
 const bridgeAuthHeaders = authHeaders;
 
+/**
+ * Canonical model ids shown in the dropdown. Anything else triggers the
+ * "custom model id" mode so users can keep up with new releases (or pick a
+ * codex-flavored id their ChatGPT subscription happens to allow) without
+ * waiting for a UI update. The server-side adapter accepts any `gpt-*` /
+ * `gemini-*` id verbatim.
+ */
+const CANONICAL_MODELS: string[] = [
+  'gpt-5.5-pro', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini',
+  'gpt-5.3-codex', 'gpt-5.3-codex-spark',
+  'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini',
+  'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash',
+];
+
 type AuthState = 'loading' | 'setup' | 'login' | 'authenticated';
 
 export default function SettingsPage() {
@@ -1612,20 +1626,56 @@ export default function SettingsPage() {
             <div style={styles.prefField}>
               <label style={styles.label}>AI Model</label>
               <p style={styles.hint}>
-                所有 AI 呼叫使用的模型。選 OpenAI 需先在上方完成 OpenAI 授權連結；
-                若 OpenAI 連線失效會自動 fallback 到 Gemini。
+                所有 AI 呼叫使用的模型。選 OpenAI 需先在上方完成 OpenAI 授權連結。
+                Codex CLI OAuth token 是 ChatGPT 訂閱型憑證，不一定能用所有模型 —
+                若回應 <code>insufficient_quota</code> 或 <code>model_not_found</code> 表示這顆模型不在你的訂閱範圍，請換一顆試試。
+                若 OpenAI 完全無法使用，請手動切回 Gemini（不會自動 fallback）。
               </p>
               <select
                 style={styles.select}
-                value={selectedModel}
-                onChange={e => handleSaveModel(e.target.value)}
+                value={CANONICAL_MODELS.includes(selectedModel) ? selectedModel : '__custom__'}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v === '__custom__') {
+                    // Switch to custom mode without saving — user types into the input below.
+                    setSelectedModel(selectedModel.startsWith('gpt-') || selectedModel.startsWith('gemini-') ? selectedModel : 'gpt-5.5');
+                  } else {
+                    handleSaveModel(v);
+                  }
+                }}
               >
-                <optgroup label="OpenAI">
+                <optgroup label="OpenAI (GPT-5 family)">
+                  <option value="gpt-5.5-pro" disabled={!openaiOAuthConnected}>
+                    gpt-5.5-pro (品質優先){openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.5" disabled={!openaiOAuthConnected}>
+                    gpt-5.5{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.4" disabled={!openaiOAuthConnected}>
+                    gpt-5.4{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.4-mini" disabled={!openaiOAuthConnected}>
+                    gpt-5.4-mini{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.3-codex" disabled={!openaiOAuthConnected}>
+                    gpt-5.3-codex{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-5.3-codex-spark" disabled={!openaiOAuthConnected}>
+                    gpt-5.3-codex-spark{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                </optgroup>
+                <optgroup label="OpenAI (legacy)">
                   <option value="gpt-4o" disabled={!openaiOAuthConnected}>
-                    gpt-4o {openaiOAuthConnected ? '' : '(未連線)'}
+                    gpt-4o{openaiOAuthConnected ? '' : ' — 未連線'}
                   </option>
                   <option value="gpt-4o-mini" disabled={!openaiOAuthConnected}>
-                    gpt-4o-mini {openaiOAuthConnected ? '' : '(未連線)'}
+                    gpt-4o-mini{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-4.1" disabled={!openaiOAuthConnected}>
+                    gpt-4.1{openaiOAuthConnected ? '' : ' — 未連線'}
+                  </option>
+                  <option value="gpt-4.1-mini" disabled={!openaiOAuthConnected}>
+                    gpt-4.1-mini{openaiOAuthConnected ? '' : ' — 未連線'}
                   </option>
                 </optgroup>
                 <optgroup label="Gemini">
@@ -1633,12 +1683,38 @@ export default function SettingsPage() {
                   <option value="gemini-2.5-pro">gemini-2.5-pro (品質優先)</option>
                   <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                 </optgroup>
+                <optgroup label="自訂">
+                  <option value="__custom__">自訂 model id…</option>
+                </optgroup>
               </select>
+
+              {!CANONICAL_MODELS.includes(selectedModel) && (
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    style={{ ...styles.input, flex: 1 }}
+                    type="text"
+                    placeholder="輸入 model id（例如 gpt-5.6-pro 或 gemini-3-flash）"
+                    value={selectedModel}
+                    onChange={e => setSelectedModel(e.target.value)}
+                  />
+                  <button
+                    style={styles.primaryBtn}
+                    onClick={() => handleSaveModel(selectedModel.trim())}
+                    disabled={!selectedModel.trim() || (
+                      !selectedModel.trim().startsWith('gpt-') &&
+                      !selectedModel.trim().startsWith('gemini-')
+                    )}
+                  >
+                    儲存
+                  </button>
+                </div>
+              )}
+
               <p style={styles.hint}>
-                目前選擇: {selectedModel}
+                目前儲存: <code>{selectedModel}</code>
                 {selectedModel.startsWith('gpt-') && !openaiOAuthConnected && (
                   <span style={{ color: '#ef4444', marginLeft: 8 }}>
-                    ⚠ OpenAI 未連線，實際會走 Gemini
+                    ⚠ OpenAI 未連線，下次 chat 會直接報錯（不會自動切到 Gemini）
                   </span>
                 )}
               </p>

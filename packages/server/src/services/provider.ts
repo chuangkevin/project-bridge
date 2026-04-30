@@ -193,19 +193,35 @@ export function invalidateProvider(): void {
 
 /**
  * Default model — read from `default_ai_model` setting (set by the user in the
- * settings page). When the user picks an OpenAI model but no OpenAI credential
- * is configured, fall back to the Gemini selection so we never route to a
- * provider that has no adapter.
+ * settings page). The selection is honored *as-is*: if the user picked an
+ * OpenAI model but the OpenAI credential is missing/expired, the router will
+ * throw `No provider/model combination matches` rather than silently swap to
+ * Gemini. Surfacing the failure is the whole point — we got bitten by silent
+ * fallback masquerading as an OpenAI response.
  */
 export function defaultModel(): string {
   const pref = readSetting("default_ai_model");
-  if (pref && pref.startsWith("gpt-")) {
-    if (loadOpenAICredential()) return pref;
-    // No OpenAI credential — fall back to Gemini regardless of preference.
-    return getGeminiModel();
-  }
-  if (pref && pref.startsWith("gemini-")) return pref;
+  if (pref && (pref.startsWith("gpt-") || pref.startsWith("gemini-"))) return pref;
   return getGeminiModel();
+}
+
+/**
+ * True if the configured default model targets OpenAI. Callers that want to
+ * distinguish OpenAI vs Gemini failure modes (e.g. mapping `insufficient_quota`
+ * to a friendlier error) can use this to know which provider the user expects.
+ */
+export function isOpenAIModelSelected(): boolean {
+  const pref = readSetting("default_ai_model");
+  return !!pref && pref.startsWith("gpt-");
+}
+
+/**
+ * True iff at least one OpenAI credential is currently usable. Cheap — just
+ * reads the settings table. Used by the chat route to fail fast with a clear
+ * message when the user picked OpenAI but the OAuth token is gone.
+ */
+export function hasOpenAICredential(): boolean {
+  return loadOpenAICredential() !== null;
 }
 
 // ─── OpenAI OAuth token auto-refresh ─────────────────────────────────────
