@@ -22,12 +22,13 @@ const { exec } = require('child_process');
 
 // Replaced server-side at download time. If left as the literal sentinel,
 // fall back to localhost so manual `node openai-auth-helper.js` from a repo
-// checkout still works.
+// checkout still works. The sentinel comparison below is split with `+` so
+// the server's global regex replace doesn't rewrite the comparison string too.
 const BAKED_SERVER_URL = '__PROJECT_BRIDGE_SERVER__';
 
 const DEFAULTS = {
   server:
-    BAKED_SERVER_URL && BAKED_SERVER_URL.indexOf('__PROJECT_BRIDGE_SERVER__') < 0
+    BAKED_SERVER_URL && BAKED_SERVER_URL !== ('__PROJECT_' + 'BRIDGE_SERVER__')
       ? BAKED_SERVER_URL
       : (process.env.PROJECT_BRIDGE_SERVER || 'http://localhost:3003'),
   clientId: process.env.OPENAI_OAUTH_CLIENT_ID || 'app_EMoamEEZ73f0CkXaXp7hrann',
