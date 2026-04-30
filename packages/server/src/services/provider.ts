@@ -79,6 +79,38 @@ class ExtendedGeminiAdapter implements ProviderAdapter {
   }
 }
 
+/**
+ * ai-core's OpenAI provider only registers `gpt-4.1-mini`, but the OpenAI
+ * Chat Completions endpoint accepts any model id the credential is entitled
+ * to. We synthesise a ModelDefinition for any `gpt-*` id (e.g. `gpt-4o`,
+ * `gpt-4o-mini`, `gpt-4.1`) so the router accepts the selection.
+ */
+class ExtendedOpenAIAdapter implements ProviderAdapter {
+  private readonly inner: OpenAIProviderAdapter;
+  constructor(credential: ConstructorParameters<typeof OpenAIProviderAdapter>[0]) {
+    this.inner = new OpenAIProviderAdapter(credential);
+  }
+  get provider() { return this.inner.provider; }
+  get credential() { return this.inner.credential; }
+  supports(modelID: string): boolean {
+    return this.inner.supports(modelID) || modelID.startsWith("gpt-");
+  }
+  getModel(modelID: string): ModelDefinition | undefined {
+    const built = this.inner.getModel(modelID);
+    if (built) return built;
+    if (!modelID.startsWith("gpt-")) return undefined;
+    const baseline = this.inner.getModel("gpt-4.1-mini");
+    if (!baseline) return undefined;
+    return { ...baseline, id: modelID };
+  }
+  generateContent(params: GenerateParams): Promise<GenerateResponse> {
+    return this.inner.generateContent(params);
+  }
+  streamContent(params: GenerateParams): AsyncGenerator<string, void, unknown> {
+    return this.inner.streamContent(params);
+  }
+}
+
 let cachedClient: MultiProviderClient | null = null;
 let cachedSnapshot = "";
 
@@ -128,7 +160,7 @@ export function getProvider(): MultiProviderClient {
   const openai = loadOpenAICredential();
   if (openai) {
     adapters.push(
-      new OpenAIProviderAdapter({
+      new ExtendedOpenAIAdapter({
         type: "api",
         provider: "openai",
         apiKey: openai.apiKey,
@@ -159,9 +191,152 @@ export function invalidateProvider(): void {
   cachedSnapshot = "";
 }
 
-/** Default model — currently always gemini-2.5-flash via getGeminiModel(). */
+/**
+ * Default model — read from `default_ai_model` setting (set by the user in the
+ * settings page). When the user picks an OpenAI model but no OpenAI credential
+ * is configured, fall back to the Gemini selection so we never route to a
+ * provider that has no adapter.
+ */
 export function defaultModel(): string {
+  const pref = readSetting("default_ai_model");
+  if (pref && pref.startsWith("gpt-")) {
+    if (loadOpenAICredential()) return pref;
+    // No OpenAI credential — fall back to Gemini regardless of preference.
+    return getGeminiModel();
+  }
+  if (pref && pref.startsWith("gemini-")) return pref;
   return getGeminiModel();
+}
+
+// ─── OpenAI OAuth token auto-refresh ─────────────────────────────────────
+//
+// OpenAI access tokens expire (~10 days for the Codex-style flow). We hold
+// a refresh_token from the initial PKCE exchange; this module periodically
+// checks expires_at and swaps in a fresh access_token before it expires so
+// AI calls don't start failing with 401.
+
+const TOKEN_REFRESH_THRESHOLD_MS = 10 * 60 * 1000; // refresh when <10 min remains
+const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000;   // poll every 5 min
+
+let refreshTimer: NodeJS.Timeout | null = null;
+let refreshInFlight: Promise<void> | null = null;
+
+function writeSetting(key: string, value: string): void {
+  db.prepare(
+    "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+  ).run(key, value);
+}
+
+async function performOpenAITokenRefresh(): Promise<void> {
+  const refreshToken = readSetting("openai_oauth_refresh_token");
+  if (!refreshToken) return;
+
+  const expiresAtRaw = readSetting("openai_oauth_expires_at");
+  if (expiresAtRaw) {
+    const expiresAtMs = Date.parse(expiresAtRaw);
+    if (!Number.isNaN(expiresAtMs) && expiresAtMs - Date.now() > TOKEN_REFRESH_THRESHOLD_MS) {
+      return; // still fresh
+    }
+  }
+
+  const clientId =
+    process.env.OPENAI_OAUTH_CLIENT_ID?.trim() ||
+    readSetting("openai_oauth_client_id") ||
+    "app_EMoamEEZ73f0CkXaXp7hrann";
+  const tokenUrl =
+    process.env.OPENAI_OAUTH_TOKEN_URL?.trim() ||
+    "https://auth.openai.com/oauth/token";
+
+  console.log("[provider] Refreshing OpenAI OAuth token…");
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: clientId,
+    refresh_token: refreshToken,
+  }).toString();
+
+  let resp: Response;
+  try {
+    resp = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body,
+    });
+  } catch (err) {
+    console.warn("[provider] OpenAI token refresh network error:", (err as Error)?.message);
+    return;
+  }
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    console.warn(
+      `[provider] OpenAI token refresh failed (${resp.status}): ${text.slice(0, 200)}`,
+    );
+    // 4xx with "invalid_grant" / "invalid_token" means the refresh_token itself
+    // is dead — clear it so the UI prompts the user to reconnect rather than
+    // looping a hopeless refresh forever.
+    if (resp.status === 400 || resp.status === 401) {
+      try {
+        if (/invalid_grant|invalid_token|expired/i.test(text)) {
+          db.prepare("DELETE FROM settings WHERE key = ?").run("openai_oauth_access_token");
+          db.prepare("DELETE FROM settings WHERE key = ?").run("openai_oauth_refresh_token");
+          db.prepare("DELETE FROM settings WHERE key = ?").run("openai_oauth_expires_at");
+          invalidateProvider();
+          console.warn("[provider] Cleared dead OpenAI OAuth tokens — user must reconnect.");
+        }
+      } catch { /* non-fatal */ }
+    }
+    return;
+  }
+
+  let data: { access_token?: string; refresh_token?: string; expires_in?: number };
+  try {
+    data = (await resp.json()) as typeof data;
+  } catch (err) {
+    console.warn("[provider] OpenAI token refresh: malformed JSON response");
+    return;
+  }
+
+  if (!data.access_token) {
+    console.warn("[provider] OpenAI token refresh: response missing access_token");
+    return;
+  }
+
+  writeSetting("openai_oauth_access_token", data.access_token);
+  if (data.refresh_token) writeSetting("openai_oauth_refresh_token", data.refresh_token);
+  if (typeof data.expires_in === "number" && data.expires_in > 0) {
+    const newAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+    writeSetting("openai_oauth_expires_at", newAt);
+  }
+
+  invalidateProvider();
+  console.log("[provider] OpenAI OAuth token refreshed.");
+}
+
+/** Refresh the OpenAI OAuth access token if it's near expiry. Coalesces concurrent calls. */
+export function refreshOpenAITokenIfNeeded(): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = performOpenAITokenRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+/** Start the periodic OAuth refresh check. Idempotent — safe to call multiple times. */
+export function startOAuthRefreshScheduler(): void {
+  if (refreshTimer) return;
+  // Initial check immediately on startup, then every 5 min.
+  void refreshOpenAITokenIfNeeded();
+  refreshTimer = setInterval(() => {
+    void refreshOpenAITokenIfNeeded();
+  }, TOKEN_REFRESH_INTERVAL_MS);
+  refreshTimer.unref?.();
+  console.log(
+    `[provider] OpenAI OAuth refresh scheduler started (interval ${TOKEN_REFRESH_INTERVAL_MS / 1000}s, threshold ${TOKEN_REFRESH_THRESHOLD_MS / 1000}s).`,
+  );
 }
 
 const JSON_RULE =

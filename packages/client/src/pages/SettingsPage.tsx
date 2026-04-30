@@ -108,7 +108,6 @@ export default function SettingsPage() {
 
   // Key management
   const [keys, setKeys] = useState<KeyInfo[]>([]);
-  const [model, setModel] = useState('gemini-2.5-flash');
   const [newKey, setNewKey] = useState('');
   const [addState, setAddState] = useState<'idle' | 'adding' | 'error'>('idle');
   const [addError, setAddError] = useState('');
@@ -326,7 +325,6 @@ export default function SettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setKeys(data.keys || []);
-        setModel(data.model || 'gemini-2.5-flash');
       }
     } catch { /* ignore */ }
   }, []);
@@ -350,6 +348,11 @@ export default function SettingsPage() {
             setEnvKeySet(data.envKeys?.GEMINI_API_KEY ?? false);
             const ctdSetting = (data.settings || []).find((s: any) => s.key === 'code_to_design_api_key');
             if (ctdSetting?.value) setCtdSavedKey(ctdSetting.value);
+            const defaultModelSetting = (data.settings || []).find((s: any) => s.key === 'default_ai_model');
+            if (defaultModelSetting?.value) {
+              setSelectedModel(defaultModelSetting.value);
+              localStorage.setItem('pb-default-model', defaultModelSetting.value);
+            }
           }
         }
       } catch { /* ignore */ }
@@ -662,11 +665,23 @@ export default function SettingsPage() {
   const handleSaveModel = async (newModel: string) => {
     setSelectedModel(newModel);
     localStorage.setItem('pb-default-model', newModel);
+    // Master switch: which model defaultModel() returns. The provider router
+    // picks OpenAI vs Gemini based on the model id prefix.
     await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
-      body: JSON.stringify({ key: 'gemini_model', value: newModel }),
+      body: JSON.stringify({ key: 'default_ai_model', value: newModel }),
     });
+    // Keep gemini_model tracking the latest gemini selection so that if the
+    // OpenAI credential dies later, the Gemini fallback remembers the user's
+    // preferred gemini variant instead of resetting to flash.
+    if (newModel.startsWith('gemini-')) {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({ key: 'gemini_model', value: newModel }),
+      });
+    }
   };
 
   const handleSaveLanguage = (lang: string) => {
@@ -1596,17 +1611,37 @@ export default function SettingsPage() {
           <div style={styles.prefGrid}>
             <div style={styles.prefField}>
               <label style={styles.label}>AI Model</label>
-              <p style={styles.hint}>用於所有 AI 呼叫的 Gemini 模型</p>
+              <p style={styles.hint}>
+                所有 AI 呼叫使用的模型。選 OpenAI 需先在上方完成 OpenAI 授權連結；
+                若 OpenAI 連線失效會自動 fallback 到 Gemini。
+              </p>
               <select
                 style={styles.select}
                 value={selectedModel}
                 onChange={e => handleSaveModel(e.target.value)}
               >
-                <option value="gemini-2.5-flash">gemini-2.5-flash (推薦)</option>
-                <option value="gemini-2.5-pro">gemini-2.5-pro (品質優先)</option>
-                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                <optgroup label="OpenAI">
+                  <option value="gpt-4o" disabled={!openaiOAuthConnected}>
+                    gpt-4o {openaiOAuthConnected ? '' : '(未連線)'}
+                  </option>
+                  <option value="gpt-4o-mini" disabled={!openaiOAuthConnected}>
+                    gpt-4o-mini {openaiOAuthConnected ? '' : '(未連線)'}
+                  </option>
+                </optgroup>
+                <optgroup label="Gemini">
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (推薦)</option>
+                  <option value="gemini-2.5-pro">gemini-2.5-pro (品質優先)</option>
+                  <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                </optgroup>
               </select>
-              <p style={styles.hint}>目前 Server 使用: {model}</p>
+              <p style={styles.hint}>
+                目前選擇: {selectedModel}
+                {selectedModel.startsWith('gpt-') && !openaiOAuthConnected && (
+                  <span style={{ color: '#ef4444', marginLeft: 8 }}>
+                    ⚠ OpenAI 未連線，實際會走 Gemini
+                  </span>
+                )}
+              </p>
             </div>
 
             <div style={styles.prefField}>

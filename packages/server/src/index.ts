@@ -38,6 +38,7 @@ import componentsRouter, { projectComponentsRouter } from './routes/components';
 import openaiOAuthRouter from './routes/openaiOAuth';
 import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
+import { startOAuthRefreshScheduler } from './services/provider';
 import { HOUSEPRICE_DESIGN_SYSTEM_V2 } from './services/designSystemV2';
 import db from './db/connection';
 import { setupSocket } from './socket';
@@ -125,6 +126,9 @@ try {
 if (process.env.SKILLS_DIR) {
   syncSkillsFromDirectory(process.env.SKILLS_DIR);
 }
+
+// Start OpenAI OAuth refresh polling (no-op when no refresh_token stored).
+startOAuthRefreshScheduler();
 
 httpServer.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);

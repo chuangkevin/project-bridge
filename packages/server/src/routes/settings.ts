@@ -5,6 +5,7 @@ import {
   getKeyList, addApiKey, removeApiKey, getUsageStats,
   getGeminiModel, invalidateKeyCache,
 } from '../services/geminiKeys';
+import { invalidateProvider } from '../services/provider';
 import { deleteMcpServer, getMcpServer, listMcpServers, upsertMcpServer } from '../services/mcpRegistry';
 import { listMcpTools, testMcpServer } from '../services/mcpHttpClient';
 
@@ -104,6 +105,12 @@ router.put('/', (req: Request, res: Response) => {
     // Invalidate key cache when API key settings change
     if (key === 'gemini_api_key' || key === 'gemini_api_keys' || key === 'gemini_model') {
       invalidateKeyCache();
+    }
+    // Rebuild the provider client when OpenAI credentials change (the snapshot
+    // already covers oauth tokens + env, but a freshly-set openai_api_key
+    // setting needs an explicit kick).
+    if (key === 'openai_api_key') {
+      invalidateProvider();
     }
 
     return res.json({ key, value: maskValue(key, String(value)) });
