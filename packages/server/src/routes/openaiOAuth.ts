@@ -85,32 +85,41 @@ function originFromUrlHeader(value: string | string[] | undefined): string | nul
  * local machine and POSTs tokens back here, so the URL must be reachable from
  * outside this process — `req.get('host')` alone is wrong behind a reverse
  * proxy (it'll return the upstream HTTP loopback like `localhost:3001`).
+ *
+ * Returns the URL plus a `source` tag describing which signal won, so the
+ * helper download endpoint can echo it in a debug header for ops to verify.
  */
-function resolveServerUrl(req: Request): string {
+function resolveServerUrl(req: Request): { url: string; source: string } {
   // 1. Explicit override wins. Set PUBLIC_BASE_URL in prod to bypass sniffing.
   const explicit = configValue('PUBLIC_BASE_URL', 'public_base_url');
-  if (explicit) return explicit.replace(/\/+$/, '');
+  if (explicit) return { url: explicit.replace(/\/+$/, ''), source: 'PUBLIC_BASE_URL' };
 
   // 2. Reverse-proxy headers. nginx/traefik terminate TLS and forward as HTTP;
   //    these carry the user-facing scheme + host.
   const forwarded = originFromForwardedHeaders(req);
-  if (forwarded) return forwarded.replace(/\/+$/, '');
+  if (forwarded) return { url: forwarded.replace(/\/+$/, ''), source: 'x-forwarded-*' };
 
   // 3. Origin header — set on fetch/XHR from the SPA settings page.
   const origin = originFromUrlHeader(req.headers.origin);
-  if (origin) return origin.replace(/\/+$/, '');
+  if (origin) return { url: origin.replace(/\/+$/, ''), source: 'origin-header' };
 
   // 4. Referer — set by browsers on plain anchor clicks (the helper download
   //    link is a top-level navigation that doesn't get Origin, but does get
   //    Referer pointing back at the settings page).
   const referer = originFromUrlHeader(req.headers.referer);
-  if (referer) return referer.replace(/\/+$/, '');
+  if (referer) return { url: referer.replace(/\/+$/, ''), source: 'referer-header' };
 
   // 5. Last resort: the request as-received. Correct for local dev; in prod
   //    without any of the above it'll bake the upstream loopback URL — that's
   //    a deploy misconfiguration (set PUBLIC_BASE_URL).
   const host = req.get('host') || 'localhost';
-  return `${req.protocol}://${host}`.replace(/\/+$/, '');
+  return { url: `${req.protocol}://${host}`.replace(/\/+$/, ''), source: 'host-header' };
+}
+
+const LOOPBACK_HOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[?::1\]?)(:\d+)?$/i;
+
+function isLoopback(url: string): boolean {
+  return LOOPBACK_HOST_RE.test(url);
 }
 
 const HELPER_FILENAME = 'openai-auth-helper.js';
@@ -128,19 +137,41 @@ function loadHelperTemplate(): string {
   throw new Error(`openai-auth-helper.js not found. Looked in: ${candidates.join(', ')}`);
 }
 
-function buildHelperJs(req: Request): string {
+function buildHelperJs(req: Request): { js: string; serverUrl: string; source: string } {
   const template = loadHelperTemplate();
-  const serverUrl = resolveServerUrl(req);
+  const { url: serverUrl, source } = resolveServerUrl(req);
+
+  if (isLoopback(serverUrl) && source !== 'host-header') {
+    // Won the resolver round but is still loopback — almost always a misconfig.
+    console.warn(
+      `[openai-oauth] helper download baked loopback URL "${serverUrl}" (source: ${source}). ` +
+      `Set PUBLIC_BASE_URL to the public URL the user's browser uses, otherwise the helper ` +
+      `will hit ECONNREFUSED when uploading tokens back from a different machine.`
+    );
+  } else if (isLoopback(serverUrl)) {
+    // Resolved purely from Host — fine in local dev, suspect in prod.
+    console.warn(
+      `[openai-oauth] helper download baked loopback URL "${serverUrl}" — only the Host ` +
+      `header was available. If this is a prod deploy, set PUBLIC_BASE_URL or fix the reverse ` +
+      `proxy to forward X-Forwarded-Proto / X-Forwarded-Host.`
+    );
+  }
+
   // Replace the literal sentinel string. The helper guards against unreplaced placeholders.
-  return template.replace(/__PROJECT_BRIDGE_SERVER__/g, serverUrl);
+  const js = template.replace(/__PROJECT_BRIDGE_SERVER__/g, serverUrl);
+  return { js, serverUrl, source };
 }
 
 router.get('/helper', (req: Request, res: Response) => {
   try {
-    const js = buildHelperJs(req);
+    const { js, serverUrl, source } = buildHelperJs(req);
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${HELPER_FILENAME}"`);
     res.setHeader('Cache-Control', 'no-store');
+    // Echo the baked URL so ops can verify with `curl -I` what got embedded
+    // before debugging an ECONNREFUSED on the user side.
+    res.setHeader('X-Helper-Server-Url', serverUrl);
+    res.setHeader('X-Helper-Server-Url-Source', source);
     return res.send(js);
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'Failed to build helper' });
@@ -167,8 +198,10 @@ router.get('/helper.cmd', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('Content-Disposition', 'attachment; filename="openai-auth-helper.cmd"');
   res.setHeader('Cache-Control', 'no-store');
-  // unused but signal source URL for debugging
-  void resolveServerUrl(req);
+  // Echo the resolver result so ops can verify wrapper + helper agree.
+  const { url: serverUrl, source } = resolveServerUrl(req);
+  res.setHeader('X-Helper-Server-Url', serverUrl);
+  res.setHeader('X-Helper-Server-Url-Source', source);
   return res.send(cmd);
 });
 
@@ -186,7 +219,9 @@ router.get('/helper.sh', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('Content-Disposition', 'attachment; filename="openai-auth-helper.sh"');
   res.setHeader('Cache-Control', 'no-store');
-  void resolveServerUrl(req);
+  const { url: serverUrl, source } = resolveServerUrl(req);
+  res.setHeader('X-Helper-Server-Url', serverUrl);
+  res.setHeader('X-Helper-Server-Url-Source', source);
   return res.send(sh);
 });
 

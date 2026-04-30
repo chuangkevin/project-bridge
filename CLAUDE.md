@@ -151,13 +151,15 @@ node packages/server/dist/index.js
 ### 四、新增的環境變數（v1.4.0）
 | Key | 必填 | 說明 |
 | --- | --- | --- |
+| **`PUBLIC_BASE_URL`** | **✅ 生產必填** | **使用者瀏覽器看到的外部 URL（例：`https://designbridge.housefun.com.tw`）。會被烘焙進可下載的 OpenAI auth helper，使用者本機跑完 OAuth 後 helper 用這個 URL 把 token POST 回來。reverse proxy 後面 server 沒辦法可靠自動偵測，缺這個 helper 會打 `localhost` 然後 ECONNREFUSED。** |
 | `OPENAI_OAUTH_CLIENT_ID` | ✅（OAuth button） | OpenAI OAuth public client id（內建預設 `app_EMoamEEZ73f0CkXaXp7hrann`，docker-compose 已預填） |
 | `OPENAI_OAUTH_AUTHORIZE_URL` | — | 預設 `https://auth.openai.com/oauth/authorize` |
 | `OPENAI_OAUTH_TOKEN_URL` | — | 預設 `https://auth.openai.com/oauth/token` |
 | `OPENAI_OAUTH_SCOPE` | — | 預設 `openid profile email offline_access` |
 | `OPENAI_OAUTH_REDIRECT_URI` | — | 不填則用 `<PUBLIC_BASE_URL>/api/openai-oauth/callback` |
-| `PUBLIC_BASE_URL` | 建議 | redirect_uri 用得到；K8s/Docker 環境必填 |
 
+> **`PUBLIC_BASE_URL` 為什麼重要**：OAuth flow 是「使用者本機跑 helper，helper 把 token POST 回 server」。Server 在使用者下載 helper 時把自己的 URL 烘焙進去；缺這個變數會 fallback 去看 `X-Forwarded-Host` / `Origin` / `Referer` / `Host` header — 多數 nginx 設定可以工作，但只要 proxy 改寫過 header 就會烘出 `http://localhost:3001` 然後 ECONNREFUSED。生產環境永遠明確設這個變數。
+>
 > 不想跑 OAuth 也可改用 `OPENAI_API_KEY` env 或在 settings 表寫入 `openai_api_key`，provider 會自動使用。
 
 ### 五、OpenAI OAuth 流程（使用者視角）
@@ -205,7 +207,7 @@ docker compose up -d   # Full stack
 | `OPENAI_OAUTH_TOKEN_URL` | optional | server | defaults to `https://auth.openai.com/oauth/token` |
 | `OPENAI_OAUTH_SCOPE` | optional | server | defaults to `openid profile email offline_access` |
 | `OPENAI_OAUTH_REDIRECT_URI` | optional | server | defaults to `${PUBLIC_BASE_URL}/api/openai-oauth/callback` |
-| `PUBLIC_BASE_URL` | required for prod OAuth | server | e.g. `https://designbridge.housefun.com.tw` |
+| **`PUBLIC_BASE_URL`** | **required in prod** | server | external URL the user's browser hits (e.g. `https://designbridge.housefun.com.tw`); baked into the downloadable OAuth helper as the token-upload target |
 | `PORT` | optional | server | defaults to 3003 (dev) / 3001 (docker) |
 | `HOST` | optional | server | defaults to `0.0.0.0` in docker |
 | `NODE_ENV` | required for prod | server | `production` enables SPA static serving |

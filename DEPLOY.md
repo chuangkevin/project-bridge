@@ -44,12 +44,14 @@ Place these in `packages/server/.env` for dev, or in `docker-compose.yml` `envir
 
 | Variable | Purpose | Default |
 |---|---|---|
+| **`PUBLIC_BASE_URL`** | **External URL the user's browser hits (e.g. `https://designbridge.housefun.com.tw`). Baked into the downloadable OpenAI auth helper so it knows where to POST tokens after sign-in. REQUIRED in prod — behind a reverse proxy the server can't reliably autodetect this.** | **— (must set)** |
 | `OPENAI_OAUTH_CLIENT_ID` | OAuth PKCE public client_id | `app_EMoamEEZ73f0CkXaXp7hrann` (Codex CLI) |
 | `OPENAI_OAUTH_AUTHORIZE_URL` | OAuth authorize endpoint | `https://auth.openai.com/oauth/authorize` |
 | `OPENAI_OAUTH_TOKEN_URL` | OAuth token exchange endpoint | `https://auth.openai.com/oauth/token` |
 | `OPENAI_OAUTH_SCOPE` | Requested scopes | `openid profile email offline_access` |
 | `OPENAI_OAUTH_REDIRECT_URI` | Where OpenAI sends the user back | `${PUBLIC_BASE_URL}/api/openai-oauth/callback` (auto-built) |
-| `PUBLIC_BASE_URL` | Used to build the default redirect_uri | required for prod OAuth |
+
+> **Why `PUBLIC_BASE_URL` matters:** the OpenAI OAuth flow uses a downloadable Node helper (`/api/openai-oauth/helper`) that runs on the user's machine and POSTs the captured tokens back to this server. The server bakes its own URL into that helper at download time. Without `PUBLIC_BASE_URL`, the bake falls through to header-sniffing (`X-Forwarded-Host`, `Origin`, `Referer`, then `Host`) — fine in many setups, but if your reverse proxy strips or rewrites those headers, the helper will end up with a loopback URL like `http://localhost:3001` and ECONNREFUSED on token upload. Always set it explicitly in prod.
 
 OAuth tokens themselves are stored in the `settings` table (`openai_oauth_access_token`, `openai_oauth_refresh_token`, `openai_oauth_expires_at`). They survive container restarts as long as `packages/server/data/` is volume-mounted.
 
