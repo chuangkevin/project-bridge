@@ -408,14 +408,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // depends on the user's `default_ai_model` selection — we re-check inside
     // each generation path via the provider router, but a fast-fail here keeps
     // the SSE stream from opening on a doomed request.
-    const hasOpenAI = hasOpenAICredential();
-    const wantsOpenAI = isOpenAIModelSelected();
-    if (wantsOpenAI && !hasOpenAI) {
-      return res.status(400).json({
-        error: '已選擇 OpenAI 模型但未連線。請至設定頁完成 OpenAI 授權連結，或切換到 Gemini 模型。',
-      });
-    }
-    // OpenCode is always available as fallback for gemini-* models — no GEMINI_API_KEY needed.
+    // OpenCode handles both gemini-* and gpt-* models — no local API key needed.
+    // Direct OpenAI credential is still preferred when available (lower latency).
     // Legacy parameter — downstream services ignore apiKey and route via getProvider() directly.
     const apiKey = '';
 

@@ -59,24 +59,42 @@ class ExtendedOpenCodeAdapter implements ProviderAdapter {
       },
     );
   }
+
+  /**
+   * Namespace bare model IDs so opencode routes to the right provider.
+   * "gpt-5.5"         → "openai/gpt-5.5"
+   * "gemini-2.5-flash" → "google/gemini-2.5-flash"
+   * "openai/gpt-5.5"  → unchanged (already namespaced)
+   */
+  private namespace(modelID: string): string {
+    if (!modelID || modelID.includes("/")) return modelID;
+    if (modelID.startsWith("gpt-") || modelID.startsWith("o1") || modelID.startsWith("o3") || modelID.startsWith("o4")) return `openai/${modelID}`;
+    if (modelID.startsWith("gemini-")) return `google/${modelID}`;
+    return modelID;
+  }
+
   get provider() { return this.inner.provider; }
   get credential() { return this.inner.credential; }
+
   supports(modelID: string): boolean {
-    return this.inner.supports(modelID) || modelID.startsWith("gemini-");
+    return this.inner.supports(this.namespace(modelID));
   }
+
   getModel(modelID: string): ModelDefinition | undefined {
-    const built = this.inner.getModel(modelID);
-    if (built) return built;
-    if (!modelID.startsWith("gemini-")) return undefined;
+    const built = this.inner.getModel(this.namespace(modelID));
+    if (built) return { ...built, id: modelID };
+    // synthesise a fallback so the router accepts the selection
     const baseline = this.inner.getModel("gemini-2.5-flash");
     if (!baseline) return undefined;
     return { ...baseline, id: modelID };
   }
+
   generateContent(params: GenerateParams): Promise<GenerateResponse> {
-    return this.inner.generateContent(params);
+    return this.inner.generateContent({ ...params, model: this.namespace(params.model ?? "") });
   }
+
   streamContent(params: GenerateParams): AsyncGenerator<string, void, unknown> {
-    return this.inner.streamContent(params);
+    return this.inner.streamContent({ ...params, model: this.namespace(params.model ?? "") });
   }
 }
 
