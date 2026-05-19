@@ -408,7 +408,6 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     // depends on the user's `default_ai_model` selection — we re-check inside
     // each generation path via the provider router, but a fast-fail here keeps
     // the SSE stream from opening on a doomed request.
-    const hasGemini = !!getGeminiApiKey();
     const hasOpenAI = hasOpenAICredential();
     const wantsOpenAI = isOpenAIModelSelected();
     if (wantsOpenAI && !hasOpenAI) {
@@ -416,13 +415,9 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
         error: '已選擇 OpenAI 模型但未連線。請至設定頁完成 OpenAI 授權連結，或切換到 Gemini 模型。',
       });
     }
-    if (!wantsOpenAI && !hasGemini) {
-      return res.status(400).json({ error: 'Gemini API key not configured. Set GEMINI_API_KEY env var or configure in settings.' });
-    }
-    // Legacy parameter — most downstream services that take `apiKey` ignore it
-    // and route through the provider client instead. Pass empty string when
-    // Gemini isn't configured so the type stays `string`.
-    const apiKey = (hasGemini ? getGeminiApiKey() : null) ?? '';
+    // OpenCode is always available as fallback for gemini-* models — no GEMINI_API_KEY needed.
+    // Legacy parameter — downstream services ignore apiKey and route via getProvider() directly.
+    const apiKey = '';
 
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -2359,18 +2354,14 @@ router.post('/:id/regenerate-page', async (req: Request, res: Response) => {
 
     // Generate with sub-agent
     const { generatePageFragment } = require('../services/subAgent');
-    const { getGeminiApiKey } = require('../services/geminiKeys');
     const { getActiveSkills } = require('./skills');
-
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) return res.status(503).json({ error: 'No API key available' });
 
     // Get relevant skills
     const skills = getActiveSkills(projectId).slice(0, 3).map((s: any) => ({
       name: s.name, content: s.content.slice(0, 500),
     }));
 
-    const result = await generatePageFragment(apiKey, pageAssignment, plan.cssVariables, plan.sharedCss, designConvention, skills);
+    const result = await generatePageFragment(undefined, pageAssignment, plan.cssVariables, plan.sharedCss, designConvention, skills);
 
     if (!result.success) {
       return res.status(500).json({ error: `Failed to regenerate: ${result.error}` });
