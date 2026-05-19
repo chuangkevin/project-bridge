@@ -21,7 +21,8 @@ services:
       # OpenAI OAuth PKCE — Codex CLI public client_id. Override via root .env if needed.
       - OPENAI_OAUTH_CLIENT_ID=${OPENAI_OAUTH_CLIENT_ID:-app_EMoamEEZ73f0CkXaXp7hrann}
       # OpenCode server — centralised AI gateway replacing the Gemini key pool.
-      - OPENCODE_URL=${OPENCODE_URL:-http://opencode:4096}
+      # Runs on 111C748 (dev workstation). Override via root .env when deploying elsewhere.
+      - OPENCODE_URL=${OPENCODE_URL:-http://111C748:4096}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-}
       # Optional: override OAuth endpoints / redirect uri / scope.
       # - OPENAI_OAUTH_AUTHORIZE_URL=https://auth.openai.com/oauth/authorize
