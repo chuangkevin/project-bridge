@@ -95,10 +95,7 @@ interface ResponsesInputItem {
 function buildResponsesInput(params: GenerateParams): ResponsesInputItem[] {
   const items: ResponsesInputItem[] = [];
 
-  if (params.systemInstruction && params.systemInstruction.trim()) {
-    items.push({ role: "system", content: params.systemInstruction });
-  }
-
+  // System instruction goes in the top-level `instructions` field, not input.
   for (const msg of params.history ?? []) {
     items.push(historyToResponsesItem(msg));
   }
@@ -234,6 +231,8 @@ export class CodexResponsesAdapter implements ProviderAdapter {
   private buildRequestBody(params: GenerateParams, stream: boolean) {
     return {
       model: params.model,
+      // `instructions` is required by the endpoint (system prompt equivalent).
+      instructions: params.systemInstruction ?? "",
       input: buildResponsesInput(params),
       stream,
       store: false,
