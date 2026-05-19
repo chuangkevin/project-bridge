@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { StepRunner } from '@kevinsisi/ai-core';
 import db from '../db/connection';
 import { createProjectBridgeStepRunner, withGeminiRetry } from './geminiRetry';
 import { classifyDocument, DocumentType } from './documentClassifier';

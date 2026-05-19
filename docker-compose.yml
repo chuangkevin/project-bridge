@@ -20,6 +20,9 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://designbridge.housefun.com.tw}
       # OpenAI OAuth PKCE — Codex CLI public client_id. Override via root .env if needed.
       - OPENAI_OAUTH_CLIENT_ID=${OPENAI_OAUTH_CLIENT_ID:-app_EMoamEEZ73f0CkXaXp7hrann}
+      # OpenCode server — centralised AI gateway replacing the Gemini key pool.
+      - OPENCODE_URL=${OPENCODE_URL:-http://opencode:4096}
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-}
       # Optional: override OAuth endpoints / redirect uri / scope.
       # - OPENAI_OAUTH_AUTHORIZE_URL=https://auth.openai.com/oauth/authorize
       # - OPENAI_OAUTH_TOKEN_URL=https://auth.openai.com/oauth/token

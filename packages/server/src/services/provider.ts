@@ -17,8 +17,8 @@
 
 import {
   MultiProviderClient,
-  GeminiProviderAdapter,
   OpenAIProviderAdapter,
+  OpenCodeProviderAdapter,
 } from "@kevinsisi/ai-core";
 import type {
   ProviderAdapter,
@@ -28,36 +28,36 @@ import type {
   ChatMessage,
   RoutedProviderSelection,
   ModelDefinition,
-  KeyPool,
 } from "@kevinsisi/ai-core";
 import db from "../db/connection";
-import { getProjectBridgeKeyPool } from "./projectBridgeAdapter";
-import { getGeminiModel, trackUsage } from "./geminiKeys";
 import { CodexResponsesAdapter, extractAccountIdFromJwt } from "./codexResponsesAdapter";
 
 const DEFAULT_ROUTE_POLICY: RoutePolicy = {
   preferredProviders: ["openai"],
-  fallbackProviders: ["gemini"],
+  fallbackProviders: ["opencode"],
   allowCrossProviderFallback: true,
 };
 
 /**
- * ai-core's built-in `gemini` provider only registers `gemini-2.5-flash`,
- * but our settings UI lets users pick `gemini-2.5-pro` and `gemini-2.0-flash`
- * too — and the Gemini REST API accepts any valid model id verbatim.
- *
- * Without this wrapper, any non-flash selection makes the router throw
- * "No provider/model combination matches the routing policy" — which the
- * user reads as "Gemini 不可用".
- *
- * We synthesise a `ModelDefinition` for every `gemini-*` id by cloning the
- * baseline (gemini-2.5-flash), so the router accepts the selection and the
- * actual id flows through to GenerativeAI.
+ * Wraps OpenCodeProviderAdapter so that every `gemini-*` model ID the settings
+ * UI exposes is accepted by the router. OpenCode routes the call to the correct
+ * underlying provider based on the model object it receives.
  */
-class ExtendedGeminiAdapter implements ProviderAdapter {
-  private readonly inner: GeminiProviderAdapter;
-  constructor(pool: KeyPool) {
-    this.inner = new GeminiProviderAdapter(pool);
+class ExtendedOpenCodeAdapter implements ProviderAdapter {
+  private readonly inner: OpenCodeProviderAdapter;
+  constructor() {
+    this.inner = new OpenCodeProviderAdapter(
+      {
+        type: "api",
+        provider: "opencode",
+        apiKey: process.env.OPENCODE_SERVER_PASSWORD ?? "",
+        baseURL: process.env.OPENCODE_URL ?? "http://localhost:4096",
+      },
+      {
+        defaultModel: { providerID: "google", id: "gemini-2.5-flash" },
+        basicAuth: !!process.env.OPENCODE_SERVER_PASSWORD,
+      },
+    );
   }
   get provider() { return this.inner.provider; }
   get credential() { return this.inner.credential; }
@@ -192,9 +192,8 @@ export function getProvider(): MultiProviderClient {
       );
     }
   }
-  // Gemini pool is always present. Use the extended wrapper so that
-  // gemini-2.5-pro / gemini-2.0-flash (and any future gemini-*) route correctly.
-  adapters.push(new ExtendedGeminiAdapter(getProjectBridgeKeyPool()));
+  // OpenCode is always present as fallback — handles all gemini-* models.
+  adapters.push(new ExtendedOpenCodeAdapter());
 
   cachedClient = new MultiProviderClient({
     adapters,
@@ -226,7 +225,7 @@ export function invalidateProvider(): void {
 export function defaultModel(): string {
   const pref = readSetting("default_ai_model");
   if (pref && (pref.startsWith("gpt-") || pref.startsWith("gemini-"))) return pref;
-  return getGeminiModel();
+  return "gemini-2.5-flash";
 }
 
 /**
@@ -429,22 +428,13 @@ export async function generateJson<T = unknown>(params: GenerateParams): Promise
 /** Bridge ai-core TokenUsage → existing trackUsage() (which expects Gemini's metadata shape). */
 export function trackProviderUsage(
   selection: RoutedProviderSelection,
-  callType: string,
+  _callType: string,
   response: GenerateResponse,
-  projectId?: string,
+  _projectId?: string,
 ): void {
   if (!response.usage) return;
-  const apiKeyForSuffix = selection.credentialRef || `${selection.provider}:${selection.credentialType}`;
-  trackUsage(
-    apiKeyForSuffix,
-    selection.model,
-    callType,
-    {
-      promptTokenCount: response.usage.promptTokens,
-      candidatesTokenCount: response.usage.completionTokens,
-      totalTokenCount: response.usage.totalTokens,
-    },
-    projectId,
+  console.log(
+    `[provider] usage provider=${selection.provider} model=${selection.model} prompt=${response.usage.promptTokens} completion=${response.usage.completionTokens}`,
   );
 }
 
