@@ -303,6 +303,110 @@ router.get('/token-usage', (_req: Request, res: Response) => {
   }
 });
 
+// ─── OpenCode Settings ──────────────────────────────
+
+const DEFAULT_OPENCODE_MODELS = [
+  { id: 'google/gemini-2.5-flash', name: 'gemini-2.5-flash', provider: 'google' },
+  { id: 'google/gemini-2.5-pro', name: 'gemini-2.5-pro', provider: 'google' },
+  { id: 'google/gemini-2.0-flash', name: 'gemini-2.0-flash', provider: 'google' },
+];
+
+function readOpenCodeSetting(key: string): string | null {
+  try {
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value?: string } | undefined;
+    const v = row?.value?.trim();
+    return v && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function upsertSetting(key: string, value: string): void {
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+  `).run(key, value);
+}
+
+router.get('/opencode', (_req: Request, res: Response) => {
+  try {
+    const url = readOpenCodeSetting('opencode_url') || process.env.OPENCODE_URL || 'http://localhost:4096';
+    const textModel = readOpenCodeSetting('opencode_text_model') || 'gemini-2.5-flash';
+    const visionModel = readOpenCodeSetting('opencode_vision_model') || 'gemini-2.5-flash';
+    return res.json({ url, textModel, visionModel });
+  } catch (err: any) {
+    console.error('Error getting OpenCode settings:', err);
+    return res.status(500).json({ error: 'Failed to get OpenCode settings' });
+  }
+});
+
+router.post('/opencode', (req: Request, res: Response) => {
+  try {
+    const { url, textModel, visionModel } = req.body as { url?: string; textModel?: string; visionModel?: string };
+    if (url !== undefined) upsertSetting('opencode_url', String(url));
+    if (textModel !== undefined) upsertSetting('opencode_text_model', String(textModel));
+    if (visionModel !== undefined) upsertSetting('opencode_vision_model', String(visionModel));
+    invalidateProvider();
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error saving OpenCode settings:', err);
+    return res.status(500).json({ error: 'Failed to save OpenCode settings' });
+  }
+});
+
+router.get('/opencode/models', async (_req: Request, res: Response) => {
+  const baseUrl = readOpenCodeSetting('opencode_url') || process.env.OPENCODE_URL || 'http://localhost:4096';
+  const password = readOpenCodeSetting('opencode_server_password') || process.env.OPENCODE_SERVER_PASSWORD || '';
+  const headers: Record<string, string> = {};
+  if (password) headers['Authorization'] = `Basic ${Buffer.from(`:${password}`).toString('base64')}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const r = await fetch(`${baseUrl}/provider`, { headers, signal: controller.signal });
+    clearTimeout(timer);
+    if (!r.ok) {
+      return res.json({ models: DEFAULT_OPENCODE_MODELS, warning: `OpenCode returned ${r.status}` });
+    }
+    const data = await r.json() as any;
+    const models: { id: string; name: string; provider: string }[] = [];
+    if (Array.isArray(data)) {
+      for (const p of data as any[]) {
+        for (const m of (Array.isArray(p.models) ? p.models : [])) {
+          models.push({ id: `${(p as any).id}/${(m as any).id}`, name: (m as any).name || (m as any).id, provider: (p as any).id });
+        }
+      }
+    }
+    return res.json({ models: models.length > 0 ? models : DEFAULT_OPENCODE_MODELS });
+  } catch (err: any) {
+    clearTimeout(timer);
+    return res.json({ models: DEFAULT_OPENCODE_MODELS, warning: (err as Error)?.message?.slice(0, 100) || '無法連接到 OpenCode' });
+  }
+});
+
+router.post('/opencode/test', async (_req: Request, res: Response) => {
+  const baseUrl = readOpenCodeSetting('opencode_url') || process.env.OPENCODE_URL || 'http://localhost:4096';
+  const password = readOpenCodeSetting('opencode_server_password') || process.env.OPENCODE_SERVER_PASSWORD || '';
+  const headers: Record<string, string> = {};
+  if (password) headers['Authorization'] = `Basic ${Buffer.from(`:${password}`).toString('base64')}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const r = await fetch(`${baseUrl}/provider`, { headers, signal: controller.signal });
+    clearTimeout(timer);
+    if (!r.ok) {
+      return res.json({ ok: false, error: `HTTP ${r.status}` });
+    }
+    return res.json({ ok: true, url: baseUrl });
+  } catch (err: any) {
+    clearTimeout(timer);
+    return res.json({ ok: false, error: (err as Error)?.message?.slice(0, 100) || '連線失敗' });
+  }
+});
+
 // ─── MCP Server Management ──────────────────────────
 
 router.get('/mcp-servers', (_req: Request, res: Response) => {

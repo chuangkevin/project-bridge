@@ -46,16 +46,18 @@ const DEFAULT_ROUTE_POLICY: RoutePolicy = {
 class ExtendedOpenCodeAdapter implements ProviderAdapter {
   private readonly inner: OpenCodeProviderAdapter;
   constructor() {
+    const url = readSetting("opencode_url") || process.env.OPENCODE_URL || "http://localhost:4096";
+    const password = readSetting("opencode_server_password") || process.env.OPENCODE_SERVER_PASSWORD || "";
     this.inner = new OpenCodeProviderAdapter(
       {
         type: "api",
         provider: "opencode",
-        apiKey: process.env.OPENCODE_SERVER_PASSWORD ?? "",
-        baseURL: process.env.OPENCODE_URL ?? "http://localhost:4096",
+        apiKey: password,
+        baseURL: url,
       },
       {
         defaultModel: { providerID: "google", id: "gemini-2.5-flash" },
-        basicAuth: !!process.env.OPENCODE_SERVER_PASSWORD,
+        basicAuth: !!password,
       },
     );
   }
@@ -167,7 +169,8 @@ function snapshot(): string {
   const oauth = readSetting("openai_oauth_access_token") || "";
   const api = readSetting("openai_api_key") || "";
   const env = process.env.OPENAI_API_KEY || "";
-  return `${oauth}|${api}|${env}`;
+  const opencodeUrl = readSetting("opencode_url") || process.env.OPENCODE_URL || "";
+  return `${oauth}|${api}|${env}|${opencodeUrl}`;
 }
 
 /** Get the singleton MultiProviderClient. Rebuilt automatically when OpenAI credentials change. */

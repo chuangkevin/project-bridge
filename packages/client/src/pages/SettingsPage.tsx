@@ -213,6 +213,18 @@ export default function SettingsPage() {
   // Reference tags (Task 4)
   const [skillRefs, setSkillRefs] = useState<Record<string, { outgoing: string[]; incoming: string[] }>>({});
 
+  // OpenCode settings
+  interface OpenCodeModel { id: string; name: string; provider: string; }
+  const [opencodeUrl, setOpencodeUrl] = useState('');
+  const [opencodeTextModel, setOpencodeTextModel] = useState('gemini-2.5-flash');
+  const [opencodeVisionModel, setOpencodeVisionModel] = useState('gemini-2.5-flash');
+  const [opencodeModels, setOpencodeModels] = useState<OpenCodeModel[]>([]);
+  const [opencodeSaving, setOpencodeSaving] = useState(false);
+  const [opencodeMsg, setOpencodeMsg] = useState('');
+  const [opencodeTesting, setOpencodeTesting] = useState(false);
+  const [opencodeTestResult, setOpencodeTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [opencodeModelsLoading, setOpencodeModelsLoading] = useState(false);
+
   // Batch operations (Task 5)
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
 
@@ -589,6 +601,76 @@ export default function SettingsPage() {
     const id = setInterval(fetchOpenaiOAuthStatus, 5000);
     return () => clearInterval(id);
   }, [fetchOpenaiOAuthStatus]);
+
+  const fetchOpencodeSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/opencode', { headers: bridgeAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setOpencodeUrl(data.url || '');
+        setOpencodeTextModel(data.textModel || 'gemini-2.5-flash');
+        setOpencodeVisionModel(data.visionModel || 'gemini-2.5-flash');
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchOpencodeModels = useCallback(async () => {
+    setOpencodeModelsLoading(true);
+    try {
+      const res = await fetch('/api/settings/opencode/models', { headers: bridgeAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setOpencodeModels(data.models || []);
+      }
+    } catch { /* ignore */ }
+    setOpencodeModelsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+    fetchOpencodeSettings();
+    fetchOpencodeModels();
+  }, [authState, fetchOpencodeSettings, fetchOpencodeModels]);
+
+  const handleSaveOpencodeSettings = async () => {
+    setOpencodeSaving(true);
+    setOpencodeMsg('');
+    try {
+      const res = await fetch('/api/settings/opencode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...bridgeAuthHeaders() },
+        body: JSON.stringify({ url: opencodeUrl.trim(), textModel: opencodeTextModel, visionModel: opencodeVisionModel }),
+      });
+      if (res.ok) {
+        setOpencodeMsg('已儲存');
+        setTimeout(() => setOpencodeMsg(''), 2000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setOpencodeMsg((data as any).error || '儲存失敗');
+      }
+    } catch {
+      setOpencodeMsg('儲存失敗');
+    } finally {
+      setOpencodeSaving(false);
+    }
+  };
+
+  const handleTestOpencode = async () => {
+    setOpencodeTesting(true);
+    setOpencodeTestResult(null);
+    try {
+      const res = await fetch('/api/settings/opencode/test', {
+        method: 'POST',
+        headers: bridgeAuthHeaders(),
+      });
+      const data = await res.json();
+      setOpencodeTestResult(data);
+    } catch {
+      setOpencodeTestResult({ ok: false, error: '連線失敗' });
+    } finally {
+      setOpencodeTesting(false);
+    }
+  };
 
   const platformIsWindows = useMemo(() => {
     if (typeof navigator === 'undefined') return true;
@@ -1445,6 +1527,105 @@ export default function SettingsPage() {
             <p style={openaiOAuthMsg.includes('失敗') ? styles.errorText : styles.successText}>
               {openaiOAuthMsg}
             </p>
+          )}
+        </section>
+
+        {/* ── Section: OpenCode Server ────────────────── */}
+        <section style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>OpenCode 伺服器</h2>
+            <div style={styles.sectionDivider} />
+            {opencodeTestResult?.ok && <span style={{ ...styles.badge, backgroundColor: 'color-mix(in srgb, #22c55e 15%, var(--bg-hover))', color: '#15803d' }}>已連線</span>}
+          </div>
+
+          <p style={styles.hint}>
+            設定自架 OpenCode server 的位址與預設模型。所有 AI 呼叫（除 Gemini key 驗證外）均透過此伺服器路由。
+          </p>
+
+          <div style={{ marginBottom: '12px' }}>
+            <label style={styles.label}>Server URL</label>
+            <div style={styles.inputRow}>
+              <input
+                style={styles.input}
+                type="url"
+                placeholder="http://localhost:4096"
+                value={opencodeUrl}
+                onChange={e => { setOpencodeUrl(e.target.value); setOpencodeTestResult(null); }}
+                disabled={opencodeSaving}
+              />
+              <button
+                type="button"
+                style={{ ...styles.primaryBtn, backgroundColor: '#64748b', ...(opencodeTesting ? styles.btnDisabled : {}) }}
+                onClick={handleTestOpencode}
+                disabled={opencodeTesting}
+              >
+                {opencodeTesting ? '測試中...' : '測試連線'}
+              </button>
+            </div>
+            {opencodeTestResult && (
+              <p style={opencodeTestResult.ok ? styles.successText : styles.errorText}>
+                {opencodeTestResult.ok ? `連線成功 — ${opencodeUrl || 'http://localhost:4096'}` : `連線失敗：${opencodeTestResult.error}`}
+              </p>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label style={styles.label}>文字模型</label>
+              <select
+                style={styles.select}
+                value={opencodeTextModel}
+                onChange={e => setOpencodeTextModel(e.target.value)}
+                disabled={opencodeModelsLoading}
+              >
+                {opencodeModels.length === 0 ? (
+                  <option value={opencodeTextModel}>{opencodeTextModel}</option>
+                ) : (
+                  opencodeModels.map(m => (
+                    <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
+                  ))
+                )}
+              </select>
+            </div>
+            <div>
+              <label style={styles.label}>視覺模型（圖片分析用）</label>
+              <select
+                style={styles.select}
+                value={opencodeVisionModel}
+                onChange={e => setOpencodeVisionModel(e.target.value)}
+                disabled={opencodeModelsLoading}
+              >
+                {opencodeModels.length === 0 ? (
+                  <option value={opencodeVisionModel}>{opencodeVisionModel}</option>
+                ) : (
+                  opencodeModels.map(m => (
+                    <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
+                  ))
+                )}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              style={{ ...styles.primaryBtn, ...(opencodeSaving ? styles.btnDisabled : {}) }}
+              onClick={handleSaveOpencodeSettings}
+              disabled={opencodeSaving}
+            >
+              {opencodeSaving ? '儲存中...' : '儲存設定'}
+            </button>
+            <button
+              type="button"
+              style={{ ...styles.primaryBtn, backgroundColor: '#64748b', ...(opencodeModelsLoading ? styles.btnDisabled : {}) }}
+              onClick={fetchOpencodeModels}
+              disabled={opencodeModelsLoading}
+            >
+              {opencodeModelsLoading ? '載入中...' : '重新載入模型列表'}
+            </button>
+          </div>
+          {opencodeMsg && (
+            <p style={opencodeMsg === '已儲存' ? styles.successText : styles.errorText}>{opencodeMsg}</p>
           )}
         </section>
 
