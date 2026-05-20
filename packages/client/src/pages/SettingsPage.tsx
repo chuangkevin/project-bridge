@@ -224,6 +224,10 @@ export default function SettingsPage() {
   const [opencodeTesting, setOpencodeTesting] = useState(false);
   const [opencodeTestResult, setOpencodeTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [opencodeModelsLoading, setOpencodeModelsLoading] = useState(false);
+  const [opencodeTextSearch, setOpencodeTextSearch] = useState('');
+  const [opencodeTextOpen, setOpencodeTextOpen] = useState(false);
+  const [opencodeVisionSearch, setOpencodeVisionSearch] = useState('');
+  const [opencodeVisionOpen, setOpencodeVisionOpen] = useState(false);
 
   // Batch operations (Task 5)
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
@@ -1569,42 +1573,94 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-            <div>
-              <label style={styles.label}>文字模型</label>
-              <select
-                style={styles.select}
-                value={opencodeTextModel}
-                onChange={e => setOpencodeTextModel(e.target.value)}
-                disabled={opencodeModelsLoading}
-              >
-                {opencodeModels.length === 0 ? (
-                  <option value={opencodeTextModel}>{opencodeTextModel}</option>
-                ) : (
-                  opencodeModels.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
-                  ))
-                )}
-              </select>
-            </div>
-            <div>
-              <label style={styles.label}>視覺模型（圖片分析用）</label>
-              <select
-                style={styles.select}
-                value={opencodeVisionModel}
-                onChange={e => setOpencodeVisionModel(e.target.value)}
-                disabled={opencodeModelsLoading}
-              >
-                {opencodeModels.length === 0 ? (
-                  <option value={opencodeVisionModel}>{opencodeVisionModel}</option>
-                ) : (
-                  opencodeModels.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>
-                  ))
-                )}
-              </select>
-            </div>
-          </div>
+          {(() => {
+            const byProvider = (models: OpenCodeModel[]) => {
+              const map: Record<string, OpenCodeModel[]> = {};
+              for (const m of models) { (map[m.provider] ??= []).push(m); }
+              return map;
+            };
+            const ModelCombobox = ({
+              label, value, onChange, search, setSearch, open, setOpen,
+            }: {
+              label: string; value: string;
+              onChange: (v: string) => void;
+              search: string; setSearch: (s: string) => void;
+              open: boolean; setOpen: (o: boolean) => void;
+            }) => {
+              const filtered = opencodeModels.filter(m =>
+                !search || m.name.toLowerCase().includes(search.toLowerCase()) ||
+                m.provider.toLowerCase().includes(search.toLowerCase()) ||
+                m.id.toLowerCase().includes(search.toLowerCase())
+              );
+              const grouped = byProvider(filtered);
+              const selectedLabel = opencodeModels.find(m => m.id === value)?.name || value;
+              return (
+                <div style={{ position: 'relative' }}>
+                  <label style={styles.label}>{label}</label>
+                  <div
+                    style={{ ...styles.input, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', userSelect: 'none' }}
+                    onClick={() => { setOpen(!open); if (!open) setSearch(''); }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'inherit' }}>{selectedLabel}</span>
+                    <span style={{ fontSize: 10, marginLeft: 6, color: 'var(--text-muted)' }}>{open ? '▲' : '▼'}</span>
+                  </div>
+                  {open && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'var(--bg-card, #fff)', border: '1px solid var(--border-primary)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', marginTop: 2, maxHeight: 300, display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ padding: '8px 8px 4px' }}>
+                        <input
+                          autoFocus
+                          style={{ ...styles.input, fontFamily: 'inherit', fontSize: 13, padding: '6px 10px' }}
+                          placeholder="搜尋模型..."
+                          value={search}
+                          onChange={e => setSearch(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </div>
+                      <div style={{ overflowY: 'auto', flex: 1 }}>
+                        {Object.keys(grouped).length === 0 ? (
+                          <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--text-muted)' }}>無符合結果</div>
+                        ) : Object.entries(grouped).map(([provider, models]) => (
+                          <div key={provider}>
+                            <div style={{ padding: '6px 12px 2px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-secondary, #f8fafc)' }}>
+                              {provider}
+                            </div>
+                            {models.map(m => (
+                              <div
+                                key={m.id}
+                                style={{ padding: '7px 14px', fontSize: 13, cursor: 'pointer', background: m.id === value ? 'color-mix(in srgb, var(--accent,#8E6FA7) 12%, var(--bg-card,#fff))' : 'transparent', color: m.id === value ? 'var(--accent,#8E6FA7)' : 'var(--text-primary)', fontWeight: m.id === value ? 600 : 400 }}
+                                onMouseEnter={e => { if (m.id !== value) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-hover, #f1f5f9)'; }}
+                                onMouseLeave={e => { if (m.id !== value) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                                onClick={() => { onChange(m.id); setOpen(false); setSearch(''); }}
+                              >
+                                {m.name}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {open && <div style={{ position: 'fixed', inset: 0, zIndex: 199 }} onClick={() => { setOpen(false); setSearch(''); }} />}
+                </div>
+              );
+            };
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <ModelCombobox
+                  label="文字模型（無圖片的呼叫）"
+                  value={opencodeTextModel} onChange={setOpencodeTextModel}
+                  search={opencodeTextSearch} setSearch={setOpencodeTextSearch}
+                  open={opencodeTextOpen} setOpen={setOpencodeTextOpen}
+                />
+                <ModelCombobox
+                  label="視覺模型（含圖片的呼叫）"
+                  value={opencodeVisionModel} onChange={setOpencodeVisionModel}
+                  search={opencodeVisionSearch} setSearch={setOpencodeVisionSearch}
+                  open={opencodeVisionOpen} setOpen={setOpencodeVisionOpen}
+                />
+              </div>
+            );
+          })()}
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
