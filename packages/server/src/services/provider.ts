@@ -244,6 +244,17 @@ export function invalidateProvider(): void {
  * fallback masquerading as an OpenAI response.
  */
 export function defaultModel(): string {
+  // When OpenCode is configured, honour opencode_text_model (stored as "providerID/id").
+  // Strip the provider prefix so ExtendedOpenCodeAdapter can re-namespace it.
+  const opencodeUrl = readSetting("opencode_url") || process.env.OPENCODE_URL;
+  if (opencodeUrl) {
+    const ocModel = readSetting("opencode_text_model");
+    if (ocModel) {
+      const slash = ocModel.indexOf("/");
+      const bareId = slash > 0 ? ocModel.slice(slash + 1) : ocModel;
+      if (bareId) return bareId;
+    }
+  }
   const pref = readSetting("default_ai_model");
   if (pref && (pref.startsWith("gpt-") || pref.startsWith("gemini-"))) return pref;
   return "gemini-2.5-flash";
