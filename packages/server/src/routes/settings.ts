@@ -371,11 +371,12 @@ router.get('/opencode/models', async (_req: Request, res: Response) => {
     }
     const data = await r.json() as any;
     const models: { id: string; name: string; provider: string }[] = [];
-    if (Array.isArray(data)) {
-      for (const p of data as any[]) {
-        for (const m of (Array.isArray(p.models) ? p.models : [])) {
-          models.push({ id: `${(p as any).id}/${(m as any).id}`, name: (m as any).name || (m as any).id, provider: (p as any).id });
-        }
+    // OpenCode /provider returns { all: [ { id, models: { modelId: {...} } } ] }
+    const providers: any[] = Array.isArray(data) ? data : (Array.isArray(data?.all) ? data.all : []);
+    for (const p of providers) {
+      const modelsMap: Record<string, any> = p.models || {};
+      for (const [modelId, m] of Object.entries(modelsMap)) {
+        models.push({ id: `${p.id}/${modelId}`, name: (m as any).name || modelId, provider: p.id });
       }
     }
     return res.json({ models: models.length > 0 ? models : DEFAULT_OPENCODE_MODELS });
