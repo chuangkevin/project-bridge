@@ -11,10 +11,18 @@ export async function extractText(filePath: string, mimeType: string): Promise<s
       return await extractPptx(filePath);
     } else if (mimeType.startsWith('image/')) {
       return ''; // OCR runs async via extractImageOcr(); chat route reads from DB
+    } else if (
+      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mimeType === 'application/vnd.ms-excel' ||
+      filePath.toLowerCase().endsWith('.xlsx') ||
+      filePath.toLowerCase().endsWith('.xls')
+    ) {
+      return await extractExcel(filePath);
+    } else if (mimeType === 'text/csv' || filePath.toLowerCase().endsWith('.csv')) {
+      return fs.readFileSync(filePath, 'utf-8');
     } else if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
       return fs.readFileSync(filePath, 'utf-8');
     } else {
-      // Fallback: try reading as text
       return fs.readFileSync(filePath, 'utf-8');
     }
   } catch (err: any) {
@@ -88,6 +96,20 @@ async function extractPptx(filePath: string): Promise<string> {
       zipfile.on('error', reject);
     });
   });
+}
+
+async function extractExcel(filePath: string): Promise<string> {
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.readFile(filePath);
+  const lines: string[] = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+    if (csv.trim()) {
+      lines.push(`[Sheet: ${sheetName}]\n${csv}`);
+    }
+  }
+  return lines.join('\n\n');
 }
 
 // Singleton OCR worker — loaded once, reused across requests to avoid
