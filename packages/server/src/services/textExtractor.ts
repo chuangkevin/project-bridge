@@ -10,7 +10,7 @@ export async function extractText(filePath: string, mimeType: string): Promise<s
     } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
       return await extractPptx(filePath);
     } else if (mimeType.startsWith('image/')) {
-      return await extractImage(filePath);
+      return '';
     } else if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
       return fs.readFileSync(filePath, 'utf-8');
     } else {
