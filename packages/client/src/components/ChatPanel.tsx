@@ -1405,7 +1405,23 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   </button>
                 )}
                 {f.analysisStatus === 'error' && (
-                  <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 500 }} data-testid="analysis-badge">⚠ 分析失敗</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 500 }} data-testid="analysis-badge">⚠ 分析失敗</span>
+                    <button
+                      type="button"
+                      style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', textDecoration: 'underline' }}
+                      title="重新執行文件分析"
+                      onClick={async () => {
+                        setAttachedFiles(prev => prev.map(x => x.id === f.id ? { ...x, analysisStatus: 'analyzing' as const } : x));
+                        try {
+                          await fetch(`/api/projects/${projectId}/upload/${f.id}/reanalyze-doc`, { method: 'POST' });
+                          startAnalysisPolling(f.id);
+                        } catch {
+                          setAttachedFiles(prev => prev.map(x => x.id === f.id ? { ...x, analysisStatus: 'error' as const } : x));
+                        }
+                      }}
+                    >重試</button>
+                  </span>
                 )}
                 {f.visualAnalysisReady ? (
                   <span style={styles.visualBadge} data-testid="visual-analysis-badge" title="視覺分析已完成">

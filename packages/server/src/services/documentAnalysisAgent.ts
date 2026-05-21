@@ -294,8 +294,8 @@ export async function analyzeDocument(
   } catch (err: any) {
     console.error(`[agent] Analysis failed for ${fileId}:`, err.message);
     db.prepare(
-      "UPDATE uploaded_files SET analysis_status = 'failed' WHERE id = ?"
-    ).run(fileId);
+      "UPDATE uploaded_files SET analysis_status = 'failed', analysis_result = ? WHERE id = ?"
+    ).run(JSON.stringify({ error: err.message || 'Unknown error' }), fileId);
     throw err;
   }
 }

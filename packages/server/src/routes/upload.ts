@@ -220,6 +220,22 @@ router.post('/:id/upload/:fileId/reanalyze', async (req: Request, res: Response)
   }
 });
 
+// POST /:id/upload/:fileId/reanalyze-doc — retry document analysis agent
+router.post('/:id/upload/:fileId/reanalyze-doc', async (req: Request, res: Response) => {
+  const { id: projectId, fileId } = req.params;
+  const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND project_id = ?').get(fileId, projectId) as any;
+  if (!file) return res.status(404).json({ error: 'File not found' });
+
+  db.prepare("UPDATE uploaded_files SET analysis_status = 'pending', analysis_result = NULL WHERE id = ?").run(fileId);
+  import('../services/documentAnalysisAgent').then(({ analyzeDocument }) => {
+    analyzeDocument(String(fileId), file.storage_path, file.mime_type, file.extracted_text || '').catch((err: any) => {
+      console.warn('[reanalyze-doc] Document analysis agent failed:', err.message);
+    });
+  }).catch(() => {});
+
+  return res.json({ success: true });
+});
+
 // GET /:id/upload/:fileId/analysis-status — poll analysis agent progress
 router.get('/:id/upload/:fileId/analysis-status', (req: Request, res: Response) => {
   const file = db.prepare(
