@@ -1,4 +1,4 @@
-import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
+import { getProvider, defaultModel, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export type DocumentType = 'spec' | 'design' | 'screenshot' | 'mixed';
 
@@ -32,7 +32,7 @@ export async function classifyDocument(
   }));
   try {
     const { selection, response } = await client.generateWithSelection({
-      model: defaultModel(),
+      model: visionImages.length > 0 ? visionModel() : defaultModel(),
       systemInstruction: withJsonInstruction(),
       prompt: `${CLASSIFICATION_PROMPT}\n\nText excerpt (first 1000 chars):\n${textHint.slice(0, 1000)}`,
       images: visionImages,

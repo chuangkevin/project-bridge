@@ -4,7 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import db from '../db/connection';
 import upload from '../middleware/upload';
-import { getProvider, defaultModel, trackProviderUsage } from '../services/provider';
+import { getProvider, defaultModel, visionModel, trackProviderUsage } from '../services/provider';
 
 const router = Router();
 
@@ -156,7 +156,7 @@ router.post('/:id/design/analyze-reference', (req: Request, res: Response, next:
       const base64data = fs.readFileSync(storagePath).toString('base64');
 
       const { selection, response } = await getProvider().generateWithSelection({
-        model: defaultModel(),
+        model: visionModel(),
         prompt: 'Analyze this design reference image and describe in detail: 1) Color palette (list main colors with hex codes if visible), 2) Typography style (serif/sans-serif/mono, weight, size impression), 3) Spacing density (compact/normal/spacious), 4) Border radius style (sharp: 0-2px / medium: 4-8px / rounded: 12px+), 5) Shadow style (flat/subtle/prominent), 6) Overall aesthetic (minimalist/modern/playful/corporate/colorful/dark/light/etc.), 7) Any other distinctive design characteristics. Be specific and actionable so an AI can reproduce this style.',
         images: [{ type: 'inline', mimeType: mimetype, data: base64data }],
       });

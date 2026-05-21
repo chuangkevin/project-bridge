@@ -1,4 +1,4 @@
-import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
+import { getProvider, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export interface SpecPage {
   name: string;
@@ -63,7 +63,7 @@ export async function extractSpecData(
   }));
 
   const { selection, response } = await getProvider().generateWithSelection({
-    model: defaultModel(),
+    model: visionModel(),
     systemInstruction: withJsonInstruction(),
     prompt: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 80000)}\n=== END ===`,
     images: visionImages,

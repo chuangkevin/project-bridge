@@ -1,4 +1,4 @@
-import { getProvider, defaultModel, trackProviderUsage } from './provider';
+import { getProvider, visionModel, trackProviderUsage } from './provider';
 
 const COMPONENT_EXTRACTION_PROMPT = `You are analyzing a UI design reference image. A developer will use your analysis to recreate this design in HTML/CSS. Be precise and only describe what you actually see.
 
@@ -53,7 +53,7 @@ export async function analyzeDesignSpec(images: Buffer[], _apiKey?: string): Pro
   }));
 
   const { selection, response } = await getProvider().generateWithSelection({
-    model: defaultModel(),
+    model: visionModel(),
     prompt: COMPONENT_EXTRACTION_PROMPT,
     images: visionImages,
     maxOutputTokens: 3000,

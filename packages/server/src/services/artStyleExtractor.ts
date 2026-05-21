@@ -1,5 +1,5 @@
 import yauzl from 'yauzl';
-import { getProvider, defaultModel, trackProviderUsage } from './provider';
+import { getProvider, visionModel, trackProviderUsage } from './provider';
 
 export async function extractImagesFromDocument(filePath: string, mimeType: string): Promise<Buffer[]> {
   const ext = mimeType.toLowerCase();
@@ -64,7 +64,7 @@ export async function analyzeArtStyle(images: Buffer[], _apiKey?: string): Promi
   }));
 
   const { selection, response } = await getProvider().generateWithSelection({
-    model: defaultModel(),
+    model: visionModel(),
     prompt: 'Analyze the visual art style of these UI design images. In 1-2 sentences, describe: color palette, typography style, UI component style (flat/material/glassmorphism/etc), and overall aesthetic. Be concise and specific.',
     images: visionImages,
     maxOutputTokens: 150,

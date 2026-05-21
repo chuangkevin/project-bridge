@@ -7,7 +7,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
-import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry, isOpenAIModelSelected, hasOpenAICredential } from '../services/provider';
+import { getProvider, defaultModel, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry, isOpenAIModelSelected, hasOpenAICredential } from '../services/provider';
 import type { ChatMessage } from '@kevinsisi/ai-core';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
@@ -600,7 +600,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 
           try {
             const exec = await getProvider().generateWithSelection({
-              model: defaultModel(),
+              model: visionModel(),
               systemInstruction: withJsonInstruction(),
               prompt: identifyPrompt,
               images: [{ type: 'inline', mimeType: imageMimeType || 'image/png', data: imageBase64 }],
@@ -634,7 +634,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
                 .replace('{instruction}', modification);
 
               const modifyExec = await getProvider().generateWithSelection({
-                model: defaultModel(),
+                model: visionModel(),
                 prompt: elementPrompt,
                 images: [{ type: 'inline', mimeType: imageMimeType || 'image/png', data: imageBase64 }],
                 maxOutputTokens: 8192,
@@ -684,7 +684,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
           }
 
           const visionExec = await getProvider().generateWithSelection({
-            model: defaultModel(),
+            model: visionModel(),
             systemInstruction: withJsonInstruction(visionPrompt),
             prompt: `使用者指示: ${userContent}\n\n目前的 prototype HTML:\n${truncatedHtml}`,
             images: [{ type: 'inline', mimeType: imageMimeType || 'image/png', data: imageBase64 }],
@@ -1036,7 +1036,7 @@ This turn is a DB schema/table confirmation request with fresh MCP lookup result
         }));
 
         const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
-          model: defaultModel(),
+          model: visionImagesQa.length > 0 ? visionModel() : defaultModel(),
           systemInstruction: richQaPrompt,
           prompt: userContent,
           history: qaHistory,

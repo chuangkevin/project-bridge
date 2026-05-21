@@ -1,4 +1,4 @@
-import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
+import { getProvider, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from './provider';
 
 export interface DesignPage {
   name: string;
@@ -67,7 +67,7 @@ export async function extractDesignData(
 
   const client = getProvider();
   const exec = await client.generateWithSelection({
-    model: defaultModel(),
+    model: visionModel(),
     systemInstruction: withJsonInstruction(),
     prompt: DESIGN_EXTRACTION_PROMPT,
     images: visionImages,
@@ -97,7 +97,7 @@ export async function extractDesignData(
   let rawAnalysis = '';
   try {
     const rawExec = await client.generateWithSelection({
-      model: defaultModel(),
+      model: visionModel(),
       prompt: 'Analyze this UI design for a developer. Describe: device type, color palette (hex), all visible components, layout structure, typography, spacing. Be precise and detailed.',
       images: visionImages,
       maxOutputTokens: 3000,

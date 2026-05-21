@@ -265,6 +265,38 @@ export function defaultModel(): string {
 }
 
 /**
+ * Model used for any AI call that includes images. Decoupled from
+ * `defaultModel()` because the Codex Responses adapter (which serves
+ * Codex-OAuth-only gpt-5.x text models) explicitly throws on multimodal
+ * input — routing vision calls through it would break image uploads,
+ * design-spec analysis, vision intent classification, etc.
+ *
+ * Resolution order:
+ *   1. `opencode_vision_model` setting (stored as "providerID/id"; we strip
+ *      the prefix so ExtendedOpenCodeAdapter re-namespaces it correctly)
+ *   2. `default_ai_model` if it's already a Gemini variant (which is
+ *      natively multimodal)
+ *   3. `gemini-2.5-flash` baseline
+ */
+export function visionModel(): string {
+  const ocVision = readSetting("opencode_vision_model");
+  if (ocVision) {
+    const slash = ocVision.indexOf("/");
+    const bareId = slash > 0 ? ocVision.slice(slash + 1) : ocVision;
+    if (bareId) return bareId;
+  }
+  const pref = readSetting("default_ai_model");
+  if (pref && pref.startsWith("gemini-")) return pref;
+  return "gemini-2.5-flash";
+}
+
+/** Pick the right model based on whether the call carries images. */
+export function modelForParams(params: { images?: unknown[] } | { images?: unknown[] | undefined }): string {
+  const images = (params as { images?: unknown[] }).images;
+  return images && images.length > 0 ? visionModel() : defaultModel();
+}
+
+/**
  * True if the configured default model targets OpenAI. Callers that want to
  * distinguish OpenAI vs Gemini failure modes (e.g. mapping `insufficient_quota`
  * to a friendlier error) can use this to know which provider the user expects.

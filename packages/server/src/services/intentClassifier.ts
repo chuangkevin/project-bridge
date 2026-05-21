@@ -1,4 +1,4 @@
-import { getProvider, defaultModel, trackProviderUsage } from './provider';
+import { getProvider, defaultModel, visionModel, trackProviderUsage } from './provider';
 import { TtlCache } from '../utils/cache';
 
 const intentCache = new TtlCache<string>('intent', 5 * 60 * 1000); // 5 min
@@ -53,7 +53,7 @@ Reply ONLY with: question, component, micro-adjust, full-page, or in-shell`;
   try {
     const client = getProvider();
     const { selection, response } = await client.generateWithSelection({
-      model: defaultModel(),
+      model: imageData ? visionModel() : defaultModel(),
       systemInstruction,
       prompt: message,
       maxOutputTokens: 5,
