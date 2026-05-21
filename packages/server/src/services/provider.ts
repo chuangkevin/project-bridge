@@ -244,8 +244,14 @@ export function invalidateProvider(): void {
  * fallback masquerading as an OpenAI response.
  */
 export function defaultModel(): string {
-  // When OpenCode is configured, honour opencode_text_model (stored as "providerID/id").
-  // Strip the provider prefix so ExtendedOpenCodeAdapter can re-namespace it.
+  // Master switch: the model picked in "生成偏好 → AI Model". Router decides
+  // OpenAI direct vs OpenCode based on credential + model id prefix.
+  const pref = readSetting("default_ai_model");
+  if (pref && (pref.startsWith("gpt-") || pref.startsWith("gemini-"))) return pref;
+
+  // Legacy fallback: only consulted when default_ai_model isn't set.
+  // opencode_text_model stores "providerID/id" — strip prefix so
+  // ExtendedOpenCodeAdapter can re-namespace it.
   const opencodeUrl = readSetting("opencode_url") || process.env.OPENCODE_URL;
   if (opencodeUrl) {
     const ocModel = readSetting("opencode_text_model");
@@ -255,8 +261,6 @@ export function defaultModel(): string {
       if (bareId) return bareId;
     }
   }
-  const pref = readSetting("default_ai_model");
-  if (pref && (pref.startsWith("gpt-") || pref.startsWith("gemini-"))) return pref;
   return "gemini-2.5-flash";
 }
 
