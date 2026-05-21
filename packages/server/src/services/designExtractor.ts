@@ -66,15 +66,25 @@ export async function extractDesignData(
   }));
 
   const client = getProvider();
-  const exec = await client.generateWithSelection({
-    model: visionModel(),
-    systemInstruction: withJsonInstruction(),
-    prompt: DESIGN_EXTRACTION_PROMPT,
-    images: visionImages,
-    maxOutputTokens: 3000,
-  });
-  try { trackProviderUsage(exec.selection, 'extract-design', exec.response); } catch {}
-  const text = exec.response.text;
+  let text = '';
+  try {
+    const exec = await client.generateWithSelection({
+      model: visionModel(),
+      systemInstruction: withJsonInstruction(),
+      prompt: DESIGN_EXTRACTION_PROMPT,
+      images: visionImages,
+      maxOutputTokens: 3000,
+    });
+    try { trackProviderUsage(exec.selection, 'extract-design', exec.response); } catch {}
+    text = exec.response.text;
+  } catch (err: any) {
+    console.warn('[designExtractor] Vision call failed (provider may not support images):', err.message?.slice(0, 100));
+    return {
+      pages: [{ name: 'Main', viewport: 'desktop', components: [], layout: '' }],
+      globalStyles: { primaryColor: '#3b82f6', secondaryColor: '#64748b', backgroundColor: '#ffffff', textColor: '#0f172a', fontFamily: 'sans-serif', borderRadius: '8px' },
+      rawAnalysis: '',
+    };
+  }
 
   let parsed: any;
   try {

@@ -62,17 +62,35 @@ export async function extractSpecData(
     data: img.toString('base64'),
   }));
 
-  const { selection, response } = await getProvider().generateWithSelection({
-    model: visionModel(),
-    systemInstruction: withJsonInstruction(),
-    prompt: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 80000)}\n=== END ===`,
-    images: visionImages,
-    maxOutputTokens: 16384,
-  });
-  try { trackProviderUsage(selection, 'extract-spec', response); } catch {}
+  let responseText = '';
+  try {
+    const { selection, response } = await getProvider().generateWithSelection({
+      model: visionModel(),
+      systemInstruction: withJsonInstruction(),
+      prompt: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 80000)}\n=== END ===`,
+      images: visionImages,
+      maxOutputTokens: 16384,
+    });
+    try { trackProviderUsage(selection, 'extract-spec', response); } catch {}
+    responseText = response.text;
+  } catch (err: any) {
+    console.warn('[specExtractor] Vision call failed, retrying text-only:', err.message?.slice(0, 100));
+    try {
+      const { selection, response } = await getProvider().generateWithSelection({
+        model: visionModel(),
+        systemInstruction: withJsonInstruction(),
+        prompt: `${FULL_EXTRACTION_PROMPT}\n\n=== FULL DOCUMENT TEXT ===\n${fullText.slice(0, 80000)}\n=== END ===`,
+        maxOutputTokens: 16384,
+      });
+      try { trackProviderUsage(selection, 'extract-spec', response); } catch {}
+      responseText = response.text;
+    } catch {
+      return { pages: [], globalRules: [], summary: 'Extraction failed — provider does not support this input' };
+    }
+  }
 
   try {
-    const parsed = JSON.parse(extractJsonBody(response.text));
+    const parsed = JSON.parse(extractJsonBody(responseText));
     const pages: SpecPage[] = (parsed.pages || []).map((p: any) => ({
       name: p.name || 'Unknown',
       viewport: p.viewport || 'both',
