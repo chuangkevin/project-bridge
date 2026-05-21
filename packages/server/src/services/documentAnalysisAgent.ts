@@ -1,4 +1,3 @@
-import fs from 'fs';
 import db from '../db/connection';
 import { createProjectBridgeStepRunner, withGeminiRetry } from './geminiRetry';
 import { classifyDocument, DocumentType } from './documentClassifier';
@@ -58,18 +57,34 @@ export async function analyzeDocument(
 
   try {
     // Step 0.5: Prepare images
+    // Provider adapters (Codex OAuth, OpenCode) currently throw on multimodal
+    // input, so all extraction runs text-only. PDF page rendering is kept only
+    // to update the page_count column; images are not forwarded to AI calls.
     const isPdf = mimeType.includes('pdf') || storagePath.toLowerCase().endsWith('.pdf');
-    const isImage = mimeType.startsWith('image/');
-    let images: Buffer[] = [];
+    const images: Buffer[] = [];
 
     if (isPdf) {
-      images = await renderPdfPages(storagePath, 6);
-    } else if (isImage && fs.existsSync(storagePath)) {
-      images = [fs.readFileSync(storagePath)];
+      try {
+        const pages = await renderPdfPages(storagePath, 6);
+        if (pages.length > 0) {
+          db.prepare('UPDATE uploaded_files SET page_count = ? WHERE id = ?').run(pages.length, fileId);
+        }
+      } catch {
+        // page count update is non-critical
+      }
     }
 
-    if (images.length === 0 && !extractedText) {
-      throw new Error('No images or text to analyze');
+    if (!extractedText?.trim()) {
+      const minimalResult: DocumentAnalysisResult = {
+        documentType: 'design',
+        pages: [],
+        globalRules: [],
+        summary: 'No text content available for analysis',
+      };
+      db.prepare(
+        "UPDATE uploaded_files SET analysis_result = ?, analysis_status = 'done' WHERE id = ?"
+      ).run(JSON.stringify(minimalResult), fileId);
+      return minimalResult;
     }
 
     // Step 1: Classify document type
