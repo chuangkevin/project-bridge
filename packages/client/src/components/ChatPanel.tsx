@@ -406,6 +406,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
     }
   };
 
+  const retryCountRef = useRef<Record<string, number>>({});
+
   const startAnalysisPolling = useCallback((fileId: string) => {
     // Clear existing interval for this file if any
     if (pollingIntervalsRef.current[fileId]) {
@@ -423,7 +425,15 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         } else if (data.status === 'error' || data.status === 'failed') {
           clearInterval(pollingIntervalsRef.current[fileId]);
           delete pollingIntervalsRef.current[fileId];
-          setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, analysisStatus: 'error' as const } : f));
+          const retries = retryCountRef.current[fileId] || 0;
+          if (retries < 1) {
+            // Auto-retry once silently
+            retryCountRef.current[fileId] = retries + 1;
+            await fetch(`/api/projects/${projectId}/upload/${fileId}/reanalyze-doc`, { method: 'POST' });
+            startAnalysisPolling(fileId);
+          } else {
+            setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, analysisStatus: 'error' as const } : f));
+          }
         }
       } catch { /* ignore polling errors */ }
     }, 2000);
@@ -1405,23 +1415,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   </button>
                 )}
                 {f.analysisStatus === 'error' && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 500 }} data-testid="analysis-badge">⚠ 分析失敗</span>
-                    <button
-                      type="button"
-                      style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', textDecoration: 'underline' }}
-                      title="重新執行文件分析"
-                      onClick={async () => {
-                        setAttachedFiles(prev => prev.map(x => x.id === f.id ? { ...x, analysisStatus: 'analyzing' as const } : x));
-                        try {
-                          await fetch(`/api/projects/${projectId}/upload/${f.id}/reanalyze-doc`, { method: 'POST' });
-                          startAnalysisPolling(f.id);
-                        } catch {
-                          setAttachedFiles(prev => prev.map(x => x.id === f.id ? { ...x, analysisStatus: 'error' as const } : x));
-                        }
-                      }}
-                    >重試</button>
-                  </span>
+                  <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 500 }} data-testid="analysis-badge">⚠ 分析失敗</span>
                 )}
                 {f.visualAnalysisReady ? (
                   <span style={styles.visualBadge} data-testid="visual-analysis-badge" title="視覺分析已完成">
