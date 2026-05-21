@@ -47,49 +47,55 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
         'INSERT INTO uploaded_files (id, project_id, original_name, mime_type, file_size, storage_path, extracted_text, page_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(id, projectId, originalname, mimetype, size, storagePath, extractedText, pageName);
 
-      // Visual analysis for PDF and image files
+      // Visual analysis for PDF and image files — fire-and-forget so the
+      // upload response returns immediately. Previously this awaited the AI
+      // call which could block 5-15s (and much longer when the configured
+      // provider was unreachable). The client polls visual analysis via the
+      // existing analysis-status endpoint; visual_analysis column is read
+      // lazily by downstream chat/generation paths.
       const apiKey = getGeminiApiKey();
-
-      let visualAnalysisReady = false;
-      let pageCount: number | null = null;
+      const visualAnalysisReady = false;
+      const pageCount: number | null = null;
 
       const isPdf = mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf');
       const isImage = mimetype.startsWith('image/') &&
         (mimetype.includes('png') || mimetype.includes('jpeg') || mimetype.includes('jpg') || mimetype.includes('webp'));
 
       if (apiKey && (isPdf || isImage)) {
-        try {
-          let images: Buffer[] = [];
-          if (isPdf) {
-            images = await renderPdfPages(storagePath, 6);
+        // Fire-and-forget visual analysis. Page count is best-effort filled
+        // in once the PDF is rendered; the response below returns null.
+        (async () => {
+          try {
+            let images: Buffer[] = [];
+            if (isPdf) {
+              images = await renderPdfPages(storagePath, 6);
+              if (images.length > 0) {
+                db.prepare('UPDATE uploaded_files SET page_count = ? WHERE id = ?').run(images.length, id);
+              }
+            } else if (isImage) {
+              const fsMod = await import('fs');
+              images = [fsMod.readFileSync(storagePath)];
+            }
             if (images.length > 0) {
-              pageCount = images.length;
-              db.prepare('UPDATE uploaded_files SET page_count = ? WHERE id = ?').run(pageCount, id);
+              const analysisText = await analyzeDesignSpec(images, apiKey);
+              if (analysisText) {
+                db.prepare(
+                  "UPDATE uploaded_files SET visual_analysis = ?, visual_analysis_at = datetime('now') WHERE id = ?"
+                ).run(analysisText, id);
+              }
             }
-          } else if (isImage) {
-            const fs = await import('fs');
-            images = [fs.readFileSync(storagePath)];
+          } catch (analysisErr) {
+            console.warn('[upload] Visual analysis failed (non-fatal):', (analysisErr as any).message);
           }
-          if (images.length > 0) {
-            const analysisText = await analyzeDesignSpec(images, apiKey);
-            if (analysisText) {
-              db.prepare(
-                "UPDATE uploaded_files SET visual_analysis = ?, visual_analysis_at = datetime('now') WHERE id = ?"
-              ).run(analysisText, id);
-              visualAnalysisReady = true;
-            }
-          }
-        } catch (analysisErr) {
-          console.warn('[upload] Visual analysis failed (non-fatal):', (analysisErr as any).message);
-        }
+        })();
       }
 
-      // Art style detection for PPTX/DOCX
+      // Art style detection for PPTX/DOCX — also fire-and-forget.
       const isPptxOrDocx = mimetype.includes('presentationml') || mimetype.includes('wordprocessingml') ||
         originalname.toLowerCase().endsWith('.pptx') || originalname.toLowerCase().endsWith('.docx');
 
-      if (isPptxOrDocx) {
-        if (apiKey) {
+      if (isPptxOrDocx && apiKey) {
+        (async () => {
           try {
             const images = await extractImagesFromDocument(storagePath, mimetype);
             if (images.length > 0) {
@@ -107,9 +113,8 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
             }
           } catch (artErr) {
             console.error('Art style extraction error:', artErr);
-            // non-fatal, continue
           }
-        }
+        })();
       }
 
       const hasMeaningfulText = extractedText.trim().length > 100;
