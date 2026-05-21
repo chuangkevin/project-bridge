@@ -10,7 +10,7 @@ export async function extractText(filePath: string, mimeType: string): Promise<s
     } else if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
       return await extractPptx(filePath);
     } else if (mimeType.startsWith('image/')) {
-      return '';
+      return ''; // OCR runs async via extractImageOcr(); chat route reads from DB
     } else if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
       return fs.readFileSync(filePath, 'utf-8');
     } else {
@@ -90,27 +90,37 @@ async function extractPptx(filePath: string): Promise<string> {
   });
 }
 
-async function extractImage(filePath: string): Promise<string> {
-  try {
-    const { createWorker } = await import('tesseract.js');
-    // Use local tessdata if available (baked into Docker), fallback to CDN
-    const workerOpts = process.env.TESSDATA_PREFIX ? { langPath: process.env.TESSDATA_PREFIX } : {};
-    const worker = await createWorker('chi_tra+eng', 1, workerOpts);
+// Singleton OCR worker — loaded once, reused across requests to avoid
+// reloading chi_tra+eng models (100-300ms load vs 10-60s cold start).
+let ocrWorkerPromise: Promise<any> | null = null;
 
-    try {
-      // Set a 60-second timeout (chi_tra model is larger, needs more time)
-      const result = await Promise.race([
-        worker.recognize(filePath),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('OCR timeout after 60 seconds')), 60000)
-        ),
-      ]);
-      return (result as any).data.text;
-    } finally {
-      await worker.terminate();
-    }
+function getOcrWorker(): Promise<any> {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = (async () => {
+      const { createWorker } = await import('tesseract.js');
+      const workerOpts = process.env.TESSDATA_PREFIX ? { langPath: process.env.TESSDATA_PREFIX } : {};
+      return createWorker('chi_tra+eng', 1, workerOpts);
+    })().catch((err) => {
+      ocrWorkerPromise = null; // allow retry on next call
+      throw err;
+    });
+  }
+  return ocrWorkerPromise;
+}
+
+// Called fire-and-forget from upload route; updates DB extracted_text when done.
+export async function extractImageOcr(filePath: string): Promise<string> {
+  try {
+    const worker = await getOcrWorker();
+    const result = await Promise.race([
+      worker.recognize(filePath),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('OCR timeout after 60 seconds')), 60000)
+      ),
+    ]);
+    return (result as any).data.text;
   } catch (err: any) {
-    console.warn('[ocr] Tesseract failed (CDN unreachable or model missing):', err.message?.slice(0, 100));
-    return '[Image: OCR unavailable]';
+    console.warn('[ocr] Tesseract failed:', err.message?.slice(0, 100));
+    return '';
   }
 }

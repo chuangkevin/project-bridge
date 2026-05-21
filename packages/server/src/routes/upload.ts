@@ -3,7 +3,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db/connection';
 import upload from '../middleware/upload';
-import { extractText } from '../services/textExtractor';
+import { extractText, extractImageOcr } from '../services/textExtractor';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { renderPdfPages } from '../services/pdfPageRenderer';
 import { analyzeDesignSpec } from '../services/designSpecAnalyzer';
@@ -86,6 +86,21 @@ router.post('/:id/upload', (req: Request, res: Response, next: NextFunction) => 
             }
           } catch (analysisErr) {
             console.warn('[upload] Visual analysis failed (non-fatal):', (analysisErr as any).message);
+          }
+        })();
+      }
+
+      // Fire-and-forget OCR for images — extractText returns '' immediately;
+      // OCR runs here and updates extracted_text so chat route sees it.
+      if (isImage) {
+        (async () => {
+          try {
+            const ocrText = await extractImageOcr(storagePath);
+            if (ocrText.trim().length > 0) {
+              db.prepare('UPDATE uploaded_files SET extracted_text = ? WHERE id = ?').run(ocrText, id);
+            }
+          } catch (ocrErr) {
+            console.warn('[upload] OCR failed (non-fatal):', (ocrErr as any).message);
           }
         })();
       }
