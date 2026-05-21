@@ -1029,25 +1029,48 @@ This turn is a DB schema/table confirmation request with fresh MCP lookup result
           parts: h.content.startsWith('<') ? '[前一次生成的原型]' : h.content.slice(0, 2000),
         }));
 
-        const visionImagesQa = qaImageParts.map((p: any) => ({
+        let visionImagesQa = qaImageParts.map((p: any) => ({
           type: 'inline' as const,
           mimeType: p.inlineData.mimeType,
           data: p.inlineData.data,
         }));
 
-        const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
-          model: visionImagesQa.length > 0 ? visionModel() : defaultModel(),
-          systemInstruction: richQaPrompt,
-          prompt: userContent,
-          history: qaHistory,
-          ...(visionImagesQa.length > 0 ? { images: visionImagesQa } : {}),
-          maxOutputTokens: 8192,
-        }), {
-          onReset: ({ attempt, chunksEmitted }) => {
-            fullResponse = '';
-            res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
-          },
-        });
+        const doQaStream = (imgs: typeof visionImagesQa) =>
+          streamWithRetry(() => getProvider().streamWithSelection({
+            model: imgs.length > 0 ? visionModel() : defaultModel(),
+            systemInstruction: richQaPrompt,
+            prompt: userContent,
+            history: qaHistory,
+            ...(imgs.length > 0 ? { images: imgs } : {}),
+            maxOutputTokens: 8192,
+          }), {
+            onReset: ({ attempt, chunksEmitted }) => {
+              fullResponse = '';
+              res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
+            },
+          });
+
+        let streamExec;
+        try {
+          streamExec = await doQaStream(visionImagesQa);
+        } catch (visionErr: any) {
+          const vMsg: string = visionErr?.message ?? '';
+          if (visionImagesQa.length > 0 && (
+            vMsg.includes('does not support multimodal') ||
+            vMsg.includes('multimodal input') ||
+            vMsg.includes('No provider/model combination')
+          )) {
+            // Current provider can't handle images — fall back to text-only and tell the user
+            console.warn('[chat-qa] Vision not supported, falling back to text-only:', vMsg.slice(0, 80));
+            visionImagesQa = [];
+            const note = '⚠️ 目前的 AI 模型不支援圖片輸入（需要 Gemini 模型）。以下為文字回覆：\n\n';
+            res.write(`data: ${JSON.stringify({ content: note })}\n\n`);
+            fullResponse += note;
+            streamExec = await doQaStream([]);
+          } else {
+            throw visionErr;
+          }
+        }
 
         for await (const text of streamExec.stream) {
           if (text) {

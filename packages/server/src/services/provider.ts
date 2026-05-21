@@ -283,7 +283,9 @@ export function visionModel(): string {
   if (ocVision) {
     const slash = ocVision.indexOf("/");
     const bareId = slash > 0 ? ocVision.slice(slash + 1) : ocVision;
-    if (bareId) return bareId;
+    // Only use if not routed through an OpenAI/Codex provider — Codex adapter
+    // throws on any multimodal input regardless of model id.
+    if (bareId && !ocVision.startsWith("openai/")) return bareId;
   }
   const pref = readSetting("default_ai_model");
   if (pref && pref.startsWith("gemini-")) return pref;
