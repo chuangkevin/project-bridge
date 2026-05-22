@@ -6,15 +6,17 @@ Runbook for deploying project-bridge. Read top-to-bottom on first deploy; later 
 
 | Area | Before (1.3.x) | After (1.4.0) |
 |---|---|---|
-| AI provider | Direct `@google/generative-ai` (`new GoogleGenerativeAI(apiKey)`) in 24 files | Single `MultiProviderClient` from `@kevinsisi/ai-core` v3.4.0 (`packages/server/src/services/provider.ts`) |
-| Routing | Gemini only, with key-pool retry wrapper | Non-stream generate: OpenCode primary → Gemini key-pool fallback → OpenAI/Codex configured fallback (`allowCrossProviderFallback: true`); streaming calls require streaming-capable adapters; cross-provider fallback NEVER silent |
+| AI provider | Direct `@google/generative-ai` (`new GoogleGenerativeAI(apiKey)`) in 24 files | Single `MultiProviderClient` from `@kevinsisi/ai-core` v3.4.1 (`packages/server/src/services/provider.ts`) |
+| Routing | Gemini only, with key-pool retry wrapper | Text/chat/streaming: OpenCode primary with multi-server fallback → Gemini key-pool fallback → OpenAI/Codex configured fallback (`allowCrossProviderFallback: true`); cross-provider fallback NEVER silent |
 | OpenAI auth | API key only (`OPENAI_API_KEY` env) | OAuth PKCE flow (Settings page button) **OR** API key |
 | JSON output | `responseMimeType: 'application/json'` from Gemini SDK | `withJsonInstruction()` appends "respond with JSON only" to system prompt + `extractJsonBody()` strips fences before `JSON.parse` |
 | `temperature` | Per-call value | **Dropped** — ai-core GenerateParams doesn't expose it; provider defaults |
 | Multi-turn chat | Gemini `model.startChat({history}).sendMessageStream(...)` with `MAX_TOKENS` auto-continue | ai-core `streamContent({history, prompt})`; auto-continue removed (ai-core's `TokenUsage` carries no `finishReason`) |
 | `routes/settings.ts` | Used Gemini SDK to validate keys | **Still uses Gemini SDK** for the 3 key-validation endpoints (test a specific user-supplied key without routing through MultiProviderClient) |
 
-ai-core dependency is now pinned to tag `v3.4.0` (`AI_CORE_VERSION = "3.4.0"`).
+ai-core dependency is now pinned to tag `v3.4.1` (`AI_CORE_VERSION = "3.4.1"`). OpenCode multi-server configuration lives in `opencode_servers` (settings table) or `OPENCODE_SERVERS` (comma/newline-separated env fallback); always note configured endpoint count in handoff.
+
+> **OpenCode auth posture is global, not per-server.** `OPENCODE_SERVER_PASSWORD` (or settings key `opencode_server_password`) applies to every configured OpenCode server (same pattern as sheet-to-car's `openCodeConfig.ts:getOpenCodePassword()`). All listed servers must share the same auth posture — either all no-auth (the canonical `provider-amd.sisihome.org` deployment in `home-basic/opencode/README.md` is no-auth) or all using this single password. Mixing a no-auth server and a password-protected server in the same list is unsupported: the adapter will still send a `Basic` `Authorization` header to the no-auth server.
 
 ## Affected files (for code review / rollback)
 

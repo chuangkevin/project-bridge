@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **DesignBridge** (project-bridge) 是 AI 協作顧問與設計平台，讓多個使用者能即時共同設計 AI 工作流程。
 整合知識庫 Skill 的 AI 顧問對話，以及 UI 原型生成功能。
-**v1.5.0 起**non-stream generate AI 呼叫走 `@kevinsisi/ai-core` v3.4.0 的 `MultiProviderClient`：OpenCode primary → Gemini key-pool fallback；OpenAI/Codex 保留為已配置時的最後 fallback 與 OAuth/PKCE 能力。SSE streaming call sites 仍受 ai-core capability selection 約束，OpenCode adapter 沒有 `streamContent` 時會選 streaming-capable provider。
+**v1.5.1 起**AI 呼叫走 `@kevinsisi/ai-core` v3.4.1 的 `MultiProviderClient`：OpenCode primary → Gemini key-pool fallback；OpenAI/Codex 保留為已配置時的最後 fallback 與 OAuth/PKCE 能力。OpenCode 可設定多 server（`opencode_servers` / `OPENCODE_SERVERS`），同一請求會先依序嘗試 OpenCode servers，streaming path 也透過 v3.4.1 pseudo-stream 維持 OpenCode-first。
 
-- **Current Version**: 1.5.0
+- **Current Version**: 1.5.1
 - **Domain**: `designbridge.housefun.com.tw` (公司) / `designbridge.sisihome.org` (home)
 - **Port**: 5123 (host) → 3001 (container)
 
@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Monorepo**: pnpm workspaces (`packages/client`, `packages/server`, `packages/e2e`)
 - **Server** (`packages/server`): Express + TypeScript + SQLite (better-sqlite3) + Socket.io + ai-core
-  - AI: `@kevinsisi/ai-core` v3.4.0 `MultiProviderClient` — see [`services/provider.ts`](packages/server/src/services/provider.ts)
+- AI: `@kevinsisi/ai-core` v3.4.1 `MultiProviderClient` — see [`services/provider.ts`](packages/server/src/services/provider.ts)
   - Providers: OpenCode + Gemini (key-pool) + OpenAI/Codex (api/oauth) via ai-core adapters
   - `@google/generative-ai` retained ONLY in `routes/settings.ts` for validating user-supplied Gemini keys
   - Document parsing: mammoth (DOCX), pdf-parse, pdfjs-dist, tesseract.js (OCR)
@@ -59,9 +59,11 @@ cd packages/client && pnpm build   # Vite → dist/
 
 ## Key Architecture Patterns
 
-### MultiProviderClient (ai-core v3.4.0)
+### MultiProviderClient (ai-core v3.4.1)
 - 單例位置：[`packages/server/src/services/provider.ts`](packages/server/src/services/provider.ts)
-- Route policy：`preferredProviders: ["opencode"]` → `fallbackProviders: ["gemini", "openai"]`；`allowCrossProviderFallback: true`；`allowCrossModelFallback: true`
+- Route policy：`preferredProviders: ["opencode"]` → `fallbackProviders: ["gemini", "openai"]`；`allowCrossProviderFallback: true`；`allowCrossModelFallback: true`；`allowSameProviderCredentialFallback: true`
+- OpenCode multi-server：正式設定鍵為 `opencode_servers`（JSON array 或 `OPENCODE_SERVERS` 逗號/換行分隔）；legacy `opencode_url` / `OPENCODE_URL` 仍作為單 server fallback。務必在交接時標明目前設定了幾個 OpenCode endpoint。
+- OpenCode auth posture：`opencode_server_password` / `OPENCODE_SERVER_PASSWORD` 是**全 HomeProject 共用的單一全域密碼**（同 sheet-to-car `getOpenCodePassword()` 設計）。所有設定的 OpenCode server 必須共享同一 auth posture：要麼全為 no-auth（例：canonical `provider-amd.sisihome.org` 就是 no-auth，見 `home-basic/opencode/README.md`），要麼全用同一把 password。混合 no-auth + password-protected server 屬於 unsupported configuration，client 會對 no-auth server 也送 Basic header。
 - 所有路由 / service 透過 `getProvider().generateContent / streamContent / generateWithSelection` 呼叫，**禁止再 import `@google/generative-ai`**（唯一例外見下方 settings.ts）。
 - Adapter 從 env / settings table 動態建構；token / key 變動時呼叫 `invalidateProvider()` 立即重建 client（snapshot-based 快取）。
 - OpenAI credential 順序：`openai_oauth_access_token` (settings) → `openai_api_key` (settings) → `OPENAI_API_KEY` (env)。
@@ -141,7 +143,7 @@ node packages/server/dist/index.js
 
 ### 三、v1.4.0 改了什麼（接手前必看）
 - **核心遷移**：所有 `@google/generative-ai` 直呼改成 ai-core `MultiProviderClient`，單例在 [`packages/server/src/services/provider.ts`](packages/server/src/services/provider.ts)。
-- **ai-core 升級**：`@kevinsisi/ai-core` 已收斂到 **v3.4.0** tag（見 [`packages/server/package.json`](packages/server/package.json)）。
+- **ai-core 升級**：`@kevinsisi/ai-core` 已收斂到 **v3.4.1** tag（見 [`packages/server/package.json`](packages/server/package.json)）。
 - **Provider 路由**：OpenCode primary → Gemini key-pool fallback → OpenAI/Codex configured fallback；`allowCrossProviderFallback: true`。
 - **OpenAI OAuth (PKCE)**：新增 [`routes/openaiOAuth.ts`](packages/server/src/routes/openaiOAuth.ts)，client 設定頁加「OpenAI 授權連結」按鈕（[`SettingsPage.tsx`](packages/client/src/pages/SettingsPage.tsx)），popup 完成後 `postMessage` 回主視窗。
 - **JSON 輸出方式改變**：ai-core `GenerateParams` 不支援 `responseMimeType`，原本用 `responseMimeType: 'application/json'` 的呼叫，改成 `withJsonInstruction()` 在 systemInstruction 末段加指令、`extractJsonBody()` parse 結果。

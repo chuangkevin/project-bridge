@@ -311,6 +311,13 @@ const DEFAULT_OPENCODE_MODELS = [
   { id: 'google/gemini-2.0-flash', name: 'gemini-2.0-flash', provider: 'google' },
 ];
 
+interface OpenCodeServerConfig {
+  id: string;
+  label: string;
+  baseUrl: string;
+  enabled: boolean;
+}
+
 function readOpenCodeSetting(key: string): string | null {
   try {
     const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value?: string } | undefined;
@@ -328,12 +335,72 @@ function upsertSetting(key: string, value: string): void {
   `).run(key, value);
 }
 
+function trimUrl(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function normalizeOpenCodeServer(raw: unknown, index: number): OpenCodeServerConfig | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const item = raw as Record<string, unknown>;
+  const baseUrl = trimUrl(String(item.baseUrl ?? item.url ?? ''));
+  if (!baseUrl) return null;
+  const id = String(item.id ?? '').trim() || `opencode-${index + 1}`;
+  const label = String(item.label ?? '').trim() || `OpenCode ${index + 1}`;
+  return { id, label, baseUrl, enabled: item.enabled !== false };
+}
+
+function parseOpenCodeServers(raw: string | null): OpenCodeServerConfig[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item, index) => normalizeOpenCodeServer(item, index))
+        .filter((server): server is OpenCodeServerConfig => Boolean(server));
+    }
+  } catch {
+    // Fall through to comma/newline-separated URL parsing for env convenience.
+  }
+  return raw
+    .split(/[\n,]+/)
+    .map((url, index) => ({ id: `opencode-${index + 1}`, label: `OpenCode ${index + 1}`, baseUrl: trimUrl(url), enabled: true }))
+    .filter((server) => server.baseUrl.length > 0);
+}
+
+function getOpenCodeServers(): OpenCodeServerConfig[] {
+  const configured = parseOpenCodeServers(readOpenCodeSetting('opencode_servers'));
+  if (configured.length > 0) return configured.filter(server => server.enabled);
+
+  const envConfigured = parseOpenCodeServers(process.env.OPENCODE_SERVERS ?? null);
+  if (envConfigured.length > 0) return envConfigured.filter(server => server.enabled);
+
+  const legacyUrl = trimUrl(readOpenCodeSetting('opencode_url') || process.env.OPENCODE_URL || 'http://localhost:4096');
+  return [{ id: 'opencode-1', label: 'OpenCode 1', baseUrl: legacyUrl, enabled: true }];
+}
+
+function authHeaders(password: string): Record<string, string> {
+  return password ? { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` } : {};
+}
+
+async function fetchOpenCodeProvider(baseUrl: string, password: string): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(`${baseUrl}/provider`, { headers: authHeaders(password), signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 router.get('/opencode', (_req: Request, res: Response) => {
   try {
-    const url = readOpenCodeSetting('opencode_url') || process.env.OPENCODE_URL || 'http://localhost:4096';
+    const servers = getOpenCodeServers();
+    const url = servers[0]?.baseUrl || 'http://localhost:4096';
     const textModel = readOpenCodeSetting('opencode_text_model') || 'gemini-2.5-flash';
     const visionModel = readOpenCodeSetting('opencode_vision_model') || 'gemini-2.5-flash';
-    return res.json({ url, textModel, visionModel });
+    return res.json({ url, servers, textModel, visionModel });
   } catch (err: any) {
     console.error('Error getting OpenCode settings:', err);
     return res.status(500).json({ error: 'Failed to get OpenCode settings' });
@@ -342,8 +409,20 @@ router.get('/opencode', (_req: Request, res: Response) => {
 
 router.post('/opencode', (req: Request, res: Response) => {
   try {
-    const { url, textModel, visionModel } = req.body as { url?: string; textModel?: string; visionModel?: string };
-    if (url !== undefined) upsertSetting('opencode_url', String(url));
+    const { url, servers, textModel, visionModel } = req.body as { url?: string; servers?: unknown; textModel?: string; visionModel?: string };
+    if (Array.isArray(servers)) {
+      const normalized = servers
+        .map((item, index) => normalizeOpenCodeServer(item, index))
+        .filter((server): server is OpenCodeServerConfig => Boolean(server));
+      if (normalized.length === 0) return res.status(400).json({ error: 'At least one OpenCode server URL is required' });
+      upsertSetting('opencode_servers', JSON.stringify(normalized));
+      upsertSetting('opencode_url', normalized[0].baseUrl);
+    } else if (url !== undefined) {
+      const normalized = parseOpenCodeServers(String(url));
+      if (normalized.length === 0) return res.status(400).json({ error: 'At least one OpenCode server URL is required' });
+      upsertSetting('opencode_servers', JSON.stringify(normalized));
+      upsertSetting('opencode_url', normalized[0].baseUrl);
+    }
     if (textModel !== undefined) upsertSetting('opencode_text_model', String(textModel));
     if (visionModel !== undefined) upsertSetting('opencode_vision_model', String(visionModel));
     invalidateProvider();
@@ -355,57 +434,51 @@ router.post('/opencode', (req: Request, res: Response) => {
 });
 
 router.get('/opencode/models', async (_req: Request, res: Response) => {
-  const baseUrl = readOpenCodeSetting('opencode_url') || process.env.OPENCODE_URL || 'http://localhost:4096';
   const password = readOpenCodeSetting('opencode_server_password') || process.env.OPENCODE_SERVER_PASSWORD || '';
-  const headers: Record<string, string> = {};
-  if (password) headers['Authorization'] = `Basic ${Buffer.from(`:${password}`).toString('base64')}`;
+  const servers = getOpenCodeServers();
+  const candidates = servers.length > 0
+    ? servers
+    : [{ id: 'opencode-1', label: 'OpenCode 1', baseUrl: 'http://localhost:4096', enabled: true }];
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
-
-  try {
-    const r = await fetch(`${baseUrl}/provider`, { headers, signal: controller.signal });
-    clearTimeout(timer);
-    if (!r.ok) {
-      return res.json({ models: DEFAULT_OPENCODE_MODELS, warning: `OpenCode returned ${r.status}` });
-    }
-    const data = await r.json() as any;
-    const models: { id: string; name: string; provider: string }[] = [];
-    // OpenCode /provider returns { all: [ { id, models: { modelId: {...} } } ] }
-    const providers: any[] = Array.isArray(data) ? data : (Array.isArray(data?.all) ? data.all : []);
-    for (const p of providers) {
-      const modelsMap: Record<string, any> = p.models || {};
-      for (const [modelId, m] of Object.entries(modelsMap)) {
-        models.push({ id: `${p.id}/${modelId}`, name: (m as any).name || modelId, provider: p.id });
+  let lastError: unknown = null;
+  for (const server of candidates) {
+    try {
+      const data = await fetchOpenCodeProvider(server.baseUrl, password);
+      const models: { id: string; name: string; provider: string }[] = [];
+      // OpenCode /provider returns { all: [ { id, models: { modelId: {...} } } ] }
+      const providers: any[] = Array.isArray(data) ? data : (Array.isArray(data?.all) ? data.all : []);
+      for (const p of providers) {
+        const modelsMap: Record<string, any> = p.models || {};
+        for (const [modelId, m] of Object.entries(modelsMap)) {
+          models.push({ id: `${p.id}/${modelId}`, name: (m as any).name || modelId, provider: p.id });
+        }
       }
+      return res.json({ models: models.length > 0 ? models : DEFAULT_OPENCODE_MODELS, sourceServerId: server.id });
+    } catch (err) {
+      lastError = err;
     }
-    return res.json({ models: models.length > 0 ? models : DEFAULT_OPENCODE_MODELS });
-  } catch (err: any) {
-    clearTimeout(timer);
-    return res.json({ models: DEFAULT_OPENCODE_MODELS, warning: (err as Error)?.message?.slice(0, 100) || '無法連接到 OpenCode' });
   }
+  return res.json({
+    models: DEFAULT_OPENCODE_MODELS,
+    warning: (lastError as Error)?.message?.slice(0, 100) || '無法連接到任何已設定的 OpenCode server',
+  });
 });
 
 router.post('/opencode/test', async (_req: Request, res: Response) => {
-  const baseUrl = readOpenCodeSetting('opencode_url') || process.env.OPENCODE_URL || 'http://localhost:4096';
   const password = readOpenCodeSetting('opencode_server_password') || process.env.OPENCODE_SERVER_PASSWORD || '';
-  const headers: Record<string, string> = {};
-  if (password) headers['Authorization'] = `Basic ${Buffer.from(`:${password}`).toString('base64')}`;
+  const servers = getOpenCodeServers();
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
-
-  try {
-    const r = await fetch(`${baseUrl}/provider`, { headers, signal: controller.signal });
-    clearTimeout(timer);
-    if (!r.ok) {
-      return res.json({ ok: false, error: `HTTP ${r.status}` });
+  const results = [];
+  for (const server of servers) {
+    try {
+      await fetchOpenCodeProvider(server.baseUrl, password);
+      results.push({ id: server.id, label: server.label, url: server.baseUrl, ok: true });
+    } catch (err: any) {
+      results.push({ id: server.id, label: server.label, url: server.baseUrl, ok: false, error: (err as Error)?.message?.slice(0, 100) || '連線失敗' });
     }
-    return res.json({ ok: true, url: baseUrl });
-  } catch (err: any) {
-    clearTimeout(timer);
-    return res.json({ ok: false, error: (err as Error)?.message?.slice(0, 100) || '連線失敗' });
   }
+  const ok = results.some(result => result.ok);
+  return res.json({ ok, results, error: ok ? undefined : '所有 OpenCode servers 都連線失敗' });
 });
 
 // ─── MCP Server Management ──────────────────────────

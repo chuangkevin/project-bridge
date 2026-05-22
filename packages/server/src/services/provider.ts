@@ -1,9 +1,10 @@
 /**
- * provider.ts — singleton MultiProviderClient (ai-core v3.4.0)
+ * provider.ts — singleton MultiProviderClient (ai-core v3.4.1)
  *
  * Routing policy:
- *   - OpenCode primary for non-stream generation calls
- *   - Gemini pool fallback, and streaming fallback while OpenCode lacks streamContent
+ *   - OpenCode primary for non-image generation and streaming calls
+ *   - Multiple OpenCode servers can be configured via `opencode_servers`
+ *   - Gemini pool fallback after all configured OpenCode servers fail
  *   - OpenAI/Codex retained as a final fallback when explicitly configured
  *   - allowCrossProviderFallback: true
  *
@@ -40,7 +41,15 @@ const DEFAULT_ROUTE_POLICY: RoutePolicy = {
   fallbackProviders: ["gemini", "openai"],
   allowCrossModelFallback: true,
   allowCrossProviderFallback: true,
+  allowSameProviderCredentialFallback: true,
 };
+
+interface OpenCodeServerConfig {
+  id: string;
+  label: string;
+  baseUrl: string;
+  enabled: boolean;
+}
 
 /**
  * Wraps OpenCodeProviderAdapter so that every `gemini-*` model ID the settings
@@ -48,22 +57,31 @@ const DEFAULT_ROUTE_POLICY: RoutePolicy = {
  * underlying provider based on the model object it receives.
  */
 class ExtendedOpenCodeAdapter implements ProviderAdapter {
-  private readonly inner: OpenCodeProviderAdapter;
-  constructor() {
-    const url = readSetting("opencode_url") || process.env.OPENCODE_URL || "http://localhost:4096";
+  private readonly inners: OpenCodeProviderAdapter[];
+
+  constructor(private readonly servers: OpenCodeServerConfig[]) {
     const password = readSetting("opencode_server_password") || process.env.OPENCODE_SERVER_PASSWORD || "";
-    this.inner = new OpenCodeProviderAdapter(
-      {
-        type: "api",
-        provider: "opencode",
-        apiKey: password,
-        baseURL: url,
-      },
-      {
-        defaultModel: { providerID: "google", id: "gemini-2.5-flash" },
-        basicAuth: !!password,
-      },
+    this.inners = servers.map((server) =>
+      new OpenCodeProviderAdapter(
+        {
+          type: "api",
+          provider: "opencode",
+          apiKey: password,
+          baseURL: server.baseUrl,
+          credentialLabel: server.id,
+        },
+        {
+          defaultModel: { providerID: "google", id: "gemini-2.5-flash" },
+          basicAuth: !!password,
+        },
+      ),
     );
+  }
+
+  private get first(): OpenCodeProviderAdapter {
+    const adapter = this.inners[0];
+    if (!adapter) throw new Error("No OpenCode servers are configured");
+    return adapter;
   }
 
   /**
@@ -79,28 +97,54 @@ class ExtendedOpenCodeAdapter implements ProviderAdapter {
     return modelID;
   }
 
-  get provider() { return this.inner.provider; }
-  get credential() { return this.inner.credential; }
+  get provider() { return this.first.provider; }
+  get credential() { return this.first.credential; }
 
   supports(modelID: string): boolean {
-    return this.inner.supports(this.namespace(modelID));
+    return this.inners.some((inner) => inner.supports(this.namespace(modelID)));
   }
 
   getModel(modelID: string): ModelDefinition | undefined {
-    const built = this.inner.getModel(this.namespace(modelID));
+    const built = this.inners.map((inner) => inner.getModel(this.namespace(modelID))).find(Boolean);
     if (built) return { ...built, id: modelID };
     // synthesise a fallback so the router accepts the selection
-    const baseline = this.inner.getModel("gemini-2.5-flash");
+    const baseline = this.first.getModel("gemini-2.5-flash");
     if (!baseline) return undefined;
     return { ...baseline, id: modelID };
   }
 
-  generateContent(params: GenerateParams): Promise<GenerateResponse> {
-    return this.inner.generateContent({ ...params, model: this.namespace(params.model ?? "") });
+  async generateContent(params: GenerateParams): Promise<GenerateResponse> {
+    let lastError: unknown;
+    for (let index = 0; index < this.inners.length; index += 1) {
+      try {
+        return await this.inners[index].generateContent({ ...params, model: this.namespace(params.model ?? "") });
+      } catch (err) {
+        lastError = err;
+        const server = this.servers[index];
+        console.warn(`[provider] OpenCode server ${server?.id ?? index + 1} failed; trying next server if available: ${(err as Error)?.message?.slice(0, 120)}`);
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("All OpenCode servers failed");
   }
 
-  streamContent(params: GenerateParams): AsyncGenerator<string, void, unknown> {
-    return this.inner.streamContent({ ...params, model: this.namespace(params.model ?? "") });
+  async *streamContent(params: GenerateParams): AsyncGenerator<string, void, unknown> {
+    let lastError: unknown;
+    for (let index = 0; index < this.inners.length; index += 1) {
+      let chunksEmitted = 0;
+      try {
+        for await (const chunk of this.inners[index].streamContent({ ...params, model: this.namespace(params.model ?? "") })) {
+          chunksEmitted += 1;
+          yield chunk;
+        }
+        return;
+      } catch (err) {
+        if (chunksEmitted > 0) throw err;
+        lastError = err;
+        const server = this.servers[index];
+        console.warn(`[provider] OpenCode stream server ${server?.id ?? index + 1} failed before output; trying next server if available: ${(err as Error)?.message?.slice(0, 120)}`);
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("All OpenCode stream servers failed");
   }
 }
 
@@ -153,6 +197,49 @@ function readSetting(key: string): string | null {
   }
 }
 
+function trimUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function normalizeOpenCodeServer(raw: unknown, index: number): OpenCodeServerConfig | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const item = raw as Record<string, unknown>;
+  const baseUrl = trimUrl(String(item.baseUrl ?? item.url ?? ""));
+  if (!baseUrl) return null;
+  const id = String(item.id ?? "").trim() || `opencode-${index + 1}`;
+  const label = String(item.label ?? "").trim() || `OpenCode ${index + 1}`;
+  return { id, label, baseUrl, enabled: item.enabled !== false };
+}
+
+function parseOpenCodeServers(raw: string | null): OpenCodeServerConfig[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item, index) => normalizeOpenCodeServer(item, index))
+        .filter((server): server is OpenCodeServerConfig => Boolean(server));
+    }
+  } catch {
+    // Fall through to comma/newline-separated URL parsing for env convenience.
+  }
+  return raw
+    .split(/[\n,]+/)
+    .map((url, index) => ({ id: `opencode-${index + 1}`, label: `OpenCode ${index + 1}`, baseUrl: trimUrl(url), enabled: true }))
+    .filter((server) => server.baseUrl.length > 0);
+}
+
+function getOpenCodeServers(): OpenCodeServerConfig[] {
+  const configured = parseOpenCodeServers(readSetting("opencode_servers"));
+  if (configured.length > 0) return configured.filter((server) => server.enabled);
+
+  const envConfigured = parseOpenCodeServers(process.env.OPENCODE_SERVERS ?? null);
+  if (envConfigured.length > 0) return envConfigured.filter((server) => server.enabled);
+
+  const legacyUrl = trimUrl(readSetting("opencode_url") || process.env.OPENCODE_URL || "http://localhost:4096");
+  return [{ id: "opencode-1", label: "OpenCode 1", baseUrl: legacyUrl, enabled: true }];
+}
+
 interface OpenAICred {
   apiKey: string;
   source: "oauth" | "api";
@@ -174,7 +261,9 @@ function snapshot(): string {
   const api = readSetting("openai_api_key") || "";
   const env = process.env.OPENAI_API_KEY || "";
   const opencodeUrl = readSetting("opencode_url") || process.env.OPENCODE_URL || "";
-  return `${oauth}|${api}|${env}|${opencodeUrl}`;
+  const opencodeServers = readSetting("opencode_servers") || process.env.OPENCODE_SERVERS || "";
+  const opencodePassword = readSetting("opencode_server_password") || process.env.OPENCODE_SERVER_PASSWORD || "";
+  return `${oauth}|${api}|${env}|${opencodeUrl}|${opencodeServers}|${opencodePassword}`;
 }
 
 /** Get the singleton MultiProviderClient. Rebuilt automatically when OpenAI credentials change. */
@@ -217,9 +306,10 @@ export function getProvider(): MultiProviderClient {
       );
     }
   }
-  // OpenCode is the default non-image route. It can delegate to hosted OpenAI,
-  // Gemini, or free opencode models through the configured OpenCode server.
-  adapters.push(new ExtendedOpenCodeAdapter());
+  // OpenCode is the default non-image route. Multiple configured servers are
+  // tried inside this adapter before Gemini fallback, including stream paths
+  // whose errors surface while the async iterator is being consumed.
+  adapters.push(new ExtendedOpenCodeAdapter(getOpenCodeServers()));
   adapters.push(new GeminiProviderAdapter(getProjectBridgeKeyPool()));
 
   cachedClient = new MultiProviderClient({
@@ -257,9 +347,16 @@ export function defaultModel(): string {
 
   // Legacy fallback: only consulted when default_ai_model isn't set.
   // opencode_text_model stores "providerID/id" — strip prefix so
-  // ExtendedOpenCodeAdapter can re-namespace it.
-  const opencodeUrl = readSetting("opencode_url") || process.env.OPENCODE_URL;
-  if (opencodeUrl) {
+  // ExtendedOpenCodeAdapter can re-namespace it. Only consult when the user
+  // has actually configured at least one OpenCode endpoint (not the hardcoded
+  // localhost default that getOpenCodeServers() returns as a last resort).
+  const userConfiguredOpenCode = !!(
+    readSetting("opencode_servers") ||
+    readSetting("opencode_url") ||
+    process.env.OPENCODE_SERVERS ||
+    process.env.OPENCODE_URL
+  );
+  if (userConfiguredOpenCode) {
     const ocModel = readSetting("opencode_text_model");
     if (ocModel) {
       const slash = ocModel.indexOf("/");

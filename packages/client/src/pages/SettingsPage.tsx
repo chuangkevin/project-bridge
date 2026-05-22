@@ -222,7 +222,7 @@ export default function SettingsPage() {
   const [opencodeSaving, setOpencodeSaving] = useState(false);
   const [opencodeMsg, setOpencodeMsg] = useState('');
   const [opencodeTesting, setOpencodeTesting] = useState(false);
-  const [opencodeTestResult, setOpencodeTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [opencodeTestResult, setOpencodeTestResult] = useState<{ ok: boolean; error?: string; results?: Array<{ label: string; url: string; ok: boolean; error?: string }> } | null>(null);
   const [opencodeModelsLoading, setOpencodeModelsLoading] = useState(false);
   const [opencodeTextSearch, setOpencodeTextSearch] = useState('');
   const [opencodeTextOpen, setOpencodeTextOpen] = useState(false);
@@ -611,7 +611,11 @@ export default function SettingsPage() {
       const res = await fetch('/api/settings/opencode', { headers: bridgeAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setOpencodeUrl(data.url || '');
+        if (Array.isArray(data.servers) && data.servers.length > 0) {
+          setOpencodeUrl(data.servers.map((server: any) => server.baseUrl || server.url).filter(Boolean).join('\n'));
+        } else {
+          setOpencodeUrl(data.url || '');
+        }
         setOpencodeTextModel(data.textModel || 'gemini-2.5-flash');
         setOpencodeVisionModel(data.visionModel || 'gemini-2.5-flash');
       }
@@ -1543,19 +1547,19 @@ export default function SettingsPage() {
           </div>
 
           <p style={styles.hint}>
-            設定自架 OpenCode server 的位址與預設模型。所有 AI 呼叫（除 Gemini key 驗證外）均透過此伺服器路由。
+            設定一個或多個自架 OpenCode server 的位址與預設模型。多 server 請一行一個；AI 呼叫會依序嘗試 OpenCode servers，再依 policy fallback。
           </p>
 
           <div style={{ marginBottom: '12px' }}>
-            <label style={styles.label}>Server URL</label>
+            <label style={styles.label}>Server URLs（一行一個）</label>
             <div style={styles.inputRow}>
-              <input
+              <textarea
                 style={styles.input}
-                type="url"
-                placeholder="http://localhost:4096"
+                placeholder={'http://localhost:4096\nhttp://opencode-backup:4096'}
                 value={opencodeUrl}
                 onChange={e => { setOpencodeUrl(e.target.value); setOpencodeTestResult(null); }}
                 disabled={opencodeSaving}
+                rows={3}
               />
               <button
                 type="button"
@@ -1568,8 +1572,17 @@ export default function SettingsPage() {
             </div>
             {opencodeTestResult && (
               <p style={opencodeTestResult.ok ? styles.successText : styles.errorText}>
-                {opencodeTestResult.ok ? `連線成功 — ${opencodeUrl || 'http://localhost:4096'}` : `連線失敗：${opencodeTestResult.error}`}
+                {opencodeTestResult.ok ? '至少一個 OpenCode server 連線成功' : `連線失敗：${opencodeTestResult.error}`}
               </p>
+            )}
+            {opencodeTestResult?.results && (
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+                {opencodeTestResult.results.map(result => (
+                  <div key={result.url}>
+                    {result.ok ? '✓' : '✕'} {result.label}: {result.url}{result.error ? ` (${result.error})` : ''}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

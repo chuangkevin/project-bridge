@@ -1,6 +1,6 @@
 {
   "name": "server",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@kevinsisi/ai-core": "github:kevinsisi/ai-core#v3.4.0",
+    "@kevinsisi/ai-core": "github:kevinsisi/ai-core#v3.4.1",
     "@napi-rs/canvas": "^0.1.97",
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^3.0.0",
