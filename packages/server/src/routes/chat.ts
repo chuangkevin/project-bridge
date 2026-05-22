@@ -1035,31 +1035,14 @@ This turn is a DB schema/table confirmation request with fresh MCP lookup result
           data: p.inlineData.data,
         }));
 
-        // When images are attached, pre-analyze them with Gemini SDK directly
-        // (neither CodexResponsesAdapter nor OpenCodeProviderAdapter supports
-        // multimodal input — we bypass the provider router for this step).
-        let qaPromptWithVision = userContent;
-        if (visionImagesQa.length > 0) {
-          try {
-            const visionDesc = await geminiVisionQuery(
-              `用繁體中文描述這張圖片的內容，並回答使用者問題：「${userContent}」`,
-              visionImagesQa.map(v => ({ mimeType: v.mimeType, data: v.data })),
-              { maxOutputTokens: 2048 },
-            );
-            if (visionDesc) {
-              // Embed the vision result so the streaming model can reference it
-              qaPromptWithVision = `[圖片分析]\n${visionDesc}\n\n[使用者原始問題]\n${userContent}`;
-              console.log('[chat-qa] Vision pre-analysis done, length:', visionDesc.length);
-            }
-          } catch (vErr: any) {
-            console.warn('[chat-qa] geminiVisionQuery failed:', vErr.message?.slice(0, 80));
-          }
-        }
-
+        // Pass images directly to the provider so the LLM actually sees them.
+        // Router: OpenCode (primary) throws on multimodal → falls back to
+        // Gemini direct adapter or Codex, both of which support images.
         const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
-          model: defaultModel(),
+          model: visionImagesQa.length > 0 ? visionModel() : defaultModel(),
           systemInstruction: richQaPrompt,
-          prompt: qaPromptWithVision,
+          prompt: userContent,
+          ...(visionImagesQa.length > 0 ? { images: visionImagesQa } : {}),
           history: qaHistory,
           maxOutputTokens: 8192,
         }), {
