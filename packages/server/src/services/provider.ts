@@ -317,6 +317,44 @@ export function hasOpenAICredential(): boolean {
   return loadOpenAICredential() !== null;
 }
 
+/**
+ * Vision-only call via Gemini SDK directly, bypassing MultiProviderClient.
+ *
+ * Neither CodexResponsesAdapter nor OpenCodeProviderAdapter supports multimodal
+ * input. When images are involved we fall back to calling the Gemini API
+ * directly with a key from the pool — the same pattern settings.ts uses for
+ * key validation.
+ *
+ * Returns null when no Gemini key is available (caller should degrade
+ * gracefully instead of crashing).
+ */
+export async function geminiVisionQuery(
+  prompt: string,
+  images: Array<{ mimeType: string; data: string }>,
+  opts: { maxOutputTokens?: number; systemInstruction?: string } = {},
+): Promise<string | null> {
+  const { getGeminiApiKey } = await import('./geminiKeys');
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) return null;
+
+  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    ...(opts.systemInstruction ? { systemInstruction: opts.systemInstruction } : {}),
+    generationConfig: opts.maxOutputTokens ? { maxOutputTokens: opts.maxOutputTokens } : undefined,
+  });
+
+  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+  for (const img of images) {
+    parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+  }
+  parts.push({ text: prompt });
+
+  const result = await model.generateContent(parts);
+  return result.response.text() || null;
+}
+
 // ─── OpenAI OAuth token auto-refresh ─────────────────────────────────────
 //
 // OpenAI access tokens expire (~10 days for the Codex-style flow). We hold

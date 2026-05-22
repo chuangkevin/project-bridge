@@ -7,7 +7,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
-import { getProvider, defaultModel, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry, isOpenAIModelSelected, hasOpenAICredential } from '../services/provider';
+import { getProvider, defaultModel, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry, isOpenAIModelSelected, hasOpenAICredential, geminiVisionQuery } from '../services/provider';
 import type { ChatMessage } from '@kevinsisi/ai-core';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
@@ -1029,48 +1029,45 @@ This turn is a DB schema/table confirmation request with fresh MCP lookup result
           parts: h.content.startsWith('<') ? '[前一次生成的原型]' : h.content.slice(0, 2000),
         }));
 
-        let visionImagesQa = qaImageParts.map((p: any) => ({
+        const visionImagesQa = qaImageParts.map((p: any) => ({
           type: 'inline' as const,
           mimeType: p.inlineData.mimeType,
           data: p.inlineData.data,
         }));
 
-        const doQaStream = (imgs: typeof visionImagesQa) =>
-          streamWithRetry(() => getProvider().streamWithSelection({
-            model: imgs.length > 0 ? visionModel() : defaultModel(),
-            systemInstruction: richQaPrompt,
-            prompt: userContent,
-            history: qaHistory,
-            ...(imgs.length > 0 ? { images: imgs } : {}),
-            maxOutputTokens: 8192,
-          }), {
-            onReset: ({ attempt, chunksEmitted }) => {
-              fullResponse = '';
-              res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
-            },
-          });
-
-        let streamExec;
-        try {
-          streamExec = await doQaStream(visionImagesQa);
-        } catch (visionErr: any) {
-          const vMsg: string = visionErr?.message ?? '';
-          if (visionImagesQa.length > 0 && (
-            vMsg.includes('does not support multimodal') ||
-            vMsg.includes('multimodal input') ||
-            vMsg.includes('No provider/model combination')
-          )) {
-            // Current provider can't handle images — fall back to text-only and tell the user
-            console.warn('[chat-qa] Vision not supported, falling back to text-only:', vMsg.slice(0, 80));
-            visionImagesQa = [];
-            const note = '⚠️ 目前的 AI 模型不支援圖片輸入（需要 Gemini 模型）。以下為文字回覆：\n\n';
-            res.write(`data: ${JSON.stringify({ content: note })}\n\n`);
-            fullResponse += note;
-            streamExec = await doQaStream([]);
-          } else {
-            throw visionErr;
+        // When images are attached, pre-analyze them with Gemini SDK directly
+        // (neither CodexResponsesAdapter nor OpenCodeProviderAdapter supports
+        // multimodal input — we bypass the provider router for this step).
+        let qaPromptWithVision = userContent;
+        if (visionImagesQa.length > 0) {
+          try {
+            const visionDesc = await geminiVisionQuery(
+              `用繁體中文描述這張圖片的內容，並回答使用者問題：「${userContent}」`,
+              visionImagesQa.map(v => ({ mimeType: v.mimeType, data: v.data })),
+              { maxOutputTokens: 2048 },
+            );
+            if (visionDesc) {
+              // Embed the vision result so the streaming model can reference it
+              qaPromptWithVision = `[圖片分析]\n${visionDesc}\n\n[使用者原始問題]\n${userContent}`;
+              console.log('[chat-qa] Vision pre-analysis done, length:', visionDesc.length);
+            }
+          } catch (vErr: any) {
+            console.warn('[chat-qa] geminiVisionQuery failed:', vErr.message?.slice(0, 80));
           }
         }
+
+        const streamExec = await streamWithRetry(() => getProvider().streamWithSelection({
+          model: defaultModel(),
+          systemInstruction: richQaPrompt,
+          prompt: qaPromptWithVision,
+          history: qaHistory,
+          maxOutputTokens: 8192,
+        }), {
+          onReset: ({ attempt, chunksEmitted }) => {
+            fullResponse = '';
+            res.write(`data: ${JSON.stringify({ type: 'reset', attempt, chunksEmitted, message: '連線中斷，重新生成中…' })}\n\n`);
+          },
+        });
 
         for await (const text of streamExec.stream) {
           if (text) {
