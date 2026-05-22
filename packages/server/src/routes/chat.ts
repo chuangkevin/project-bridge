@@ -7,7 +7,7 @@ import { classifyIntent } from '../services/intentClassifier';
 import { extractImagesFromDocument, analyzeArtStyle } from '../services/artStyleExtractor';
 import { analyzePageStructure } from '../services/pageStructureAnalyzer';
 import { getGeminiApiKey, getGeminiApiKeyExcluding, getGeminiModel, getKeyCount, trackUsage, markKeyBad } from '../services/geminiKeys';
-import { getProvider, defaultModel, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry, isOpenAIModelSelected, hasOpenAICredential, geminiVisionQuery } from '../services/provider';
+import { getProvider, defaultModel, visionModel, withJsonInstruction, extractJsonBody, trackProviderUsage, streamWithRetry, isOpenAIModelSelected, hasOpenAICredential } from '../services/provider';
 import type { ChatMessage } from '@kevinsisi/ai-core';
 import { sanitizeGeneratedHtml, injectConventionColors } from '../services/htmlSanitizer';
 import { validatePrototype, logValidation } from '../services/prototypeValidator';
