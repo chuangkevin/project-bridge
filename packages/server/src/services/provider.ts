@@ -265,30 +265,25 @@ export function defaultModel(): string {
 }
 
 /**
- * Model used for any AI call that includes images. Decoupled from
- * `defaultModel()` because the Codex Responses adapter (which serves
- * Codex-OAuth-only gpt-5.x text models) explicitly throws on multimodal
- * input — routing vision calls through it would break image uploads,
- * design-spec analysis, vision intent classification, etc.
+ * Model used for any AI call that includes images.
  *
  * Resolution order:
- *   1. `opencode_vision_model` setting (stored as "providerID/id"; we strip
- *      the prefix so ExtendedOpenCodeAdapter re-namespaces it correctly)
- *   2. `default_ai_model` if it's already a Gemini variant (which is
- *      natively multimodal)
+ *   1. `opencode_vision_model` setting (stored as "providerID/id"; strip prefix)
+ *   2. `default_ai_model` if it's a gpt-* or gemini-* model
  *   3. `gemini-2.5-flash` baseline
+ *
+ * Note: CodexResponsesAdapter now supports multimodal input (image_url parts),
+ * so gpt-5.x models routed through the Codex endpoint work for vision calls.
  */
 export function visionModel(): string {
   const ocVision = readSetting("opencode_vision_model");
   if (ocVision) {
     const slash = ocVision.indexOf("/");
     const bareId = slash > 0 ? ocVision.slice(slash + 1) : ocVision;
-    // Only use if not routed through an OpenAI/Codex provider — Codex adapter
-    // throws on any multimodal input regardless of model id.
-    if (bareId && !ocVision.startsWith("openai/")) return bareId;
+    if (bareId) return bareId;
   }
   const pref = readSetting("default_ai_model");
-  if (pref && pref.startsWith("gemini-")) return pref;
+  if (pref && (pref.startsWith("gpt-") || pref.startsWith("gemini-"))) return pref;
   return "gemini-2.5-flash";
 }
 
@@ -320,10 +315,9 @@ export function hasOpenAICredential(): boolean {
 /**
  * Vision-only call via Gemini SDK directly, bypassing MultiProviderClient.
  *
- * Neither CodexResponsesAdapter nor OpenCodeProviderAdapter supports multimodal
- * input. When images are involved we fall back to calling the Gemini API
- * directly with a key from the pool — the same pattern settings.ts uses for
- * key validation.
+ * OpenCodeProviderAdapter does not support multimodal input. This helper calls
+ * the Gemini API directly (same pattern as settings.ts key validation) and is
+ * used as a Gemini-only vision path when needed.
  *
  * Returns null when no Gemini key is available (caller should degrade
  * gracefully instead of crashing).

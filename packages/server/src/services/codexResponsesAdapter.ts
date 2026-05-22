@@ -77,7 +77,7 @@ const CODEX_PROVIDER: ProviderDefinition = {
         streaming: true,
         tools: false,
         reasoning: false,
-        multimodalInput: false,
+        multimodalInput: true,
         multimodalOutput: false,
       },
       contextWindow: 400_000,
@@ -87,9 +87,14 @@ const CODEX_PROVIDER: ProviderDefinition = {
   ],
 };
 
+type ResponsesContentPart =
+  | { type: "input_text"; text: string }
+  | { type: "output_text"; text: string }
+  | { type: "input_image"; image_url: { url: string } };
+
 interface ResponsesInputItem {
   role: "system" | "developer" | "user" | "assistant";
-  content: string | Array<{ type: string; text?: string }>;
+  content: string | ResponsesContentPart[];
 }
 
 function buildResponsesInput(params: GenerateParams): ResponsesInputItem[] {
@@ -100,11 +105,19 @@ function buildResponsesInput(params: GenerateParams): ResponsesInputItem[] {
     items.push(historyToResponsesItem(msg));
   }
 
-  items.push({
-    role: "user",
-    content: [{ type: "input_text", text: params.prompt }],
-  });
+  const userContent: ResponsesContentPart[] = [];
+  for (const img of params.images ?? []) {
+    if (img.type === "inline") {
+      userContent.push({
+        type: "input_image",
+        image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+      });
+    }
+    // FileImagePart (type === "file") not used in this codebase — skip silently
+  }
+  userContent.push({ type: "input_text", text: params.prompt });
 
+  items.push({ role: "user", content: userContent });
   return items;
 }
 
@@ -160,10 +173,6 @@ export class CodexResponsesAdapter implements ProviderAdapter {
   }
 
   async generateContent(params: GenerateParams): Promise<GenerateResponse> {
-    if (params.images?.length) {
-      throw new Error("Codex Responses adapter does not support multimodal input yet");
-    }
-
     const accessToken = this.tokenGetter();
     if (!accessToken) {
       throw makeAuthError("OpenAI OAuth access token missing — please reconnect");
@@ -186,10 +195,6 @@ export class CodexResponsesAdapter implements ProviderAdapter {
   }
 
   async *streamContent(params: GenerateParams): AsyncGenerator<string, void, unknown> {
-    if (params.images?.length) {
-      throw new Error("Codex Responses adapter does not support multimodal input yet");
-    }
-
     const accessToken = this.tokenGetter();
     if (!accessToken) {
       throw makeAuthError("OpenAI OAuth access token missing — please reconnect");
