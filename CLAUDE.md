@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **DesignBridge** (project-bridge) 是 AI 協作顧問與設計平台，讓多個使用者能即時共同設計 AI 工作流程。
 整合知識庫 Skill 的 AI 顧問對話，以及 UI 原型生成功能。
-**v1.4.0 起**所有 AI 呼叫走 `@kevinsisi/ai-core` v3.1.0 的 `MultiProviderClient`：OpenAI primary → Gemini key-pool fallback；OpenAI 連結支援 OAuth PKCE。
+**v1.5.0 起**non-stream generate AI 呼叫走 `@kevinsisi/ai-core` v3.4.0 的 `MultiProviderClient`：OpenCode primary → Gemini key-pool fallback；OpenAI/Codex 保留為已配置時的最後 fallback 與 OAuth/PKCE 能力。SSE streaming call sites 仍受 ai-core capability selection 約束，OpenCode adapter 沒有 `streamContent` 時會選 streaming-capable provider。
 
-- **Current Version**: 1.4.0（2026-04-29）
+- **Current Version**: 1.5.0
 - **Domain**: `designbridge.housefun.com.tw` (公司) / `designbridge.sisihome.org` (home)
 - **Port**: 5123 (host) → 3001 (container)
 
@@ -16,8 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Monorepo**: pnpm workspaces (`packages/client`, `packages/server`, `packages/e2e`)
 - **Server** (`packages/server`): Express + TypeScript + SQLite (better-sqlite3) + Socket.io + ai-core
-  - AI: `@kevinsisi/ai-core` v3.1.0 `MultiProviderClient` — see [`services/provider.ts`](packages/server/src/services/provider.ts)
-  - Providers: OpenAI (api/oauth) + Gemini (key-pool) via ai-core adapters
+  - AI: `@kevinsisi/ai-core` v3.4.0 `MultiProviderClient` — see [`services/provider.ts`](packages/server/src/services/provider.ts)
+  - Providers: OpenCode + Gemini (key-pool) + OpenAI/Codex (api/oauth) via ai-core adapters
   - `@google/generative-ai` retained ONLY in `routes/settings.ts` for validating user-supplied Gemini keys
   - Document parsing: mammoth (DOCX), pdf-parse, pdfjs-dist, tesseract.js (OCR)
   - URL Crawler: Playwright full-page crawl, CSS extraction, style apply
@@ -59,9 +59,9 @@ cd packages/client && pnpm build   # Vite → dist/
 
 ## Key Architecture Patterns
 
-### MultiProviderClient (ai-core v3.1.0)
+### MultiProviderClient (ai-core v3.4.0)
 - 單例位置：[`packages/server/src/services/provider.ts`](packages/server/src/services/provider.ts)
-- Route policy：`preferredProviders: ["openai"]` → `fallbackProviders: ["gemini"]`；`allowCrossProviderFallback: true`
+- Route policy：`preferredProviders: ["opencode"]` → `fallbackProviders: ["gemini", "openai"]`；`allowCrossProviderFallback: true`；`allowCrossModelFallback: true`
 - 所有路由 / service 透過 `getProvider().generateContent / streamContent / generateWithSelection` 呼叫，**禁止再 import `@google/generative-ai`**（唯一例外見下方 settings.ts）。
 - Adapter 從 env / settings table 動態建構；token / key 變動時呼叫 `invalidateProvider()` 立即重建 client（snapshot-based 快取）。
 - OpenAI credential 順序：`openai_oauth_access_token` (settings) → `openai_api_key` (settings) → `OPENAI_API_KEY` (env)。
@@ -141,8 +141,8 @@ node packages/server/dist/index.js
 
 ### 三、v1.4.0 改了什麼（接手前必看）
 - **核心遷移**：所有 `@google/generative-ai` 直呼改成 ai-core `MultiProviderClient`，單例在 [`packages/server/src/services/provider.ts`](packages/server/src/services/provider.ts)。
-- **ai-core 升級**：`@kevinsisi/ai-core` v3.0.0 → **v3.1.0**，pin SHA `0e94858243aff078c48fbe5127575ce7bcb0d207`（見 [`packages/server/package.json`](packages/server/package.json)）。
-- **Provider 路由**：OpenAI primary → Gemini key-pool fallback；`allowCrossProviderFallback: true`。
+- **ai-core 升級**：`@kevinsisi/ai-core` 已收斂到 **v3.4.0** tag（見 [`packages/server/package.json`](packages/server/package.json)）。
+- **Provider 路由**：OpenCode primary → Gemini key-pool fallback → OpenAI/Codex configured fallback；`allowCrossProviderFallback: true`。
 - **OpenAI OAuth (PKCE)**：新增 [`routes/openaiOAuth.ts`](packages/server/src/routes/openaiOAuth.ts)，client 設定頁加「OpenAI 授權連結」按鈕（[`SettingsPage.tsx`](packages/client/src/pages/SettingsPage.tsx)），popup 完成後 `postMessage` 回主視窗。
 - **JSON 輸出方式改變**：ai-core `GenerateParams` 不支援 `responseMimeType`，原本用 `responseMimeType: 'application/json'` 的呼叫，改成 `withJsonInstruction()` 在 systemInstruction 末段加指令、`extractJsonBody()` parse 結果。
 - **settings.ts 例外**：[`routes/settings.ts`](packages/server/src/routes/settings.ts) 仍直接 import Gemini SDK 用於驗證使用者新增的特定 key，**勿動**。

@@ -1,9 +1,10 @@
 /**
- * provider.ts — singleton MultiProviderClient (ai-core v3.0.0)
+ * provider.ts — singleton MultiProviderClient (ai-core v3.4.0)
  *
  * Routing policy:
- *   - OpenAI primary (api key OR oauth access token from settings/env)
- *   - Gemini pool fallback (always present)
+ *   - OpenCode primary for non-stream generation calls
+ *   - Gemini pool fallback, and streaming fallback while OpenCode lacks streamContent
+ *   - OpenAI/Codex retained as a final fallback when explicitly configured
  *   - allowCrossProviderFallback: true
  *
  * Note: ai-core's GenerateParams does not expose temperature/responseMimeType,
@@ -16,6 +17,7 @@
  */
 
 import {
+  GeminiProviderAdapter,
   MultiProviderClient,
   OpenAIProviderAdapter,
   OpenCodeProviderAdapter,
@@ -31,10 +33,12 @@ import type {
 } from "@kevinsisi/ai-core";
 import db from "../db/connection";
 import { CodexResponsesAdapter, extractAccountIdFromJwt } from "./codexResponsesAdapter";
+import { getProjectBridgeKeyPool } from "./projectBridgeAdapter";
 
 const DEFAULT_ROUTE_POLICY: RoutePolicy = {
-  preferredProviders: ["openai"],
-  fallbackProviders: ["opencode"],
+  preferredProviders: ["opencode"],
+  fallbackProviders: ["gemini", "openai"],
+  allowCrossModelFallback: true,
   allowCrossProviderFallback: true,
 };
 
@@ -213,8 +217,10 @@ export function getProvider(): MultiProviderClient {
       );
     }
   }
-  // OpenCode is always present as fallback — handles all gemini-* models.
+  // OpenCode is the default non-image route. It can delegate to hosted OpenAI,
+  // Gemini, or free opencode models through the configured OpenCode server.
   adapters.push(new ExtendedOpenCodeAdapter());
+  adapters.push(new GeminiProviderAdapter(getProjectBridgeKeyPool()));
 
   cachedClient = new MultiProviderClient({
     adapters,

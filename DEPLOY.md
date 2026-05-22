@@ -6,15 +6,15 @@ Runbook for deploying project-bridge. Read top-to-bottom on first deploy; later 
 
 | Area | Before (1.3.x) | After (1.4.0) |
 |---|---|---|
-| AI provider | Direct `@google/generative-ai` (`new GoogleGenerativeAI(apiKey)`) in 24 files | Single `MultiProviderClient` from `@kevinsisi/ai-core` v3.1.0 (`packages/server/src/services/provider.ts`) |
-| Routing | Gemini only, with key-pool retry wrapper | OpenAI primary → Gemini key-pool fallback (`allowCrossProviderFallback: true`); cross-provider fallback NEVER silent |
+| AI provider | Direct `@google/generative-ai` (`new GoogleGenerativeAI(apiKey)`) in 24 files | Single `MultiProviderClient` from `@kevinsisi/ai-core` v3.4.0 (`packages/server/src/services/provider.ts`) |
+| Routing | Gemini only, with key-pool retry wrapper | Non-stream generate: OpenCode primary → Gemini key-pool fallback → OpenAI/Codex configured fallback (`allowCrossProviderFallback: true`); streaming calls require streaming-capable adapters; cross-provider fallback NEVER silent |
 | OpenAI auth | API key only (`OPENAI_API_KEY` env) | OAuth PKCE flow (Settings page button) **OR** API key |
 | JSON output | `responseMimeType: 'application/json'` from Gemini SDK | `withJsonInstruction()` appends "respond with JSON only" to system prompt + `extractJsonBody()` strips fences before `JSON.parse` |
 | `temperature` | Per-call value | **Dropped** — ai-core GenerateParams doesn't expose it; provider defaults |
 | Multi-turn chat | Gemini `model.startChat({history}).sendMessageStream(...)` with `MAX_TOKENS` auto-continue | ai-core `streamContent({history, prompt})`; auto-continue removed (ai-core's `TokenUsage` carries no `finishReason`) |
 | `routes/settings.ts` | Used Gemini SDK to validate keys | **Still uses Gemini SDK** for the 3 key-validation endpoints (test a specific user-supplied key without routing through MultiProviderClient) |
 
-ai-core dependency is now pinned to commit `0e94858243aff078c48fbe5127575ce7bcb0d207` (`AI_CORE_VERSION = "3.1.0"`).
+ai-core dependency is now pinned to tag `v3.4.0` (`AI_CORE_VERSION = "3.4.0"`).
 
 ## Affected files (for code review / rollback)
 
