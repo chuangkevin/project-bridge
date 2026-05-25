@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ChatMessage } from '../components/ChatPanel';
-import PreviewPanel, { InteractionMode } from '../components/PreviewPanel';
+import PreviewArea from '../components/PreviewArea';
+import { InteractionMode } from '../components/PreviewPanel';
 import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector';
 import QueueStatusIndicator from '../components/QueueStatusIndicator';
 import Toast from '../components/Toast';
@@ -13,9 +14,6 @@ import TokenPanel, { DesignToken } from '../components/TokenPanel';
 import ApiBindingPanel from '../components/ApiBindingPanel';
 import PageApiBindingPanel from '../components/PageApiBindingPanel';
 import ConstraintPanel from '../components/ConstraintPanel';
-import VisualEditor from '../components/VisualEditor';
-import CodePanel from '../components/CodePanel';
-import CodeFileTree from '../components/CodeFileTree';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import WorkspaceHeader from '../components/WorkspaceHeader';
@@ -640,6 +638,33 @@ export default function WorkspacePage() {
     }
   }, [annotations]);
 
+  const handleGenerateVariants = useCallback(async (page: string) => {
+    try {
+      await fetch(`/api/projects/${id}/generate-variants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page }),
+      });
+    } catch { /* silently fail */ }
+  }, [id]);
+
+  const handleRegeneratePage = useCallback(async (page: string) => {
+    if (!confirm(`重新生成「${page}」頁面？`)) return;
+    try {
+      const res = await fetch(`/api/projects/${id}/regenerate-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        alert(data.error || '重新生成失敗');
+      }
+    } catch { alert('重新生成失敗'); }
+  }, [id]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -791,188 +816,6 @@ export default function WorkspacePage() {
     cursor: 'pointer',
   });
 
-  const renderWorkspacePreviewPane = () => (
-    <div style={styles.previewPane} ref={iframeContainerRef}>
-      {viewMode === 'code' ? (
-        !html ? (
-          <div style={styles.emptyStateContainer}>
-            <div style={{ ...styles.emptyStateCard, backgroundColor: 'var(--bg-elevated)', border: '2px dashed var(--border-primary)' }}>
-              <div style={styles.emptyStateIcon}>💻</div>
-              <div style={{ ...styles.emptyStateTitle, color: 'var(--text-secondary)' }}>尚未生成原型，請先在對話中描述需求</div>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: isMobileViewport ? 'column' : 'row' }}>
-            {isMobileViewport && isMultiPage && pages.length > 1 && (
-              <div style={styles.pageSidebarMobile}>
-                <div style={styles.pageSidebarLabel}>頁面</div>
-                {pages.map(page => (
-                  <div key={page} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <button
-                      type="button"
-                      style={{ ...styles.pageSidebarItem, ...(activePage === page ? styles.pageSidebarItemActive : {}), width: 'auto', whiteSpace: 'nowrap' }}
-                      onClick={() => handleNavigatePage(page)}
-                    >
-                      {page}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await fetch(`/api/projects/${id}/generate-variants`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ page }),
-                          });
-                        } catch {}
-                      }}
-                      style={styles.pageSidebarActionBtnMobile}
-                      title="其他方案"
-                    >
-                      🔄
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!isMobileViewport && (
-              <CodeFileTree pages={pages} activePage={activePage || null} onSelect={handleNavigatePage} html={html || ''} />
-            )}
-            <CodePanel html={html} pages={pages} activePage={activePage} onPageChange={handleNavigatePage} />
-          </div>
-        )
-      ) : (
-        <>
-              {isMultiPage && pages.length > 1 && (
-                <div style={isMobileViewport ? styles.pageSidebarMobile : styles.pageSidebar}>
-                  <div style={styles.pageSidebarLabel}>頁面</div>
-                  {pages.map(page => (
-                    <div key={page} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                  <button
-                    type="button"
-                    style={{ ...styles.pageSidebarItem, ...(activePage === page ? styles.pageSidebarItemActive : {}), flex: 1 }}
-                        onClick={() => handleNavigatePage(page)}
-                        data-testid={`page-tab-${page}`}
-                      >
-                        {page}
-                      </button>
-                      {isMobileViewport && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await fetch(`/api/projects/${id}/generate-variants`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ page }),
-                              });
-                            } catch {}
-                          }}
-                          style={styles.pageSidebarActionBtnMobile}
-                          title="其他方案"
-                        >
-                          🔄
-                        </button>
-                      )}
-                      {!isMobileViewport && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await fetch(`/api/projects/${id}/generate-variants`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ page }),
-                                });
-                              } catch {}
-                            }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
-                            title="其他方案"
-                          >
-                            🔄
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (!confirm(`重新生成「${page}」頁面？`)) return;
-                              try {
-                                const res = await fetch(`/api/projects/${id}/regenerate-page`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ page }),
-                                });
-                                const data = await res.json();
-                                if (res.ok) {
-                                  window.location.reload();
-                                } else {
-                                  alert(data.error || '重新生成失敗');
-                                }
-                              } catch { alert('重新生成失敗'); }
-                            }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', opacity: 0.5, padding: '2px' }}
-                            title="重新生成此頁面"
-                          >
-                            ↻
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-          <div style={deviceSize === 'desktop' && !isMobileViewport ? styles.previewScrollDesktop : styles.previewScroll}>
-            {!html ? (
-              <div style={styles.emptyStateContainer}>
-                <div style={styles.emptyStateCard}>
-                  <div style={styles.emptyStateIcon}>🎨</div>
-                  <div style={styles.emptyStateTitle}>尚未生成原型</div>
-                  <div style={styles.emptyStateSubtitle}>在左側聊天輸入你的需求，或上傳設計稿 PDF，AI 將生成互動式原型</div>
-                  <ul style={styles.emptyStateHints}>
-                    <li>💡 描述你想要的頁面設計</li>
-                    <li>📎 上傳設計稿 PDF 讓 AI 分析樣式</li>
-                    <li>⚡ 點擊元素可以直接修改</li>
-                  </ul>
-                  <div style={styles.emptyStateActionGrid}>
-                    {WORKSPACE_QUICK_STARTS.map(item => (
-                      <button key={item.title} type="button" style={styles.emptyStateActionCard} onClick={() => triggerQuickStart(item.mode, item.prompt)}>
-                        <div style={styles.emptyStateActionTitle}>{item.title}</div>
-                        <div style={styles.emptyStateActionDesc}>{item.description}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={deviceSize === 'mobile' ? styles.deviceFrameMobile : deviceSize === 'tablet' ? styles.deviceFrameTablet : styles.deviceFrameDesktop}>
-                <PreviewPanel
-                  html={html}
-                  deviceSize={deviceSize}
-                  annotationMode={annotationMode}
-                  interactionMode={interactionMode}
-                  onElementClick={handleElementClick}
-                  onElementDeselected={() => {
-                    setSelectedElement(null);
-                    setInteractionMode('browse');
-                  }}
-                  onIndicatorClick={handleIndicatorClick}
-                  annotations={annotationIndicators}
-                  apiBindings={apiBindingIndicators}
-                />
-                {interactionMode === 'visual-edit' && id && (
-                  <VisualEditor
-                    projectId={id}
-                    iframeRef={{ current: iframeContainerRef.current?.querySelector('iframe') as HTMLIFrameElement | null } as React.RefObject<HTMLIFrameElement>}
-                    active={interactionMode === 'visual-edit'}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
 
   return (
     <div style={workspaceContainerStyle}>
@@ -1523,7 +1366,29 @@ export default function WorkspacePage() {
                   />
                 </div>
               ) : (
-                renderWorkspacePreviewPane()
+                <PreviewArea
+                  html={html}
+                  viewMode={viewMode}
+                  deviceSize={deviceSize}
+                  isMobileViewport={isMobileViewport}
+                  isMultiPage={isMultiPage}
+                  pages={pages}
+                  activePage={activePage}
+                  onNavigatePage={handleNavigatePage}
+                  annotationMode={annotationMode}
+                  interactionMode={interactionMode}
+                  onElementClick={handleElementClick}
+                  onElementDeselected={() => { setSelectedElement(null); setInteractionMode('browse'); }}
+                  onIndicatorClick={handleIndicatorClick}
+                  annotationIndicators={annotationIndicators}
+                  apiBindingIndicators={apiBindingIndicators}
+                  containerRef={iframeContainerRef}
+                  projectId={project.id}
+                  onQuickStart={triggerQuickStart}
+                  quickStarts={WORKSPACE_QUICK_STARTS}
+                  onGenerateVariants={handleGenerateVariants}
+                  onRegeneratePage={handleRegeneratePage}
+                />
               )}
             </div>
           </>
@@ -1587,7 +1452,29 @@ export default function WorkspacePage() {
             onMouseLeave={(e) => { if (!chatResizing.current) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
           />
             )}
-            {renderWorkspacePreviewPane()}
+            <PreviewArea
+              html={html}
+              viewMode={viewMode}
+              deviceSize={deviceSize}
+              isMobileViewport={isMobileViewport}
+              isMultiPage={isMultiPage}
+              pages={pages}
+              activePage={activePage}
+              onNavigatePage={handleNavigatePage}
+              annotationMode={annotationMode}
+              interactionMode={interactionMode}
+              onElementClick={handleElementClick}
+              onElementDeselected={() => { setSelectedElement(null); setInteractionMode('browse'); }}
+              onIndicatorClick={handleIndicatorClick}
+              annotationIndicators={annotationIndicators}
+              apiBindingIndicators={apiBindingIndicators}
+              containerRef={iframeContainerRef}
+              projectId={project.id}
+              onQuickStart={triggerQuickStart}
+              quickStarts={WORKSPACE_QUICK_STARTS}
+              onGenerateVariants={handleGenerateVariants}
+              onRegeneratePage={handleRegeneratePage}
+            />
             {!focusMode && (
               <SpecPanel
                 annotations={annotations}
@@ -1947,15 +1834,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     padding: '10px 12px',
   },
-  toolbarLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  toolbarLeftMobile: {
-    width: '100%',
-    justifyContent: 'space-between',
-  },
   toolbarCenter: {
     display: 'flex',
     alignItems: 'center',
@@ -2009,36 +1887,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     whiteSpace: 'nowrap' as const,
   },
-  homeBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    border: '1px solid var(--border-primary)',
-    borderRadius: '6px',
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-  },
-  projectName: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-    cursor: 'pointer',
-    textDecoration: 'underline dotted',
-  },
-  projectNameInput: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-    border: '1px solid var(--accent)',
-    borderRadius: '4px',
-    padding: '2px 6px',
-    outline: 'none',
-    width: '200px',
-    backgroundColor: 'var(--bg-input)',
-  },
   historyBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -2069,19 +1917,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--accent)',
     borderColor: 'var(--accent)',
     color: '#ffffff',
-  },
-  shareBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 12px',
-    border: '1px solid var(--border-primary)',
-    borderRadius: '8px',
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--text-secondary)',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
   },
   body: {
     display: 'flex',
@@ -2146,39 +1981,6 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column' as const,
     backgroundColor: 'var(--bg-card)',
   },
-  tabBar: {
-    display: 'flex',
-    borderBottom: '1px solid var(--border-primary)',
-    backgroundColor: 'var(--bg-secondary)',
-    flexShrink: 0,
-  },
-  tabBtn: {
-    flex: 1,
-    padding: '8px 0',
-    border: 'none',
-    borderBottom: '2px solid transparent',
-    backgroundColor: 'transparent',
-    color: 'var(--text-muted)',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'color 0.15s, border-color 0.15s',
-  },
-  tabBtnActive: {
-    color: 'var(--text-accent)',
-    borderBottom: '2px solid var(--accent)',
-  },
-  tabBtnDisabled: {
-    opacity: 0.4,
-    cursor: 'not-allowed',
-  },
-  tabContent: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
   designActiveBadge: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -2189,86 +1991,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     fontWeight: 600,
   },
-  previewPane: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'row',
-  },
-  pageSidebar: {
-    width: '120px',
-    flexShrink: 0,
-    borderRight: '1px solid var(--border-primary)',
-    backgroundColor: 'var(--bg-secondary)',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflowY: 'auto' as const,
-    padding: '8px 6px',
-    gap: '4px',
-  },
-  pageSidebarMobile: {
-    width: '100%',
-    flexShrink: 0,
-    borderBottom: '1px solid var(--border-primary)',
-    backgroundColor: 'var(--bg-secondary)',
-    display: 'flex',
-    flexDirection: 'row' as const,
-    overflowX: 'auto' as const,
-    overflowY: 'hidden' as const,
-    padding: '8px 6px',
-    gap: '6px',
-    alignItems: 'center',
-  },
   readOnlyOverlay: {
     position: 'absolute' as const,
     inset: 0,
     zIndex: 10,
     backgroundColor: 'rgba(255,255,255,0.01)',
     cursor: 'not-allowed',
-  },
-  pageSidebarLabel: {
-    fontSize: '10px',
-    fontWeight: 600,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em',
-    padding: '2px 6px 6px',
-    flexShrink: 0,
-  },
-  pageSidebarItem: {
-    display: 'block',
-    width: '100%',
-    padding: '6px 8px',
-    border: '1px solid transparent',
-    borderRadius: '6px',
-    backgroundColor: 'transparent',
-    color: 'var(--text-secondary)',
-    fontSize: '12px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    textAlign: 'left' as const,
-    wordBreak: 'break-word' as const,
-    flexShrink: 0,
-  },
-  pageSidebarItemActive: {
-    backgroundColor: 'var(--accent-glass)',
-    borderColor: 'var(--accent)',
-    color: 'var(--text-accent)',
-  },
-  pageSidebarActionBtnMobile: {
-    width: '30px',
-    height: '30px',
-    flexShrink: 0,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '1px solid var(--border-primary)',
-    borderRadius: '8px',
-    backgroundColor: 'var(--bg-card)',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    fontSize: '12px',
-    lineHeight: 1,
   },
   quickRegenPopup: {
     position: 'fixed' as const,
@@ -2391,66 +2119,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '11px',
     fontFamily: 'monospace',
   },
-  deviceFrameGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    border: '1px solid var(--border-primary)',
-    borderRadius: '8px',
-    overflow: 'hidden',
-  },
-  deviceFrameBtn: {
-    padding: '5px 9px',
-    border: 'none',
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--text-secondary)',
-    fontSize: '13px',
-    cursor: 'pointer',
-    lineHeight: 1,
-  },
-  deviceFrameBtnActive: {
-    backgroundColor: 'var(--accent-glass)',
-    color: 'var(--text-accent)',
-  },
-  previewScroll: {
-    flex: 1,
-    overflow: 'auto',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    padding: '16px',
-    backgroundColor: 'var(--bg-hover)',
-    boxSizing: 'border-box' as const,
-  },
-  previewScrollDesktop: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-  deviceFrameDesktop: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-  deviceFrameMobile: {
-    width: '375px',
-    height: '812px',
-    flexShrink: 0,
-    margin: '0 auto',
-    border: '2px solid #333',
-    borderRadius: '40px',
-    overflow: 'hidden',
-  },
-  deviceFrameTablet: {
-    width: '768px',
-    height: '1024px',
-    flexShrink: 0,
-    margin: '0 auto',
-    border: '2px solid #333',
-    borderRadius: '40px',
-    overflow: 'hidden',
-  },
   regenHistoryChips: {
     display: 'flex',
     flexWrap: 'nowrap' as const,
@@ -2491,98 +2159,6 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '200px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-  },
-  emptyStateContainer: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'var(--bg-primary)',
-    padding: '40px 24px',
-  },
-  emptyStateCard: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    textAlign: 'center' as const,
-    backgroundColor: 'var(--bg-card)',
-    border: '2px dashed var(--border-secondary)',
-    borderRadius: '16px',
-    padding: '48px 40px',
-    maxWidth: '420px',
-    width: '100%',
-  },
-  emptyStateIcon: {
-    fontSize: '48px',
-    lineHeight: 1,
-    marginBottom: '16px',
-  },
-  emptyStateTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-    marginBottom: '8px',
-  },
-  emptyStateSubtitle: {
-    fontSize: '14px',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.6,
-    marginBottom: '20px',
-  },
-  emptyStateHints: {
-    listStyle: 'none' as const,
-    padding: 0,
-    margin: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '8px',
-    textAlign: 'left' as const,
-    fontSize: '13px',
-    color: 'var(--text-secondary)',
-  },
-  emptyStateActionGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '10px',
-    width: '100%',
-    marginTop: '18px',
-  },
-  emptyStateActionCard: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '6px',
-    alignItems: 'flex-start',
-    textAlign: 'left' as const,
-    padding: '14px',
-    minHeight: '44px',
-    borderRadius: '12px',
-    border: '1px solid color-mix(in srgb, var(--accent, #8E6FA7) 30%, var(--border-primary))',
-    backgroundColor: 'color-mix(in srgb, var(--accent, #8E6FA7) 10%, var(--bg-card))',
-    color: 'var(--text-primary)',
-    cursor: 'pointer',
-  },
-  emptyStateActionTitle: {
-    fontSize: '13px',
-    fontWeight: 700,
-    color: 'var(--text-primary)',
-  },
-  emptyStateActionDesc: {
-    fontSize: '12px',
-    lineHeight: 1.5,
-    color: 'var(--text-secondary)',
-  },
-  shortcutsBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '5px 10px',
-    border: '1px solid var(--border-primary)',
-    borderRadius: '8px',
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--text-secondary)',
-    fontSize: '12px',
-    fontWeight: 500,
-    cursor: 'pointer',
   },
   shortcutsBackdrop: {
     position: 'fixed' as const,
@@ -2722,41 +2298,5 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     textAlign: 'center' as const,
-  },
-  forkBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 12px',
-    border: '1px solid var(--accent)',
-    borderRadius: '8px',
-    backgroundColor: 'var(--accent-glass)',
-    color: 'var(--text-accent)',
-    fontSize: '13px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  userWidget: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 4,
-  } as React.CSSProperties,
-  userWidgetName: {
-    fontSize: 12,
-    color: 'var(--text-secondary)',
-    maxWidth: 100,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  } as React.CSSProperties,
-  logoutBtn: {
-    fontSize: 11,
-    padding: '3px 8px',
-    border: '1px solid var(--border-primary)',
-    borderRadius: 4,
-    background: 'none',
-    color: 'var(--text-muted)',
-    cursor: 'pointer',
   },
 };
