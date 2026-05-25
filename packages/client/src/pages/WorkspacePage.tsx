@@ -22,6 +22,7 @@ import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
 import WorkspaceHeader from '../components/WorkspaceHeader';
+import ModeRail from '../components/ModeRail';
 // import FigmaExportDialog from '../components/FigmaExportDialog'; // disabled: internal URLs not supported
 
 // Strip [Attached files] block from user message display content
@@ -776,17 +777,6 @@ export default function WorkspacePage() {
   const workspaceContainerStyle: React.CSSProperties = {
     display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden'
   };
-  const tabBarStyle: React.CSSProperties = {
-    display: 'flex', borderBottom: '1px solid var(--border-primary)', background: 'var(--bg-primary)', padding: '0 16px', flexShrink: 0
-  };
-  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
-    padding: '10px 20px', cursor: 'pointer',
-    fontWeight: active ? 600 : 400,
-    color: active ? 'var(--text-accent)' : 'var(--text-muted)',
-    background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-    fontSize: 14, transition: 'all 0.15s'
-  });
-
   const mobileSurfaceBtnStyle = (active: boolean): React.CSSProperties => ({
     flex: 1,
     minHeight: '40px',
@@ -1299,37 +1289,8 @@ export default function WorkspacePage() {
         </div>
       )}
 
-      <div style={{ ...tabBarStyle, alignItems: 'center' }}>
-        <div role="tablist" style={{ display: 'flex' }}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeMode === 'design'}
-            style={tabBtnStyle(activeMode === 'design')}
-            onClick={() => setActiveMode('design')}
-          >
-            設計
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeMode === 'consultant'}
-            style={tabBtnStyle(activeMode === 'consultant')}
-            onClick={() => setActiveMode('consultant')}
-          >
-            顧問
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeMode === 'architecture'}
-            style={tabBtnStyle(activeMode === 'architecture')}
-            onClick={() => setActiveMode('architecture')}
-          >
-            架構圖
-          </button>
-        </div>
-      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden', minHeight: 0 }}>
+        <ModeRail activeMode={activeMode} onModeChange={setActiveMode} />
 
       {activeMode === 'architecture' ? (
         <ArchitectureTab
@@ -1905,6 +1866,7 @@ export default function WorkspacePage() {
     </div>
         </div>
       )}
+      </div>{/* end ModeRail row */}
     </div>
   );
 }
