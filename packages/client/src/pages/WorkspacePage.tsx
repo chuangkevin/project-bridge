@@ -861,9 +861,9 @@ export default function WorkspacePage() {
       {viewMode === 'code' ? (
         !html ? (
           <div style={styles.emptyStateContainer}>
-            <div style={{ ...styles.emptyStateCard, backgroundColor: '#1e1e2e', border: '2px dashed #45475a' }}>
+            <div style={{ ...styles.emptyStateCard, backgroundColor: 'var(--bg-elevated)', border: '2px dashed var(--border-primary)' }}>
               <div style={styles.emptyStateIcon}>💻</div>
-              <div style={{ ...styles.emptyStateTitle, color: '#cdd6f4' }}>尚未生成原型，請先在對話中描述需求</div>
+              <div style={{ ...styles.emptyStateTitle, color: 'var(--text-secondary)' }}>尚未生成原型，請先在對話中描述需求</div>
             </div>
           </div>
         ) : (
