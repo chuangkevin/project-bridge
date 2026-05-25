@@ -35,15 +35,24 @@ interface Props {
 }
 
 export default function ContextPanel({ activeMode, ...props }: Props) {
-  const wrapperStyle: React.CSSProperties = {
-    width: props.width,
-    flexShrink: 0,
-    borderRight: '1px solid var(--border-primary)',
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative',
-  };
+  const isFullWidth = activeMode !== 'design';
+  const wrapperStyle: React.CSSProperties = isFullWidth
+    ? {
+        flex: 1,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+      }
+    : {
+        width: props.width,
+        flexShrink: 0,
+        borderRight: '1px solid var(--border-primary)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+      };
 
   const renderPanel = () => {
     switch (activeMode) {

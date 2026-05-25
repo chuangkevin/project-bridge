@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import ChatPanel, { ChatMessage } from '../components/ChatPanel';
-import DesignPanel from '../components/DesignPanel';
-import StyleTweakerPanel from '../components/StyleTweakerPanel';
+import { ChatMessage } from '../components/ChatPanel';
 import PreviewPanel, { InteractionMode } from '../components/PreviewPanel';
 import DeviceSizeSelector, { DeviceSize } from '../components/DeviceSizeSelector';
 import QueueStatusIndicator from '../components/QueueStatusIndicator';
@@ -20,9 +18,9 @@ import CodePanel from '../components/CodePanel';
 import CodeFileTree from '../components/CodeFileTree';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
-import ArchitectureTab from '../components/ArchitectureTab';
 import WorkspaceHeader from '../components/WorkspaceHeader';
 import ModeRail from '../components/ModeRail';
+import ContextPanel from '../components/ContextPanel';
 // import FigmaExportDialog from '../components/FigmaExportDialog'; // disabled: internal URLs not supported
 
 // Strip [Attached files] block from user message display content
@@ -88,7 +86,6 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [leftTab, setLeftTab] = useState<'chat' | 'design' | 'style'>('chat');
   const [activeMode, setActiveMode] = useState<'design' | 'consultant' | 'architecture'>('design');
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 960 : false);
@@ -420,6 +417,10 @@ export default function WorkspacePage() {
     });
     if (!res.ok) throw new Error('Save failed');
   }, [id]);
+
+  const handleSendFromContextPanel = useCallback((text: string) => {
+    setPendingChatMessage(text);
+  }, []);
 
   const handleExport = useCallback(() => {
     if (!html || !project) return;
@@ -789,35 +790,6 @@ export default function WorkspacePage() {
     fontWeight: 600,
     cursor: 'pointer',
   });
-
-  const renderWorkspaceLeftPane = () => (
-    <>
-      <div style={styles.tabBar}>
-        <button style={{ ...styles.tabBtn, ...(leftTab === 'chat' ? styles.tabBtnActive : {}) }} onClick={() => setLeftTab('chat')} data-testid="tab-chat">對話</button>
-        <button style={{ ...styles.tabBtn, ...(leftTab === 'design' ? styles.tabBtnActive : {}) }} onClick={() => setLeftTab('design')} data-testid="tab-design">設計</button>
-        <button style={{ ...styles.tabBtn, ...(leftTab === 'style' ? styles.tabBtnActive : {}), ...(!html ? styles.tabBtnDisabled : {}) }} onClick={() => html && setLeftTab('style')} disabled={!html} data-testid="tab-style" title={!html ? '請先生成原型' : undefined}>🎨 樣式</button>
-      </div>
-      <div style={styles.tabContent}>
-        {leftTab === 'chat' ? (
-          <ChatPanel
-            projectId={project.id}
-            messages={messages}
-            onNewMessages={handleNewMessages}
-            onHtmlGenerated={handleHtmlGenerated}
-            pendingMessage={pendingChatMessage}
-            onPendingMessageConsumed={() => setPendingChatMessage(null)}
-            hasPrototype={!!html}
-            selectedElement={selectedElement}
-            onClearSelectedElement={() => setSelectedElement(null)}
-          />
-        ) : leftTab === 'design' ? (
-          <DesignPanel projectId={project.id} onSaved={checkDesignActive} />
-        ) : (
-          <StyleTweakerPanel html={html} onInject={injectStyles} onSave={handleSaveStyles} />
-        )}
-      </div>
-    </>
-  );
 
   const renderWorkspacePreviewPane = () => (
     <div style={styles.previewPane} ref={iframeContainerRef}>
@@ -1292,32 +1264,30 @@ export default function WorkspacePage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden', minHeight: 0 }}>
         <ModeRail activeMode={activeMode} onModeChange={setActiveMode} />
 
-      {activeMode === 'architecture' ? (
-        <ArchitectureTab
-          projectId={id!}
+      {activeMode !== 'design' ? (
+        <ContextPanel
+          activeMode={activeMode}
+          projectId={project.id}
+          messages={messages}
+          onNewMessages={handleNewMessages}
+          onHtmlGenerated={handleHtmlGenerated}
+          html={html}
+          onSaved={checkDesignActive}
+          onInjectStyles={injectStyles}
+          onSaveStyles={handleSaveStyles}
+          pendingMessage={pendingChatMessage}
+          onPendingMessageConsumed={() => setPendingChatMessage(null)}
+          hasPrototype={!!html}
+          selectedElement={selectedElement}
+          onClearSelectedElement={() => setSelectedElement(null)}
+          onSendMessage={handleSendFromContextPanel}
           onSwitchToDesign={() => setActiveMode('design')}
           onSwitchToDesignAndGenerate={() => {
             setActiveMode('design');
             setPendingChatMessage('請依照架構生成所有頁面');
           }}
+          width={chatPaneWidth}
         />
-      ) : activeMode === 'consultant' ? (
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <ChatPanel
-              projectId={project?.id || id!}
-              messages={messages}
-              onNewMessages={handleNewMessages}
-              onHtmlGenerated={handleHtmlGenerated}
-              pendingMessage={pendingChatMessage}
-              onPendingMessageConsumed={() => setPendingChatMessage(null)}
-              hasPrototype={!!html}
-              selectedElement={null}
-              onClearSelectedElement={() => {}}
-              initialChatOnly={true}
-            />
-          </div>
-        </div>
       ) : (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
     <div style={styles.container}>
@@ -1509,7 +1479,29 @@ export default function WorkspacePage() {
               {mobileDesignSurface === 'chat' ? (
                 <div style={styles.chatPaneMobile}>
                   {isReadOnly && <div style={styles.readOnlyOverlay} data-testid="readonly-overlay" />}
-                  {renderWorkspaceLeftPane()}
+                  <ContextPanel
+                    activeMode={activeMode}
+                    projectId={project.id}
+                    messages={messages}
+                    onNewMessages={handleNewMessages}
+                    onHtmlGenerated={handleHtmlGenerated}
+                    html={html}
+                    onSaved={checkDesignActive}
+                    onInjectStyles={injectStyles}
+                    onSaveStyles={handleSaveStyles}
+                    pendingMessage={pendingChatMessage}
+                    onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                    hasPrototype={!!html}
+                    selectedElement={selectedElement}
+                    onClearSelectedElement={() => setSelectedElement(null)}
+                    onSendMessage={handleSendFromContextPanel}
+                    onSwitchToDesign={() => setActiveMode('design')}
+                    onSwitchToDesignAndGenerate={() => {
+                      setActiveMode('design');
+                      setPendingChatMessage('請依照架構生成所有頁面');
+                    }}
+                    width={chatPaneWidth}
+                  />
                 </div>
               ) : mobileDesignSurface === 'spec' ? (
                 <div style={styles.specPanelMobile}>
@@ -1540,7 +1532,29 @@ export default function WorkspacePage() {
             <div style={styles.chatPaneWrapper}>
               {isReadOnly && <div style={styles.readOnlyOverlay} data-testid="readonly-overlay" />}
               <div style={{ ...styles.chatPane, width: focusMode ? 0 : chatPaneWidth, ...(focusMode ? { overflow: 'hidden', borderRight: 'none' } : {}) }}>
-                {renderWorkspaceLeftPane()}
+                <ContextPanel
+                  activeMode={activeMode}
+                  projectId={project.id}
+                  messages={messages}
+                  onNewMessages={handleNewMessages}
+                  onHtmlGenerated={handleHtmlGenerated}
+                  html={html}
+                  onSaved={checkDesignActive}
+                  onInjectStyles={injectStyles}
+                  onSaveStyles={handleSaveStyles}
+                  pendingMessage={pendingChatMessage}
+                  onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                  hasPrototype={!!html}
+                  selectedElement={selectedElement}
+                  onClearSelectedElement={() => setSelectedElement(null)}
+                  onSendMessage={handleSendFromContextPanel}
+                  onSwitchToDesign={() => setActiveMode('design')}
+                  onSwitchToDesignAndGenerate={() => {
+                    setActiveMode('design');
+                    setPendingChatMessage('請依照架構生成所有頁面');
+                  }}
+                  width={chatPaneWidth}
+                />
               </div>
             </div>
             {/* Resize handle for chat pane */}
