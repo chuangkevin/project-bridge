@@ -816,16 +816,16 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       {chatOnlyMode && (
         <div style={{
           padding: '8px 16px',
-          background: '#eff6ff',
-          borderBottom: '1px solid #bfdbfe',
+          background: 'var(--accent-subtle)',
+          borderBottom: '1px solid var(--border-accent)',
           fontSize: '13px',
-          color: '#1e40af',
+          color: 'var(--text-accent)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
           <span>💬 顧問模式 — 跟 AI 架構師對話，不生成 UI</span>
-          <button onClick={() => setChatOnlyMode(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: '12px' }}>
+          <button onClick={() => setChatOnlyMode(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '12px' }}>
             切換回設計模式
           </button>
         </div>
@@ -836,7 +836,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
         <div style={styles.generationProgress} data-testid="generation-progress">
           {generationPhase === 'parallel' ? (
             <div style={{ padding: '4px 0' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#8E6FA7' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--accent)' }}>
                 {Object.values(pageProgress).filter(s => s === 'done').length > 0
                   ? `${Object.values(pageProgress).filter(s => s === 'done').length}/${Object.keys(pageProgress).length} 頁面完成`
                   : parallelMessage || `並行生成 ${Object.keys(pageProgress).length} 個頁面...`}
@@ -845,13 +845,13 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {Object.entries(pageProgress).map(([page, status]) => (
                     <div key={page} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                      <span style={{ width: 14, textAlign: 'center', color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'started' ? '#3b82f6' : '#94a3b8' }}>
+                      <span style={{ width: 14, textAlign: 'center', color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'started' ? 'var(--accent)' : 'var(--text-muted)' }}>
                         {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'started' ? '●' : '○'}
                       </span>
-                      <span style={{ color: status === 'started' ? '#3b82f6' : status === 'done' ? '#22c55e' : '#64748b', fontWeight: status === 'started' ? 600 : 400 }}>
+                      <span style={{ color: status === 'started' ? 'var(--accent)' : status === 'done' ? '#22c55e' : 'var(--text-muted)', fontWeight: status === 'started' ? 600 : 400 }}>
                         {page}
                       </span>
-                      <span style={{ color: '#94a3b8', fontSize: 10 }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
                         {pageDevNames[page] || (status === 'done' ? '完成' : status === 'error' ? '失敗' : status === 'started' ? '生成中...' : '等待')}
                       </span>
                     </div>
@@ -871,7 +871,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   const stepStyle: React.CSSProperties = {
                     ...styles.generationStep,
                     fontWeight: isActive ? 700 : 400,
-                    color: isActive ? '#8E6FA7' : isPast ? '#22c55e' : '#94a3b8',
+                    color: isActive ? 'var(--accent)' : isPast ? '#22c55e' : 'var(--text-muted)',
                   };
                   return (
                     <span key={phase} style={stepStyle}>
@@ -883,13 +883,13 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               <div style={styles.generationBarTrack}>
                 {(() => {
                   const fillWidth = generationPhase === 'analyzing' ? '25%' : generationPhase === 'planning' ? '50%' : generationPhase === 'generating' ? '75%' : '100%';
-                  const barFillStyle: React.CSSProperties = { ...styles.generationBarFill, width: fillWidth, backgroundColor: '#8E6FA7' };
+                  const barFillStyle: React.CSSProperties = { ...styles.generationBarFill, width: fillWidth, backgroundColor: 'var(--accent)' };
                   return <div style={barFillStyle} />;
                 })()}
               </div>
               {/* Token counter */}
               {tokenCount > 0 && (
-                <div style={{ fontSize: 11, color: '#8E6FA7', textAlign: 'right' as const, padding: '4px 0 0 0' }}>
+                <div style={{ fontSize: 11, color: 'var(--accent)', textAlign: 'right' as const, padding: '4px 0 0 0' }}>
                   約 {tokenCount.toLocaleString()} 字
                 </div>
               )}
@@ -918,12 +918,12 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                     <>
                       <div style={styles.todoList}>
                         {todoItems.map(item => {
-                          const color = item.status === 'completed' ? '#22c55e' : item.status === 'in_progress' ? '#3b82f6' : '#94a3b8';
+                          const color = item.status === 'completed' ? '#22c55e' : item.status === 'in_progress' ? 'var(--accent)' : 'var(--text-muted)';
                           const icon = item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○';
                           return (
                             <div key={item.id} style={{ ...styles.todoRow, ...(item.status === 'completed' ? styles.todoRowCompleted : {}) }}>
                               <span style={{ ...styles.todoIcon, color }}>{icon}</span>
-                              <span style={{ ...styles.todoText, color: item.status === 'pending' ? '#64748b' : '#1e293b' }}>{item.label}</span>
+                              <span style={{ ...styles.todoText, color: item.status === 'pending' ? 'var(--text-muted)' : 'var(--text-primary)' }}>{item.label}</span>
                             </div>
                           );
                         })}
@@ -955,7 +955,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               />
               <span style={{
                 ...styles.toggleSlider,
-                backgroundColor: artStyle.applyStyle ? '#3b82f6' : '#cbd5e1',
+                backgroundColor: artStyle.applyStyle ? 'var(--accent)' : 'var(--border-secondary)',
               }} />
             </label>
           </div>
@@ -967,8 +967,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       <div
         style={{
           ...styles.dropZone,
-          borderColor: dragOver ? '#3b82f6' : '#cbd5e1',
-          backgroundColor: dragOver ? '#eff6ff' : '#f8fafc',
+          borderColor: dragOver ? 'var(--accent)' : 'var(--border-secondary)',
+          backgroundColor: dragOver ? 'var(--accent-subtle)' : 'var(--bg-secondary)',
         }}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -1162,21 +1162,21 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
           </div>
         )}
         {variantSelection && (
-          <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', margin: '8px 0' }}>
-            <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '12px', color: '#1e293b' }}>
+          <div style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: '12px', border: '1px solid var(--border-primary)', margin: '8px 0' }}>
+            <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '12px', color: 'var(--text-primary)' }}>
               📋 「{variantSelection.page}」有 {variantSelection.variants.length} 個方案，請選擇：
             </div>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               {variantSelection.variants.map(v => (
                 <div key={v.id} style={{
-                  flex: '1 1 200px', maxWidth: '300px', border: '1px solid #e2e8f0', borderRadius: '8px',
-                  overflow: 'hidden', background: '#fff', cursor: 'pointer',
+                  flex: '1 1 200px', maxWidth: '300px', border: '1px solid var(--border-primary)', borderRadius: '8px',
+                  overflow: 'hidden', background: 'var(--bg-card)', cursor: 'pointer',
                   transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(59,130,246,0.15)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#e2e8f0'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(124,92,191,0.2)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-primary)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
                 >
-                  <div style={{ height: '180px', overflow: 'hidden', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
+                  <div style={{ height: '180px', overflow: 'hidden', borderBottom: '1px solid var(--border-subtle)', position: 'relative' }}>
                     <iframe
                       srcDoc={`<!DOCTYPE html><html><head><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:14px;color:#1f2937;background:#f9fafb;padding:16px}.container{max-width:100%}.card{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px}.btn-primary{background:#3b82f6;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px}.badge{display:inline-block;padding:2px 8px;font-size:11px;border-radius:4px;background:#eff6ff;color:#3b82f6}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:13px}th{background:#f9fafb;font-weight:600}</style></head><body>${v.html}</body></html>`}
                       sandbox="allow-scripts"
@@ -1189,7 +1189,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                     />
                   </div>
                   <div style={{ padding: '10px 12px' }}>
-                    <div style={{ fontWeight: 600, fontSize: '13px', color: '#374151' }}>{v.label}</div>
+                    <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>{v.label}</div>
                     <button
                       type="button"
                       onClick={async () => {
@@ -1207,7 +1207,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                       }}
                       style={{
                         marginTop: '8px', width: '100%', padding: '8px',
-                        background: '#3b82f6', color: '#fff', border: 'none',
+                        background: 'linear-gradient(90deg, var(--accent-grad-start), var(--accent-grad-end))', color: '#fff', border: 'none',
                         borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer',
                       }}
                     >
@@ -1401,7 +1401,7 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                   <span style={styles.fileName}>{f.filename}</span>
                 )}
                 {f.analysisStatus === 'analyzing' && (
-                  <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 500 }} data-testid="analysis-badge">◌ 分析中...</span>
+                  <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500 }} data-testid="analysis-badge">◌ 分析中...</span>
                 )}
                 {f.analysisStatus === 'ready' && (
                   <button
@@ -1483,8 +1483,8 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
                 <select
                   style={{
                     ...styles.labelSelect,
-                    borderColor: f.intent ? (INTENT_OPTIONS.find(o => o.value === f.intent)?.color || '#cbd5e1') : '#cbd5e1',
-                    color: f.intent ? (INTENT_OPTIONS.find(o => o.value === f.intent)?.color || '#475569') : '#475569',
+                    borderColor: f.intent ? (INTENT_OPTIONS.find(o => o.value === f.intent)?.color || 'var(--border-secondary)') : 'var(--border-secondary)',
+                    color: f.intent ? (INTENT_OPTIONS.find(o => o.value === f.intent)?.color || 'var(--text-secondary)') : 'var(--text-secondary)',
                     fontWeight: f.intent ? 600 : 400,
                   }}
                   value={f.intent || ''}
@@ -1558,9 +1558,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
       )}
 
       {selectedElement && (
-        <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '6px', margin: '0 8px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+        <div style={{ padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-accent)', borderRadius: '6px', margin: '0 8px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: 'var(--text-primary)' }}>
           <span>🎯 已選取：<strong>&lt;{selectedElement.tagName}&gt;</strong> [{selectedElement.bridgeId}]</span>
-          <button type="button" onClick={() => onClearSelectedElement?.()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#92400e', padding: '0 4px' }}>✕</button>
+          <button type="button" onClick={() => onClearSelectedElement?.()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'var(--text-muted)', padding: '0 4px' }}>✕</button>
         </div>
       )}
       <div style={styles.inputArea}>
@@ -1643,9 +1643,9 @@ export default function ChatPanel({ projectId, messages, onNewMessages, onHtmlGe
               padding: '6px 10px',
               fontSize: '11px',
               fontWeight: chatOnlyMode ? 700 : 500,
-              color: chatOnlyMode ? '#fff' : '#6b7280',
-              background: chatOnlyMode ? '#3b82f6' : 'var(--bg-hover, #f1f5f9)',
-              border: chatOnlyMode ? 'none' : '1px solid var(--border-primary, #e2e8f0)',
+              color: chatOnlyMode ? '#fff' : 'var(--text-muted)',
+              background: chatOnlyMode ? 'linear-gradient(90deg, var(--accent-grad-start), var(--accent-grad-end))' : 'var(--bg-hover)',
+              border: chatOnlyMode ? 'none' : '1px solid var(--border-primary)',
               borderRadius: '6px',
               cursor: 'pointer',
               transition: 'all 0.15s',
@@ -1818,8 +1818,9 @@ const styles: Record<string, React.CSSProperties> = {
   userBubble: {
     maxWidth: '85%',
     padding: '10px 14px',
-    backgroundColor: '#3b82f6',
-    color: '#ffffff',
+    backgroundColor: 'var(--accent-glass)',
+    border: '1px solid var(--border-accent)',
+    color: 'var(--text-primary)',
     borderRadius: '14px 14px 4px 14px',
     fontSize: '14px',
     lineHeight: '1.5',
@@ -1844,10 +1845,10 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '100%',
     width: '100%',
     padding: '16px 20px',
-    backgroundColor: '#f8fafc',
-    color: '#1e293b',
+    backgroundColor: 'var(--bg-elevated)',
+    color: 'var(--text-primary)',
     borderRadius: '8px',
-    borderLeft: '3px solid #3b82f6',
+    borderLeft: '3px solid var(--accent)',
     fontSize: '14px',
     lineHeight: '1.7',
     fontFamily: 'inherit',
@@ -1880,17 +1881,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   answerLabel: {
     fontSize: '11px',
-    color: '#3b82f6',
+    color: 'var(--accent)',
     fontWeight: 600 as const,
     marginBottom: '4px',
     display: 'block',
   },
   cursor: {
     animation: 'blink 1s infinite',
-    color: '#64748b',
+    color: 'var(--text-muted)',
   },
   thinking: {
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     fontStyle: 'italic',
   },
   errorRow: {
@@ -1948,7 +1949,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     padding: 0,
-    color: '#2563eb',
+    color: 'var(--text-accent)',
     textDecoration: 'underline',
     textDecorationColor: 'transparent',
     transition: 'text-decoration-color 0.15s',
@@ -1967,8 +1968,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   extractedBadge: {
     padding: '1px 6px',
-    backgroundColor: '#dbeafe',
-    color: '#2563eb',
+    backgroundColor: 'var(--accent-subtle)',
+    color: 'var(--text-accent)',
     border: 'none',
     borderRadius: '8px',
     fontSize: '10px',
@@ -1995,8 +1996,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   pageCountBadge: {
     padding: '1px 6px',
-    backgroundColor: '#f1f5f9',
-    color: '#475569',
+    backgroundColor: 'var(--bg-elevated)',
+    color: 'var(--text-muted)',
     borderRadius: '8px',
     fontSize: '10px',
     fontWeight: 500,
@@ -2024,7 +2025,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     border: 'none',
     backgroundColor: 'transparent',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     cursor: 'pointer',
     fontSize: '12px',
     padding: 0,
@@ -2032,14 +2033,14 @@ const styles: Record<string, React.CSSProperties> = {
   uploadProgress: {
     margin: '0 16px 4px',
     height: '3px',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: 'var(--border-primary)',
     borderRadius: '2px',
     overflow: 'hidden',
     flexShrink: 0,
   },
   uploadBar: {
     height: '100%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: 'var(--accent)',
     borderRadius: '2px',
     transition: 'width 0.2s',
   },
@@ -2085,7 +2086,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3b82f6',
+    background: 'linear-gradient(90deg, var(--accent-grad-start), var(--accent-grad-end))',
     border: 'none',
     borderRadius: '10px',
     cursor: 'pointer',
@@ -2147,7 +2148,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '6px 14px',
     border: 'none',
     borderRadius: '8px',
-    backgroundColor: '#3b82f6',
+    background: 'linear-gradient(90deg, var(--accent-grad-start), var(--accent-grad-end))',
     color: '#ffffff',
     fontSize: '13px',
     fontWeight: 600,
@@ -2185,7 +2186,7 @@ const styles: Record<string, React.CSSProperties> = {
   historyChipRemove: {
     padding: '3px 6px 3px 2px',
     fontSize: '10px',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     background: 'none',
     border: 'none',
     cursor: 'pointer',
@@ -2207,13 +2208,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   generationBarTrack: {
     height: '3px',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: 'var(--border-primary)',
     borderRadius: '2px',
     overflow: 'hidden',
   },
   generationBarFill: {
     height: '100%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: 'var(--accent)',
     borderRadius: '2px',
     transition: 'width 0.5s ease',
   },
@@ -2419,13 +2420,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   genSettingsSlider: {
     width: '100%',
-    accentColor: '#3b82f6',
+    accentColor: 'var(--accent)',
   },
   genSettingsSliderLabels: {
     display: 'flex',
     justifyContent: 'space-between',
     fontSize: '10px',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
   },
   genSettingsSeedTextarea: {
     width: '100%',
