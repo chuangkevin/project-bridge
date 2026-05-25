@@ -804,13 +804,13 @@ export default function WorkspacePage() {
     display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden'
   };
   const tabBarStyle: React.CSSProperties = {
-    display: 'flex', borderBottom: '1px solid #e5e7eb', background: '#fff', padding: '0 16px', flexShrink: 0
+    display: 'flex', borderBottom: '1px solid var(--border-primary)', background: 'var(--bg-primary)', padding: '0 16px', flexShrink: 0
   };
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
     padding: '10px 20px', cursor: 'pointer',
     fontWeight: active ? 600 : 400,
-    color: active ? '#8E6FA7' : '#666666',
-    background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: active ? '2px solid #8E6FA7' : '2px solid transparent',
+    color: active ? 'var(--text-accent)' : 'var(--text-muted)',
+    background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
     fontSize: 14, transition: 'all 0.15s'
   });
 
@@ -819,9 +819,9 @@ export default function WorkspacePage() {
     minHeight: '40px',
     padding: '8px 10px',
     borderRadius: '10px',
-    border: active ? '1px solid #8E6FA7' : '1px solid var(--border-primary)',
-    backgroundColor: active ? 'color-mix(in srgb, #8E6FA7 12%, var(--bg-card))' : 'var(--bg-card)',
-    color: active ? '#8E6FA7' : 'var(--text-secondary)',
+    border: active ? '1px solid var(--accent)' : '1px solid var(--border-primary)',
+    backgroundColor: active ? 'var(--accent-glass)' : 'var(--bg-card)',
+    color: active ? 'var(--text-accent)' : 'var(--text-secondary)',
     fontSize: 12,
     fontWeight: 600,
     cursor: 'pointer',
@@ -1045,14 +1045,14 @@ export default function WorkspacePage() {
         <button
           type="button"
           onClick={() => navigate('/')}
-          style={{ background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', cursor: 'pointer', padding: '6px 12px', color: '#666', display: 'flex', alignItems: 'center', gap: 4, marginRight: 8, fontSize: 13, flexShrink: 0 }}
+          style={{ background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', cursor: 'pointer', padding: '6px 12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginRight: 8, fontSize: 13, flexShrink: 0 }}
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M10 12L6 8l4-4" />
           </svg>
           專案列表
         </button>
-        <span style={{ color: '#e5e7eb', marginRight: 8, fontSize: 16 }}>|</span>
+        <span style={{ color: 'var(--border-primary)', marginRight: 8, fontSize: 16 }}>|</span>
         <div role="tablist" style={{ display: 'flex' }}>
           <button
             type="button"
@@ -1217,8 +1217,8 @@ export default function WorkspacePage() {
                   top: '100%',
                   right: 0,
                   marginTop: 4,
-                  background: '#1e1e2e',
-                  border: '1px solid #3a3a4a',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-secondary)',
                   borderRadius: 6,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
                   zIndex: 1000,
@@ -1227,7 +1227,7 @@ export default function WorkspacePage() {
                 }}
                 onMouseLeave={() => { if (!exportingFramework) setShowExportMenu(false); }}
               >
-                <div style={{ padding: '6px 14px', fontSize: 11, color: '#888', borderBottom: '1px solid #3a3a4a', textTransform: 'uppercase', letterSpacing: 1 }}>
+                <div style={{ padding: '6px 14px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>
                   匯出為框架專案
                 </div>
                 {([
@@ -1247,14 +1247,14 @@ export default function WorkspacePage() {
                       padding: '8px 14px',
                       background: 'none',
                       border: 'none',
-                      color: exportingFramework === fw.key ? '#a78bfa' : '#e0e0f0',
+                      color: exportingFramework === fw.key ? 'var(--text-accent)' : 'var(--text-primary)',
                       fontSize: 13,
                       textAlign: 'left',
                       cursor: exportingFramework ? 'wait' : 'pointer',
                       whiteSpace: 'nowrap',
                       opacity: exportingFramework && exportingFramework !== fw.key ? 0.5 : 1,
                     }}
-                    onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = '#2a2a3e'; }}
+                    onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                     onClick={() => handleExportFramework(fw.key)}
                   >
@@ -1262,7 +1262,7 @@ export default function WorkspacePage() {
                     {exportingFramework === fw.key && ' 匯出中...'}
                   </button>
                 ))}
-                <div style={{ borderTop: '1px solid #3a3a4a', marginTop: 2 }} />
+                <div style={{ borderTop: '1px solid var(--border-secondary)', marginTop: 2 }} />
                 <button
                   type="button"
                   disabled={!!exportingFramework}
@@ -1273,19 +1273,19 @@ export default function WorkspacePage() {
                     padding: '8px 14px',
                     background: 'none',
                     border: 'none',
-                    color: exportingFramework === 'html' ? '#a78bfa' : '#e0e0f0',
+                    color: exportingFramework === 'html' ? 'var(--text-accent)' : 'var(--text-primary)',
                     fontSize: 13,
                     textAlign: 'left',
                     cursor: exportingFramework ? 'wait' : 'pointer',
                     whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = '#2a2a3e'; }}
+                  onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   onClick={() => handleExportFramework('html')}
                 >
                   {exportingFramework === 'html' ? '\u23F3 匯出中...' : '\uD83D\uDCC4 匯出 HTML 專案'}
                 </button>
-                <div style={{ borderTop: '1px solid #3a3a4a' }} />
+                <div style={{ borderTop: '1px solid var(--border-secondary)' }} />
                 <button
                   type="button"
                   style={{
@@ -1294,13 +1294,13 @@ export default function WorkspacePage() {
                     padding: '8px 14px',
                     background: 'none',
                     border: 'none',
-                    color: '#e0e0f0',
+                    color: 'var(--text-primary)',
                     fontSize: 13,
                     textAlign: 'left',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   onClick={() => { handleExport(); setShowExportMenu(false); }}
                 >
@@ -1314,13 +1314,13 @@ export default function WorkspacePage() {
                     padding: '8px 14px',
                     background: 'none',
                     border: 'none',
-                    color: '#e0e0f0',
+                    color: 'var(--text-primary)',
                     fontSize: 13,
                     textAlign: 'left',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   onClick={() => { handleOpenInNewTab(); setShowExportMenu(false); }}
                 >
@@ -1334,13 +1334,13 @@ export default function WorkspacePage() {
                     padding: '8px 14px',
                     background: 'none',
                     border: 'none',
-                    color: '#e0e0f0',
+                    color: 'var(--text-primary)',
                     fontSize: 13,
                     textAlign: 'left',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#2a2a3e')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                   onClick={async () => {
                     setShowExportMenu(false);
@@ -1391,7 +1391,7 @@ export default function WorkspacePage() {
             type="button"
             style={{
               ...styles.annotateBtn,
-              ...(interactionMode === 'api-binding' ? { backgroundColor: '#eff6ff', borderColor: '#2563eb', color: '#2563eb' } : {}),
+              ...(interactionMode === 'api-binding' ? { backgroundColor: 'var(--accent-glass)', borderColor: 'var(--accent)', color: 'var(--text-accent)' } : {}),
               ...(!html ? { opacity: 0.5 } : {}),
             }}
             onClick={() => {
@@ -1414,7 +1414,7 @@ export default function WorkspacePage() {
             type="button"
             style={{
               ...styles.annotateBtn,
-              ...(interactionMode === 'visual-edit' ? { backgroundColor: '#faf5ff', borderColor: '#8E6FA7', color: '#8E6FA7' } : {}),
+              ...(interactionMode === 'visual-edit' ? { backgroundColor: 'var(--accent-glass)', borderColor: 'var(--accent)', color: 'var(--text-accent)' } : {}),
               ...(!html ? { opacity: 0.5 } : {}),
             }}
             onClick={() => {
@@ -1433,7 +1433,7 @@ export default function WorkspacePage() {
             type="button"
             style={{
               ...styles.annotateBtn,
-              ...(interactionMode === 'element-select' ? { backgroundColor: '#fffbeb', borderColor: '#f59e0b', color: '#b45309' } : {}),
+              ...(interactionMode === 'element-select' ? { backgroundColor: 'var(--accent-glass)', borderColor: 'var(--accent)', color: 'var(--text-accent)' } : {}),
               ...(!html ? { opacity: 0.5 } : {}),
             }}
             onClick={() => {
@@ -1462,7 +1462,7 @@ export default function WorkspacePage() {
               style={{
                 ...styles.shareBtn,
                 ...(shareEnabled && showSharePanel
-                  ? { backgroundColor: '#eff6ff', borderColor: '#3b82f6', color: '#2563eb' }
+                  ? { backgroundColor: 'var(--accent-glass)', borderColor: 'var(--accent)', color: 'var(--text-accent)' }
                   : {}),
               }}
               onClick={handleShare}
@@ -1483,8 +1483,8 @@ export default function WorkspacePage() {
                   position: 'absolute',
                   top: 'calc(100% + 6px)',
                   right: 0,
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-primary)',
                   borderRadius: '10px',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                   zIndex: 1100,
@@ -1501,8 +1501,8 @@ export default function WorkspacePage() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
+                    background: 'var(--bg-input)',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '6px',
                     padding: '6px 10px',
                     overflow: 'hidden',
@@ -1513,7 +1513,7 @@ export default function WorkspacePage() {
                     style={{
                       flex: 1,
                       fontSize: '12px',
-                      color: '#64748b',
+                      color: 'var(--text-muted)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
@@ -1529,10 +1529,10 @@ export default function WorkspacePage() {
                     alignItems: 'center',
                     gap: '6px',
                     padding: '7px 12px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '7px',
-                    backgroundColor: copyLinkFeedback ? '#f0fdf4' : '#f8fafc',
-                    color: copyLinkFeedback ? '#16a34a' : '#374151',
+                    backgroundColor: copyLinkFeedback ? '#f0fdf4' : 'var(--bg-elevated)',
+                    color: copyLinkFeedback ? '#16a34a' : 'var(--text-secondary)',
                     fontSize: '13px',
                     fontWeight: 500,
                     cursor: 'pointer',
@@ -1552,10 +1552,10 @@ export default function WorkspacePage() {
                     alignItems: 'center',
                     gap: '6px',
                     padding: '7px 12px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--border-primary)',
                     borderRadius: '7px',
-                    backgroundColor: '#f8fafc',
-                    color: '#374151',
+                    backgroundColor: 'var(--bg-elevated)',
+                    color: 'var(--text-secondary)',
                     fontSize: '13px',
                     fontWeight: 500,
                     textDecoration: 'none',
@@ -1573,7 +1573,7 @@ export default function WorkspacePage() {
                     padding: '7px 12px',
                     border: '1px solid #fecaca',
                     borderRadius: '7px',
-                    backgroundColor: '#fff5f5',
+                    backgroundColor: 'var(--bg-elevated)',
                     color: '#dc2626',
                     fontSize: '13px',
                     fontWeight: 500,
@@ -1639,12 +1639,12 @@ export default function WorkspacePage() {
       )}
       {/* API binding mode banner */}
       {interactionMode === 'api-binding' && (
-        <div style={{ ...styles.annotationBanner, background: '#eff6ff', color: '#1e40af', borderBottom: '2px solid #2563eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ ...styles.annotationBanner, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>API Binding Mode — Click any element to define its API endpoint binding</span>
           <button
             type="button"
             onClick={() => setShowPageApiPanel(true)}
-            style={{ background: '#8E6FA7', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            style={{ background: 'linear-gradient(90deg, var(--accent-grad-start), var(--accent-grad-end))', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
             data-testid="open-page-api-btn"
           >
             Page-level API
@@ -1814,7 +1814,7 @@ export default function WorkspacePage() {
               type="button"
               onClick={handleQuickRegen}
               disabled={quickRegen.loading || !quickRegen.instruction.trim()}
-              style={{ ...styles.quickRegenSubmit, background: quickRegen.loading ? '#94a3b8' : '#3b82f6' }}
+              style={{ ...styles.quickRegenSubmit, background: quickRegen.loading ? 'var(--text-muted)' : 'linear-gradient(90deg, var(--accent-grad-start), var(--accent-grad-end))' }}
             >
               {quickRegen.loading ? '⟳ 生成中...' : '⚡ 修改'}
             </button>
@@ -2030,11 +2030,12 @@ export default function WorkspacePage() {
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    backgroundColor: 'var(--bg-primary)',
+    flexDirection: 'column' as const,
+    height: '100vh',
+    overflow: 'hidden',
+    backgroundColor: 'var(--bg-root)',
     color: 'var(--text-primary)',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   loadingContainer: {
     display: 'flex',
@@ -2142,7 +2143,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '4px 10px',
     border: 'none',
     borderRadius: '6px',
-    backgroundColor: '#8E6FA7',
+    backgroundColor: 'var(--accent)',
     color: '#ffffff',
     fontSize: '12px',
     fontWeight: 500,
@@ -2173,7 +2174,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     fontWeight: 600,
     color: 'var(--text-primary)',
-    border: '1px solid #3b82f6',
+    border: '1px solid var(--accent)',
     borderRadius: '4px',
     padding: '2px 6px',
     outline: 'none',
@@ -2207,8 +2208,8 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   annotateBtnActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
+    backgroundColor: 'var(--accent)',
+    borderColor: 'var(--accent)',
     color: '#ffffff',
   },
   shareBtn: {
@@ -2228,6 +2229,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flex: 1,
     overflow: 'hidden',
+    backgroundColor: 'var(--bg-root)',
   },
   bodyMobile: {
     display: 'flex',
@@ -2266,6 +2268,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
+    backgroundColor: 'var(--glass-context)',
+    backdropFilter: 'var(--glass-blur-md)',
   },
   chatPaneMobile: {
     flex: 1,
@@ -2296,7 +2300,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderBottom: '2px solid transparent',
     backgroundColor: 'transparent',
-    color: 'var(--text-secondary)',
+    color: 'var(--text-muted)',
     fontSize: '13px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -2304,8 +2308,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'color 0.15s, border-color 0.15s',
   },
   tabBtnActive: {
-    color: '#3b82f6',
-    borderBottom: '2px solid #3b82f6',
+    color: 'var(--text-accent)',
+    borderBottom: '2px solid var(--accent)',
   },
   tabBtnDisabled: {
     opacity: 0.4,
@@ -2321,8 +2325,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     padding: '3px 8px',
-    backgroundColor: '#d1fae5',
-    color: '#065f46',
+    backgroundColor: 'var(--accent-glass)',
+    color: 'var(--text-accent)',
     borderRadius: '12px',
     fontSize: '12px',
     fontWeight: 600,
@@ -2389,9 +2393,9 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   pageSidebarItemActive: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-    color: '#1d4ed8',
+    backgroundColor: 'var(--accent-glass)',
+    borderColor: 'var(--accent)',
+    color: 'var(--text-accent)',
   },
   pageSidebarActionBtnMobile: {
     width: '30px',
@@ -2433,7 +2437,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   quickRegenTag: {
     fontSize: '11px',
-    background: '#f1f5f9',
+    background: 'var(--bg-elevated)',
     padding: '1px 4px',
     borderRadius: '3px',
   },
@@ -2441,7 +2445,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     fontSize: '16px',
     lineHeight: 1,
   },
@@ -2482,16 +2486,16 @@ const styles: Record<string, React.CSSProperties> = {
   quickRegenAnnotateBtn: {
     padding: '7px 10px',
     borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    background: '#fff',
-    color: '#64748b',
+    border: '1px solid var(--border-primary)',
+    background: 'var(--bg-elevated)',
+    color: 'var(--text-muted)',
     cursor: 'pointer',
     fontSize: '12px',
   },
   quickRegenSpecIndicator: {
     fontSize: '11px',
-    color: '#0369a1',
-    backgroundColor: '#e0f2fe',
+    color: 'var(--text-accent)',
+    backgroundColor: 'var(--accent-glass)',
     borderRadius: '6px',
     padding: '3px 8px',
     marginTop: '6px',
@@ -2499,14 +2503,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   quickRegenHint: {
     fontSize: '11px',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     marginTop: '6px',
     textAlign: 'center' as const,
   },
   quickRegenTextPreview: {
     display: 'block',
     fontSize: '11px',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     fontWeight: 400,
     marginTop: '2px',
     overflow: 'hidden',
@@ -2514,16 +2518,16 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap' as const,
   },
   annotationBanner: {
-    background: '#eff6ff',
-    borderBottom: '1px solid #bfdbfe',
+    background: 'var(--accent-glass)',
+    borderBottom: '1px solid var(--accent)',
     padding: '6px 16px',
     fontSize: '12px',
-    color: '#1d4ed8',
+    color: 'var(--text-accent)',
     textAlign: 'center' as const,
   },
   kbd: {
-    background: '#dbeafe',
-    border: '1px solid #93c5fd',
+    background: 'var(--accent-glass)',
+    border: '1px solid var(--border-accent)',
     borderRadius: '3px',
     padding: '1px 5px',
     fontSize: '11px',
@@ -2546,8 +2550,8 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1,
   },
   deviceFrameBtnActive: {
-    backgroundColor: '#eff6ff',
-    color: '#3b82f6',
+    backgroundColor: 'var(--accent-glass)',
+    color: 'var(--text-accent)',
   },
   previewScroll: {
     flex: 1,
@@ -2619,11 +2623,11 @@ const styles: Record<string, React.CSSProperties> = {
   regenHistoryChip: {
     flexShrink: 0,
     padding: '3px 8px',
-    backgroundColor: '#f1f5f9',
-    border: '1px solid #e2e8f0',
+    backgroundColor: 'var(--bg-elevated)',
+    border: '1px solid var(--border-primary)',
     borderRadius: '999px',
     fontSize: '12px',
-    color: '#475569',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
     whiteSpace: 'nowrap' as const,
     maxWidth: '200px',
@@ -2757,7 +2761,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     fontSize: '16px',
     lineHeight: 1,
     padding: '2px 4px',
@@ -2770,33 +2774,33 @@ const styles: Record<string, React.CSSProperties> = {
   shortcutsThKey: {
     textAlign: 'left' as const,
     padding: '6px 12px 6px 0',
-    color: '#64748b',
+    color: 'var(--text-muted)',
     fontWeight: 600,
     fontSize: '12px',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
-    borderBottom: '1px solid #e2e8f0',
+    borderBottom: '1px solid var(--border-primary)',
   },
   shortcutsThFn: {
     textAlign: 'left' as const,
     padding: '6px 0',
-    color: '#64748b',
+    color: 'var(--text-muted)',
     fontWeight: 600,
     fontSize: '12px',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
-    borderBottom: '1px solid #e2e8f0',
+    borderBottom: '1px solid var(--border-primary)',
   },
   shortcutsTdKey: {
     padding: '8px 12px 8px 0',
     verticalAlign: 'middle' as const,
-    borderBottom: '1px solid #f1f5f9',
+    borderBottom: '1px solid var(--border-primary)',
   },
   shortcutsTdFn: {
     padding: '8px 0',
-    color: '#334155',
+    color: 'var(--text-primary)',
     verticalAlign: 'middle' as const,
-    borderBottom: '1px solid #f1f5f9',
+    borderBottom: '1px solid var(--border-primary)',
   },
   onboardingCard: {
     position: 'fixed' as const,
@@ -2820,14 +2824,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   onboardingStepLabel: {
     fontSize: '11px',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
   },
   onboardingSkip: {
     background: 'none',
     border: 'none',
     fontSize: '11px',
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     cursor: 'pointer',
     padding: 0,
   },
@@ -2852,7 +2856,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'block',
     width: '100%',
     padding: '8px',
-    backgroundColor: '#3b82f6',
+    background: 'linear-gradient(90deg, var(--accent-grad-start), var(--accent-grad-end))',
     color: '#ffffff',
     border: 'none',
     borderRadius: '6px',
@@ -2866,10 +2870,10 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '6px',
     padding: '6px 12px',
-    border: '1px solid #3b82f6',
+    border: '1px solid var(--accent)',
     borderRadius: '8px',
-    backgroundColor: '#eff6ff',
-    color: '#1d4ed8',
+    backgroundColor: 'var(--accent-glass)',
+    color: 'var(--text-accent)',
     fontSize: '13px',
     fontWeight: 600,
     cursor: 'pointer',
