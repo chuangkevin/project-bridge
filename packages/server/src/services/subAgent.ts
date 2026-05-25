@@ -117,8 +117,10 @@ ${page.constraints}
 Generate the complete page fragment now. Return ONLY the <div class="page"> element with all content inside.`;
 
   try {
+    // 300s: OpenCode does synchronous full-response inference (pseudo-stream) and can
+    // take 60-120s for 8192 tokens on a local server. Gemini responds well within this.
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout generating ${pageName}`)), 60000)
+      setTimeout(() => reject(new Error(`Timeout generating ${pageName}`)), 300000)
     );
     const exec = await Promise.race([
       getProvider().generateWithSelection({

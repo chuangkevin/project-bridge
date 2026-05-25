@@ -1899,6 +1899,13 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
     // ── Phase 2: Actual generation ──
     res.write(`data: ${JSON.stringify({ type: 'phase', phase: 'generating', message: '生成程式碼...' })}\n\n`);
 
+    // SSE heartbeat: OpenCode uses pseudo-stream (full inference before first byte),
+    // which can take 120-300s for 65536 tokens. Without this the browser drops the
+    // SSE connection before the response arrives.
+    const genHeartbeat = setInterval(() => {
+      try { res.write(`: heartbeat\n\n`); } catch { clearInterval(genHeartbeat); }
+    }, 15000);
+
     try {
       // Convert Gemini-shape history (parts: [{text}]) to ai-core ChatMessage[]
       const aiCoreHistory: ChatMessage[] = trimmedHistory.map((h: any) => ({
@@ -1921,6 +1928,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
         },
       });
 
+      clearInterval(genHeartbeat);
       for await (const text of streamExec.stream) {
         if (text) {
           fullResponse += text;
@@ -1929,6 +1937,7 @@ document.addEventListener('DOMContentLoaded', function() { showPage('${finalPage
       }
       console.log(`[chat-generate] provider=${streamExec.selection.provider} model=${streamExec.selection.model}`);
     } catch (err: any) {
+      clearInterval(genHeartbeat);
       console.error('Gemini API error:', err);
       res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
       res.end();

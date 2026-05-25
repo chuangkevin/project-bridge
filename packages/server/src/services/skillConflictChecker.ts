@@ -74,7 +74,7 @@ ${skillsText}
         prompt,
         maxOutputTokens: 2048,
       }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000)),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60000)),
     ]);
 
     const { selection, response } = exec;
