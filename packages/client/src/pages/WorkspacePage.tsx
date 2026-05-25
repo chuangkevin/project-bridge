@@ -21,6 +21,7 @@ import CodeFileTree from '../components/CodeFileTree';
 import { SpecData } from '../components/SpecForm';
 import { useArchStore } from '../stores/useArchStore';
 import ArchitectureTab from '../components/ArchitectureTab';
+import WorkspaceHeader from '../components/WorkspaceHeader';
 // import FigmaExportDialog from '../components/FigmaExportDialog'; // disabled: internal URLs not supported
 
 // Strip [Attached files] block from user message display content
@@ -181,10 +182,6 @@ export default function WorkspacePage() {
   // Onboarding tour state: null = no tour, 0-3 = step index
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
   const prevHtmlRef = useRef<string | null | undefined>(undefined);
-
-  // Inline rename state
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState('');
 
   // Fork state
   const [forking, setForking] = useState(false);
@@ -759,30 +756,6 @@ export default function WorkspacePage() {
     }
   }, [quickRegen, id]);
 
-  const handleStartRename = () => {
-    setNameValue(project?.name ?? '');
-    setEditingName(true);
-  };
-
-  const handleSaveName = async () => {
-    if (!nameValue.trim() || nameValue === project?.name) {
-      setEditingName(false);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/projects/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: nameValue.trim() }),
-      });
-      if (res.ok) {
-        setProject(prev => prev ? { ...prev, name: nameValue.trim() } : null);
-        setToastMsg('已重新命名');
-      }
-    } catch { /* ignore */ }
-    setEditingName(false);
-  };
-
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
@@ -1041,18 +1014,292 @@ export default function WorkspacePage() {
 
   return (
     <div style={workspaceContainerStyle}>
-      <div style={{ ...tabBarStyle, alignItems: 'center' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          style={{ background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', cursor: 'pointer', padding: '6px 12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginRight: 8, fontSize: 13, flexShrink: 0 }}
+      <WorkspaceHeader
+        project={project}
+        user={user}
+        isReadOnly={isReadOnly}
+        forking={forking}
+        onFork={handleFork}
+        onLogout={logout}
+        onShare={handleShare}
+        onExport={() => setShowExportMenu(v => !v)}
+        onToggleShortcuts={() => setShowShortcuts(v => !v)}
+        onNameSave={newName => {
+          setProject(prev => prev ? { ...prev, name: newName } : null);
+          setToastMsg('已重新命名');
+        }}
+        exportingFramework={exportingFramework}
+      />
+
+      {/* Share panel overlay */}
+      {showSharePanel && shareEnabled && project?.share_token && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '52px',
+            right: '16px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: '10px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            zIndex: 1100,
+            minWidth: '280px',
+            padding: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}
+          onMouseLeave={() => setShowSharePanel(false)}
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M10 12L6 8l4-4" />
-          </svg>
-          專案列表
-        </button>
-        <span style={{ color: 'var(--border-primary)', marginRight: 8, fontSize: 16 }}>|</span>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '6px',
+              padding: '6px 10px',
+              overflow: 'hidden',
+            }}
+            title={`${window.location.origin}/share/${project.share_token}`}
+          >
+            <span
+              style={{
+                flex: 1,
+                fontSize: '12px',
+                color: 'var(--text-muted)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {`${window.location.origin}/share/${project.share_token}`}
+            </span>
+          </div>
+          <button
+            type="button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '7px',
+              backgroundColor: copyLinkFeedback ? '#f0fdf4' : 'var(--bg-elevated)',
+              color: copyLinkFeedback ? '#16a34a' : 'var(--text-secondary)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'background 0.15s',
+            }}
+            onClick={handleCopyShareLink}
+            data-testid="copy-share-link-btn"
+          >
+            {copyLinkFeedback ? '✓ 已複製!' : '📋 複製連結'}
+          </button>
+          <a
+            href={`${window.location.origin}/share/${project.share_token}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '7px',
+              backgroundColor: 'var(--bg-elevated)',
+              color: 'var(--text-secondary)',
+              fontSize: '13px',
+              fontWeight: 500,
+              textDecoration: 'none',
+            }}
+            data-testid="open-share-link-btn"
+          >
+            🔗 在新分頁開啟
+          </a>
+          <button
+            type="button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              border: '1px solid #fecaca',
+              borderRadius: '7px',
+              backgroundColor: 'var(--bg-elevated)',
+              color: '#dc2626',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+            onClick={handleStopSharing}
+            data-testid="stop-sharing-btn"
+          >
+            停止分享
+          </button>
+        </div>
+      )}
+
+      {/* Export menu overlay */}
+      {showExportMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '52px',
+            right: '80px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-secondary)',
+            borderRadius: 6,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            zIndex: 1000,
+            minWidth: 210,
+            overflow: 'hidden',
+          }}
+          onMouseLeave={() => { if (!exportingFramework) setShowExportMenu(false); }}
+        >
+          <div style={{ padding: '6px 14px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>
+            匯出為框架專案
+          </div>
+          {([
+            { key: 'react', label: 'React', icon: '⚛️' },
+            { key: 'vue3', label: 'Vue 3', icon: '🟢' },
+            { key: 'nextjs', label: 'Next.js', icon: '▲' },
+            { key: 'nuxt3', label: 'Nuxt 3', icon: '🟩' },
+          ] as const).map(fw => (
+            <button
+              key={fw.key}
+              type="button"
+              disabled={!!exportingFramework}
+              data-testid={`export-${fw.key}`}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 14px',
+                background: 'none',
+                border: 'none',
+                color: exportingFramework === fw.key ? 'var(--text-accent)' : 'var(--text-primary)',
+                fontSize: 13,
+                textAlign: 'left',
+                cursor: exportingFramework ? 'wait' : 'pointer',
+                whiteSpace: 'nowrap',
+                opacity: exportingFramework && exportingFramework !== fw.key ? 0.5 : 1,
+              }}
+              onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              onClick={() => handleExportFramework(fw.key)}
+            >
+              {exportingFramework === fw.key ? '⏳' : fw.icon} {fw.label}
+              {exportingFramework === fw.key && ' 匯出中...'}
+            </button>
+          ))}
+          <div style={{ borderTop: '1px solid var(--border-secondary)', marginTop: 2 }} />
+          <button
+            type="button"
+            disabled={!!exportingFramework}
+            data-testid="export-html"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 14px',
+              background: 'none',
+              border: 'none',
+              color: exportingFramework === 'html' ? 'var(--text-accent)' : 'var(--text-primary)',
+              fontSize: 13,
+              textAlign: 'left',
+              cursor: exportingFramework ? 'wait' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            onClick={() => handleExportFramework('html')}
+          >
+            {exportingFramework === 'html' ? '⏳ 匯出中...' : '📄 匯出 HTML 專案'}
+          </button>
+          <div style={{ borderTop: '1px solid var(--border-secondary)' }} />
+          <button
+            type="button"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 14px',
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+              textAlign: 'left',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            onClick={() => { handleExport(); setShowExportMenu(false); }}
+          >
+            📥 下載原始 HTML
+          </button>
+          <button
+            type="button"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 14px',
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+              textAlign: 'left',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            onClick={() => { handleOpenInNewTab(); setShowExportMenu(false); }}
+          >
+            🔗 在新分頁開啟
+          </button>
+          <button
+            type="button"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 14px',
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+              textAlign: 'left',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            onClick={async () => {
+              setShowExportMenu(false);
+              try {
+                const res = await fetch(`/api/projects/${id}/api-bindings/export`);
+                if (res.ok) {
+                  const data = await res.json();
+                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${project!.name.replace(/[^a-z0-9一-鿿]/gi, '-')}-api-bindings.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } else {
+                  setToastMsg('匯出失敗');
+                }
+              } catch { setToastMsg('匯出失敗'); }
+            }}
+            data-testid="export-api-bindings"
+          >
+            📋 API Bindings (JSON)
+          </button>
+        </div>
+      )}
+
+      <div style={{ ...tabBarStyle, alignItems: 'center' }}>
         <div role="tablist" style={{ display: 'flex' }}>
           <button
             type="button"
@@ -1115,29 +1362,6 @@ export default function WorkspacePage() {
     <div style={styles.container}>
       {/* Toolbar */}
       <div style={{ ...styles.toolbar, ...(isMobileViewport ? styles.toolbarMobile : {}), ...(focusMode ? { display: 'none' } : {}) }}>
-        <div style={{ ...styles.toolbarLeft, ...(isMobileViewport ? styles.toolbarLeftMobile : {}) }}>
-          <button style={styles.homeBtn} onClick={() => navigate('/')} title="首頁" data-testid="home-btn">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7" />
-            </svg>
-          </button>
-          {editingName ? (
-            <input
-              autoFocus
-              title="專案名稱"
-              placeholder="專案名稱"
-              value={nameValue}
-              onChange={e => setNameValue(e.target.value)}
-              onBlur={handleSaveName}
-              onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false); }}
-              style={styles.projectNameInput}
-            />
-          ) : (
-            <span style={styles.projectName} onClick={handleStartRename} title="點擊重新命名">
-              {project.name}
-            </span>
-          )}
-        </div>
         <div style={{ ...styles.toolbarCenter, ...(isMobileViewport ? styles.toolbarCenterMobile : {}) }}>
           <div style={styles.viewModeToggle}>
             <button
@@ -1197,177 +1421,6 @@ export default function WorkspacePage() {
             </svg>
             歷史版本
           </button>
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <button
-              type="button"
-              style={{ ...styles.historyBtn, ...(html ? {} : { opacity: 0.5 }) }}
-              onClick={() => setShowExportMenu(v => !v)}
-              disabled={!html}
-              title="匯出選項"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-                <path d="M7 1v8M4 6l3 3 3-3M2 11h10"/>
-              </svg>
-              匯出
-            </button>
-            {showExportMenu && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-secondary)',
-                  borderRadius: 6,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-                  zIndex: 1000,
-                  minWidth: 210,
-                  overflow: 'hidden',
-                }}
-                onMouseLeave={() => { if (!exportingFramework) setShowExportMenu(false); }}
-              >
-                <div style={{ padding: '6px 14px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>
-                  匯出為框架專案
-                </div>
-                {([
-                  { key: 'react', label: 'React', icon: '\u269B\uFE0F' },
-                  { key: 'vue3', label: 'Vue 3', icon: '\uD83D\uDFE2' },
-                  { key: 'nextjs', label: 'Next.js', icon: '\u25B2' },
-                  { key: 'nuxt3', label: 'Nuxt 3', icon: '\uD83D\uDFE9' },
-                ] as const).map(fw => (
-                  <button
-                    key={fw.key}
-                    type="button"
-                    disabled={!!exportingFramework}
-                    data-testid={`export-${fw.key}`}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      padding: '8px 14px',
-                      background: 'none',
-                      border: 'none',
-                      color: exportingFramework === fw.key ? 'var(--text-accent)' : 'var(--text-primary)',
-                      fontSize: 13,
-                      textAlign: 'left',
-                      cursor: exportingFramework ? 'wait' : 'pointer',
-                      whiteSpace: 'nowrap',
-                      opacity: exportingFramework && exportingFramework !== fw.key ? 0.5 : 1,
-                    }}
-                    onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                    onClick={() => handleExportFramework(fw.key)}
-                  >
-                    {exportingFramework === fw.key ? '\u23F3' : fw.icon} {fw.label}
-                    {exportingFramework === fw.key && ' 匯出中...'}
-                  </button>
-                ))}
-                <div style={{ borderTop: '1px solid var(--border-secondary)', marginTop: 2 }} />
-                <button
-                  type="button"
-                  disabled={!!exportingFramework}
-                  data-testid="export-html"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 14px',
-                    background: 'none',
-                    border: 'none',
-                    color: exportingFramework === 'html' ? 'var(--text-accent)' : 'var(--text-primary)',
-                    fontSize: 13,
-                    textAlign: 'left',
-                    cursor: exportingFramework ? 'wait' : 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => { if (!exportingFramework) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  onClick={() => handleExportFramework('html')}
-                >
-                  {exportingFramework === 'html' ? '\u23F3 匯出中...' : '\uD83D\uDCC4 匯出 HTML 專案'}
-                </button>
-                <div style={{ borderTop: '1px solid var(--border-secondary)' }} />
-                <button
-                  type="button"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 14px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  onClick={() => { handleExport(); setShowExportMenu(false); }}
-                >
-                  📥 下載原始 HTML
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 14px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  onClick={() => { handleOpenInNewTab(); setShowExportMenu(false); }}
-                >
-                  🔗 在新分頁開啟
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 14px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  onClick={async () => {
-                    setShowExportMenu(false);
-                    try {
-                      const res = await fetch(`/api/projects/${id}/api-bindings/export`);
-                      if (res.ok) {
-                        const data = await res.json();
-                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${project!.name.replace(/[^a-z0-9\u4e00-\u9fff]/gi, '-')}-api-bindings.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      } else {
-                        setToastMsg('匯出失敗');
-                      }
-                    } catch { setToastMsg('匯出失敗'); }
-                  }}
-                  data-testid="export-api-bindings"
-                >
-                  📋 API Bindings (JSON)
-                </button>
-                {/* Figma export disabled — internal URLs not supported by html.to.design */}
-              </div>
-            )}
-          </div>
           <button
             style={{
               ...styles.annotateBtn,
@@ -1457,177 +1510,6 @@ export default function WorkspacePage() {
           >
             ⛶ 專注
           </button>
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <button
-              style={{
-                ...styles.shareBtn,
-                ...(shareEnabled && showSharePanel
-                  ? { backgroundColor: 'var(--accent-glass)', borderColor: 'var(--accent)', color: 'var(--text-accent)' }
-                  : {}),
-              }}
-              onClick={handleShare}
-              data-testid="share-btn"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-                <circle cx="3" cy="7" r="2" />
-                <circle cx="11" cy="3" r="2" />
-                <circle cx="11" cy="11" r="2" />
-                <line x1="4.8" y1="6" x2="9.2" y2="3.8" />
-                <line x1="4.8" y1="8" x2="9.2" y2="10.2" />
-              </svg>
-              {shareEnabled ? '已分享' : 'Share'}
-            </button>
-            {showSharePanel && shareEnabled && project?.share_token && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 6px)',
-                  right: 0,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '10px',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                  zIndex: 1100,
-                  minWidth: '280px',
-                  padding: '12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                }}
-                onMouseLeave={() => setShowSharePanel(false)}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    padding: '6px 10px',
-                    overflow: 'hidden',
-                  }}
-                  title={`${window.location.origin}/share/${project.share_token}`}
-                >
-                  <span
-                    style={{
-                      flex: 1,
-                      fontSize: '12px',
-                      color: 'var(--text-muted)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {`${window.location.origin}/share/${project.share_token}`}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 12px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '7px',
-                    backgroundColor: copyLinkFeedback ? '#f0fdf4' : 'var(--bg-elevated)',
-                    color: copyLinkFeedback ? '#16a34a' : 'var(--text-secondary)',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'background 0.15s',
-                  }}
-                  onClick={handleCopyShareLink}
-                  data-testid="copy-share-link-btn"
-                >
-                  {copyLinkFeedback ? '✓ 已複製!' : '📋 複製連結'}
-                </button>
-                <a
-                  href={`${window.location.origin}/share/${project.share_token}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 12px',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '7px',
-                    backgroundColor: 'var(--bg-elevated)',
-                    color: 'var(--text-secondary)',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    textDecoration: 'none',
-                  }}
-                  data-testid="open-share-link-btn"
-                >
-                  🔗 在新分頁開啟
-                </a>
-                <button
-                  type="button"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 12px',
-                    border: '1px solid #fecaca',
-                    borderRadius: '7px',
-                    backgroundColor: 'var(--bg-elevated)',
-                    color: '#dc2626',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
-                  onClick={handleStopSharing}
-                  data-testid="stop-sharing-btn"
-                >
-                  停止分享
-                </button>
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            style={styles.shortcutsBtn}
-            onClick={() => setShowShortcuts(v => !v)}
-            title="鍵盤快捷鍵 (?)"
-            data-testid="shortcuts-btn"
-          >
-            ⌨ ?
-          </button>
-          {isReadOnly && (
-            <button
-              type="button"
-              style={styles.forkBtn}
-              onClick={handleFork}
-              disabled={forking}
-              title="複製此專案到你的帳號"
-              data-testid="fork-btn"
-            >
-              {forking ? '⟳ Fork 中...' : '⑂ Fork 專案'}
-            </button>
-          )}
-          {user && (
-            <div style={styles.userWidget}>
-              <span
-                style={styles.userWidgetName}
-                data-testid="current-user-name"
-                title={user.name}
-              >
-                {user.name}
-              </span>
-              <button
-                type="button"
-                style={styles.logoutBtn}
-                onClick={logout}
-                data-testid="logout-btn"
-                title="登出"
-              >
-                登出
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
