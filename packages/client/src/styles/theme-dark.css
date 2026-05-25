@@ -1,0 +1,59 @@
+/* packages/client/src/styles/theme-dark.css */
+/* 深色玻璃主題 CSS tokens — 覆蓋 theme.css 的 light 預設 */
+
+:root {
+  /* 背景層 */
+  --bg-root:      #060d1a;
+  --bg-primary:   #0f172a;
+  --bg-secondary: #0f172a;
+  --bg-elevated:  #1e293b;
+  --bg-card:      #1e293b;
+  --bg-input:     #334155;
+  --bg-hover:     #334155;
+
+  /* 品牌 / Accent */
+  --accent:            #7c5cbf;
+  --accent-light:      rgba(124, 92, 191, 0.22);
+  --accent-glass:      rgba(124, 92, 191, 0.22);
+  --accent-subtle:     rgba(192, 132, 252, 0.15);
+  --accent-grad-start: #7c5cbf;
+  --accent-grad-end:   #c084fc;
+
+  /* 文字層（深色底，最低下限 #94a3b8） */
+  --text-primary:   #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted:     #94a3b8;
+  --text-accent:    #e9d5ff;
+
+  /* 邊框 */
+  --border-primary:    #334155;
+  --border-secondary:  #475569;
+  --border-subtle:     #1e293b;
+  --border-accent:     rgba(192, 132, 252, 0.3);
+  --border-accent-hi:  rgba(192, 132, 252, 0.5);
+
+  /* 陰影 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  /* Glass 效果 */
+  --glass-context:  rgba(20, 30, 50, 0.75);
+  --glass-active:   rgba(124, 92, 191, 0.25);
+  --glass-floating: rgba(15, 23, 42, 0.90);
+  --glass-blur-sm:  blur(8px);
+  --glass-blur-md:  blur(16px);
+  --glass-blur-lg:  blur(20px);
+}
+
+/* 深色主題下強制 body 背景 */
+body {
+  background: var(--bg-root);
+  color: var(--text-primary);
+}
+
+/* Scrollbar 深色樣式 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #64748b; }
