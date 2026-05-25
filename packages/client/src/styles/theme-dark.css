@@ -1,5 +1,13 @@
 /* packages/client/src/styles/theme-dark.css */
-/* 深色玻璃主題 CSS tokens — 覆蓋 theme.css 的 light 預設 */
+/*
+ * DesignBridge 深色玻璃主題（Dark Glass Theme）
+ *
+ * 設計意圖：此應用程式強制使用深色主題（dark-always），無 light mode 切換。
+ * 使用 :root 選擇器確保所有使用者都看到深色，不依賴 [data-theme="dark"] 切換。
+ *
+ * 覆蓋 theme.css 的舊 [data-theme="dark"] 值，以新的品牌色彩規格為準：
+ * - Accent: #7c5cbf → #c084fc (gradient)，取代舊的 #a78bca
+ */
 
 :root {
   /* 背景層 */
@@ -57,3 +65,14 @@ body {
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+/* Ensure our accent values win even when [data-theme="dark"] is applied */
+[data-theme="dark"] {
+  --accent:            #7c5cbf;
+  --accent-grad-start: #7c5cbf;
+  --accent-grad-end:   #c084fc;
+  --accent-glass:      rgba(124, 92, 191, 0.22);
+  --text-accent:       #e9d5ff;
+  --border-accent:     rgba(192, 132, 252, 0.3);
+  --border-accent-hi:  rgba(192, 132, 252, 0.5);
+}
