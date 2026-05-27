@@ -35,6 +35,8 @@ export { addEvent } from './mutations/addEvent';
 export type { AddEventInput } from './mutations/addEvent';
 export { addConstraintRef } from './mutations/addConstraintRef';
 export type { AddConstraintRefInput } from './mutations/addConstraintRef';
+export { applyMutationOps } from './mutations/mutationOp';
+export type { MutationOp, MutationOpKind } from './mutations/mutationOp';
 
 export { findNode } from './query/findNode';
 export { getAncestors } from './query/getAncestors';
