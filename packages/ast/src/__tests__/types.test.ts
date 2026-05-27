@@ -70,3 +70,35 @@ describe('RuleRef', () => {
     expect(r.ruleId).toContain('.');
   });
 });
+
+import type { ComponentNode } from '../types/componentNode';
+import type { SemanticUIAst } from '../types/ast';
+import { AST_SCHEMA_VERSION } from '../index';
+
+describe('ComponentNode', () => {
+  it('is recursive — has children of same type', () => {
+    const node: ComponentNode = {
+      id: 'n_abc', type: 'Container', props: {},
+      layout: { kind: 'stack', direction: 'vertical' }, style: {},
+      bindings: [], events: [], constraints: [],
+      children: [
+        { id: 'n_def', type: 'Text', props: { content: 'hello' },
+          layout: { kind: 'flow' }, style: {},
+          bindings: [], events: [], constraints: [], children: [] },
+      ],
+    };
+    expect(node.children[0]?.type).toBe('Text');
+  });
+});
+
+describe('SemanticUIAst envelope', () => {
+  it('carries schemaVersion + artifactId + root node', () => {
+    const ast: SemanticUIAst = {
+      schemaVersion: AST_SCHEMA_VERSION, artifactId: 'home-page', kind: 'page',
+      root: { id: 'n_root', type: 'Container', props: {},
+        layout: { kind: 'stack', direction: 'vertical' }, style: {},
+        bindings: [], events: [], constraints: [], children: [] },
+    };
+    expect(ast.schemaVersion).toBe(1);
+  });
+});
