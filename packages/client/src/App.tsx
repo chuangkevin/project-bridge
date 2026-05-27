@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import WorkspacePage from './pages/WorkspacePage';
+import CompilerWorkspace from './pages/CompilerWorkspace';
 import SharePage from './pages/SharePage';
 import GlobalDesignPage from './pages/GlobalDesignPage';
 import ComponentLibraryPage from './pages/ComponentLibraryPage';
@@ -17,7 +17,7 @@ function App() {
         <Routes>
           {/* Public — no login required */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/project/:id" element={<WorkspacePage />} />
+          <Route path="/project/:id" element={<CompilerWorkspace />} />
           <Route path="/share/:token" element={<SharePage />} />
           <Route path="/global-design" element={<GlobalDesignPage />} />
           <Route path="/components" element={<ComponentLibraryPage />} />

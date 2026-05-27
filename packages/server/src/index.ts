@@ -36,6 +36,7 @@ import queueRouter from './routes/queue';
 import designPresetsRouter from './routes/designPresets';
 import componentsRouter, { projectComponentsRouter } from './routes/components';
 import openaiOAuthRouter from './routes/openaiOAuth';
+import compileRouter from './routes/compile';
 import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
 import { startOAuthRefreshScheduler } from './services/provider';
@@ -88,6 +89,7 @@ app.use('/api/design-presets', designPresetsRouter);
 app.use('/api/components', componentsRouter);
 app.use('/api/projects', projectComponentsRouter);
 app.use('/api/openai-oauth', openaiOAuthRouter);
+app.use('/api/projects', compileRouter);
 
 // Health check
 function sendHealth(_req: express.Request, res: express.Response) {
