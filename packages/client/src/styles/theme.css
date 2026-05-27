@@ -14,6 +14,24 @@
   --accent-light: rgba(142, 111, 167, 0.08);
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+  /* Extended tokens — light values (dark values live in theme-dark.css under [data-theme="dark"]) */
+  --bg-root: #eef2f7;
+  --bg-elevated: #ffffff;
+  --accent-glass: rgba(142, 111, 167, 0.12);
+  --accent-subtle: rgba(142, 111, 167, 0.08);
+  --accent-grad-start: #8E6FA7;
+  --accent-grad-end: #b794d6;
+  --text-accent: #7c3aed;
+  --border-subtle: #f1f5f9;
+  --border-accent: rgba(142, 111, 167, 0.3);
+  --border-accent-hi: rgba(142, 111, 167, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --glass-context: rgba(255, 255, 255, 0.75);
+  --glass-active: rgba(142, 111, 167, 0.12);
+  --glass-floating: rgba(255, 255, 255, 0.92);
+  --glass-blur-sm: blur(8px);
+  --glass-blur-md: blur(16px);
+  --glass-blur-lg: blur(20px);
 }
 
 [data-theme="dark"] {
