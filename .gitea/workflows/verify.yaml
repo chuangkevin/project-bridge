@@ -1,0 +1,46 @@
+name: Verify (tests + compiler invariants)
+
+# Build-free validation: workspace unit tests + the deterministic compiler-invariant
+# CLIs (verify-ast / verify-rules). Does NOT build/push a Docker image and does NOT deploy
+# (that is docker-build.yaml). Safe to run on every PR.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+      # Gitea runner cannot reach codeload.github.com — rewrite the ai-core tarball URL to the
+      # internal mirror (same approach as docker-build.yaml) so the frozen install resolves.
+      - name: Rewrite ai-core URL to internal mirror
+        run: |
+          sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#https://gitea.housefun.com.tw/H1114/ai-core/archive/\1.tar.gz#g" pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace libs
+        run: |
+          pnpm --filter @designbridge/ast build
+          pnpm --filter @designbridge/codegen build
+
+      - name: Unit / integration tests
+        run: |
+          pnpm --filter @designbridge/ast test
+          pnpm --filter @designbridge/codegen test
+          pnpm --filter client test
+
+      - name: Compiler-invariant CLIs
+        run: |
+          pnpm exec tsx packages/ast/src/bin/verify-ast.ts packages/ast/src/__tests__/fixtures/valid.ast.json
+          pnpm exec tsx packages/ast/src/bin/verify-rules.ts packages/ast/src/__tests__/fixtures/valid.rules.json

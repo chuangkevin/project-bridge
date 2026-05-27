@@ -9,3 +9,11 @@ if [ -n "$STAGED_AST" ]; then
   # shellcheck disable=SC2086
   pnpm exec tsx ./packages/ast/src/bin/verify-ast.ts $STAGED_AST
 fi
+
+STAGED_RULES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.rules\.json$' || true)
+
+if [ -n "$STAGED_RULES" ]; then
+  echo "[pre-commit] running verify-rules on staged *.rules.json files..."
+  # shellcheck disable=SC2086
+  pnpm exec tsx ./packages/ast/src/bin/verify-rules.ts $STAGED_RULES
+fi
