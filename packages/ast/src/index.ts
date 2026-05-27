@@ -10,3 +10,6 @@ export type { SemanticUIAst, ArtifactKind } from './types/ast';
 
 export { generateNodeId } from './ids/generateNodeId';
 export { collectIds, hasDuplicateIds } from './ids/collectIds';
+
+export type { PropSpec, PropType, ComponentSpec, ComponentRegistry } from './registry/componentSpec';
+export { BASE_COMPONENTS, getComponentSpec, registerComponent } from './registry/baseComponents';
