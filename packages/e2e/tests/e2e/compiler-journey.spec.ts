@@ -97,14 +97,14 @@ test.describe('AI UI Compiler — workspace journey (route-mocked)', () => {
 
     // 3) Inspect the generated code via the Codegen stage.
     await page.getByRole('tab', { name: 'Codegen' }).click();
-    await expect(page.locator('pre')).toContainText('<form class="flex flex-col gap-[12px] p-[24px]">');
-    await expect(page.locator('pre')).toContainText('Sign in</button>');
+    await expect(page.locator('pre').first()).toContainText('<form class="flex flex-col gap-[12px] p-[24px]">');
+    await expect(page.locator('pre').first()).toContainText('Sign in</button>');
 
     // 4) Chat an edit → mutate → re-render with the new label.
     await page.getByLabel('compiler chat input').fill('rename the button to Submit');
     await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.locator('pre')).toContainText('Submit</button>', { timeout: 15000 });
-    await expect(page.locator('pre')).not.toContainText('Sign in</button>');
+    await expect(page.locator('pre').first()).toContainText('Submit</button>', { timeout: 15000 });
+    await expect(page.locator('pre').first()).not.toContainText('Sign in</button>');
 
     // 5) Back to the AST/visual stage — preview still renders.
     await page.getByRole('tab', { name: 'AST' }).click();
