@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Block commit if any staged *.ast.json fails verify-ast.
+set -e
+
+STAGED_AST=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.ast\.json$' || true)
+
+if [ -n "$STAGED_AST" ]; then
+  echo "[pre-commit] running verify-ast on staged *.ast.json files..."
+  # shellcheck disable=SC2086
+  pnpm exec tsx ./packages/ast/src/bin/verify-ast.ts $STAGED_AST
+fi

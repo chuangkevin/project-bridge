@@ -6,6 +6,8 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare": "husky",
+    "verify-ast": "pnpm exec tsx ./packages/ast/src/bin/verify-ast.ts",
     "dev:server": "pnpm --filter server dev",
     "dev:client": "pnpm --filter client dev",
     "test:e2e": "pnpm --filter e2e test",
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",
+    "husky": "^9.1.0",
     "playwright": "^1.58.2"
   }
 }
