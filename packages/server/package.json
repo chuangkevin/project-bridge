@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@designbridge/ast": "workspace:*",
+    "@designbridge/codegen": "workspace:*",
     "@google/generative-ai": "^0.24.1",
     "@kevinsisi/ai-core": "github:kevinsisi/ai-core#v3.4.2",
     "@napi-rs/canvas": "^0.1.97",

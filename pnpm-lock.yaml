@@ -131,6 +131,9 @@ importers:
       '@designbridge/ast':
         specifier: workspace:*
         version: link:../ast
+      '@designbridge/codegen':
+        specifier: workspace:*
+        version: link:../codegen
       '@google/generative-ai':
         specifier: ^0.24.1
         version: 0.24.1
