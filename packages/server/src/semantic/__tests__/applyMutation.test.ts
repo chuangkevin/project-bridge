@@ -48,4 +48,24 @@ describe('applyMutation', () => {
     const after = await applyMutation(baseAst(), 'no change needed', { generate });
     expect(after.root.children[0]?.props.label).toBe('Go');
   });
+
+  it('repairs when the AI emits ops as a non-array with a semantic error', async () => {
+    const bad = JSON.stringify({ ops: 'notarray' });
+    const good = JSON.stringify({ ops: [] });
+    const generate = vi.fn().mockResolvedValueOnce(bad).mockResolvedValueOnce(good);
+    await applyMutation(baseAst(), 'test', { generate });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[1][0].prompt).toMatch(/"ops" must be an array/i);
+  });
+
+  it('repairs when ops apply cleanly but produce a schema-invalid AST (bad enum)', async () => {
+    // Button.variant is an enum [primary|secondary|ghost|danger]; 'INVALID' applies via setProp
+    // but fails validateAst, so the repair loop must re-prompt then succeed.
+    const bad = JSON.stringify({ ops: [{ op: 'setProp', nodeId: 'n_submit', key: 'variant', value: 'INVALID' }] });
+    const good = JSON.stringify({ ops: [{ op: 'setProp', nodeId: 'n_submit', key: 'variant', value: 'primary' }] });
+    const generate = vi.fn().mockResolvedValueOnce(bad).mockResolvedValueOnce(good);
+    const after = await applyMutation(baseAst(), 'make it primary', { generate });
+    expect(after.root.children[0]?.props.variant).toBe('primary');
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
 });

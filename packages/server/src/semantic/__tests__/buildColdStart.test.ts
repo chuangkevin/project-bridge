@@ -57,6 +57,14 @@ describe('buildColdStart', () => {
     expect(call.prompt).toMatch(/login form/i);
   });
 
+  it('repairs when the AI returns JSON null (not an object) with a semantic error', async () => {
+    const generate = vi.fn().mockResolvedValueOnce('null').mockResolvedValueOnce(validAstJson);
+    const ast = await buildColdStart(ingestion, { artifactId: 'login', generate });
+    expect(ast.root.type).toBe('Form');
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[1][0].prompt).toMatch(/expected a JSON object/i);
+  });
+
   it('throws after exhausting repairs on persistently invalid output', async () => {
     const generate = vi.fn().mockResolvedValue('{"not":"an ast"}');
     await expect(buildColdStart(ingestion, { artifactId: 'login', generate, maxRepairs: 1 }))

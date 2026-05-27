@@ -26,7 +26,12 @@ export async function buildColdStart(ingestion: IngestionAst, options: BuildCold
   return runRepairLoop<SemanticUIAst>({
     generate, systemInstruction, initialPrompt: prompt, maxRepairs: options.maxRepairs, model: options.model,
     parseAndValidate: (raw) => {
-      const parsed = JSON.parse(extractJsonBody(raw)) as SemanticUIAst;
+      const parsedUnknown: unknown = JSON.parse(extractJsonBody(raw));
+      if (parsedUnknown === null || typeof parsedUnknown !== 'object' || Array.isArray(parsedUnknown)) {
+        const got = parsedUnknown === null ? 'null' : Array.isArray(parsedUnknown) ? 'array' : typeof parsedUnknown;
+        return { valid: false, errors: [`expected a JSON object (a Semantic UI AST), got ${got}`] };
+      }
+      const parsed = parsedUnknown as SemanticUIAst;
       parsed.artifactId = options.artifactId;  // AI does not own identity fields
       parsed.kind = kind;
       const result = validateAst(parsed, { registry });

@@ -23,8 +23,12 @@ export async function applyMutation(ast: SemanticUIAst, instruction: string, opt
   return runRepairLoop<SemanticUIAst>({
     generate, systemInstruction, initialPrompt: prompt, maxRepairs: options.maxRepairs, model: options.model,
     parseAndValidate: (raw) => {
-      const parsed = JSON.parse(extractJsonBody(raw)) as { ops?: MutationOp[] };
-      const ops = parsed.ops ?? [];
+      const parsed = JSON.parse(extractJsonBody(raw)) as { ops?: unknown };
+      const rawOps = parsed.ops ?? [];
+      if (!Array.isArray(rawOps)) {
+        return { valid: false, errors: [`"ops" must be an array, got ${typeof rawOps}`] };
+      }
+      const ops = rawOps as MutationOp[];
       const next = applyMutationOps(ast, ops);   // may throw on bad op → caught as invalid by repair loop
       const result = validateAst(next, { registry });
       if (result.valid) return { valid: true, value: next };
