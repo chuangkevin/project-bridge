@@ -58,3 +58,8 @@ export {
   isRequirementIngestion, isPdfIngestion, isScreenshotIngestion,
   isClipboardIngestion, isWebpageIngestion,
 } from './ingestion/guards';
+
+export type { SkillRule, RuleWhen, RuleAssert, RuleViolation, RuleSeverity } from './skill/rule';
+export { applySkillRules, hasErrorViolations } from './skill/applySkillRules';
+export type { ApplySkillRulesResult } from './skill/applySkillRules';
+export { CORE_RULES } from './skill/coreRules';

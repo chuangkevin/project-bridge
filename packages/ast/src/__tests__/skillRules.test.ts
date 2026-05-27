@@ -126,3 +126,20 @@ describe('hasErrorViolations', () => {
     expect(hasErrorViolations([])).toBe(false);
   });
 });
+
+import { CORE_RULES } from '../skill/coreRules';
+
+describe('CORE_RULES', () => {
+  it('contains the form-requires-button reference rule', () => {
+    const rule = CORE_RULES.find(r => r.id === 'core.form.requires-button');
+    expect(rule).toBeDefined();
+    expect(rule?.severity).toBe('error');
+    expect(rule?.when.type).toBe('Form');
+  });
+
+  it('flags a buttonless Form and clears once a Button is added', () => {
+    expect(hasErrorViolations(applySkillRules(wrap(node('n_root', 'Form')), CORE_RULES).violations)).toBe(true);
+    const withButton = wrap(node('n_root', 'Form', [ node('n_b', 'Button', [], { label: 'Submit' }) ]));
+    expect(applySkillRules(withButton, CORE_RULES).violations).toEqual([]);
+  });
+});
