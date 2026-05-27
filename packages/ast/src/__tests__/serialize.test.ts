@@ -34,4 +34,17 @@ describe('serialization', () => {
   it('fromJson rejects malformed JSON', () => {
     expect(() => fromJson('{ not json', { registry: BASE_COMPONENTS })).toThrow();
   });
+
+  it('emits valid JSON when a prop value is undefined (key omitted, JSON semantics)', () => {
+    const a: SemanticUIAst = {
+      schemaVersion: AST_SCHEMA_VERSION, artifactId: 'home', kind: 'page',
+      root: { id: 'n_root', type: 'Container', props: { dropMe: undefined, keepMe: 'yes' },
+        layout: { kind: 'flow' }, style: {},
+        bindings: [], events: [], constraints: [], children: [] },
+    };
+    const json = toJson(a);
+    expect(() => JSON.parse(json)).not.toThrow();
+    const parsed = JSON.parse(json);
+    expect(parsed.root.props).toEqual({ keepMe: 'yes' }); // undefined key omitted, matching JSON.stringify
+  });
 });

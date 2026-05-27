@@ -14,6 +14,11 @@ export interface AddComponentResult {
   newNodeId: string;
 }
 
+/**
+ * Appends (or inserts at `index`) a new child under `parentId`. Returns a new AST + the new node id.
+ * Does NOT consult the component registry: it neither checks `allowsChildren` nor supplies required
+ * props. Call `validateAst` after a sequence of mutations to catch structural/prop violations.
+ */
 export function addComponent(ast: SemanticUIAst, input: AddComponentInput): AddComponentResult {
   const newNodeId = generateNodeId();
   const newNode: ComponentNode = {

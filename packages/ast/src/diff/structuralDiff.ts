@@ -28,6 +28,12 @@ function fieldsChanged(a: ComponentNode, b: ComponentNode): boolean {
   return false;
 }
 
+/**
+ * Structural diff by node id. A node appears in `changed` only when its OWN fields
+ * (type/props/layout/style/bindings/events/constraints) differ — NOT when it merely gains
+ * or loses a child. Child additions/removals surface as `added`/`removed` on the child ids.
+ * Consequence: a pure content-preserving move/reorder is not reported.
+ */
 export function structuralDiff(before: SemanticUIAst, after: SemanticUIAst): AstDiff {
   const beforeIndex = indexById(before.root);
   const afterIndex = indexById(after.root);

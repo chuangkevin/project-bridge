@@ -6,6 +6,12 @@ export interface FromJsonOptions {
   registry: ComponentRegistry;
 }
 
+/**
+ * Parses + validates a JSON string into a SemanticUIAst. Throws on malformed JSON or validation
+ * failure. Pass the registry to validate against — use BASE_COMPONENTS for the standard set, or
+ * `{ ...BASE_COMPONENTS, ...projectRegistry }` for project extensions. An empty registry rejects
+ * all component types as unknown.
+ */
 export function fromJson(text: string, opts: FromJsonOptions): SemanticUIAst {
   const parsed = JSON.parse(text);
   const result = validateAst(parsed, { registry: opts.registry });

@@ -1,7 +1,10 @@
 export { AST_SCHEMA_VERSION } from './version';
 
-export type { LayoutIntent } from './types/layoutIntent';
-export type { StyleIntent } from './types/styleIntent';
+export type {
+  LayoutIntent, LayoutKind, LayoutAlign, LayoutJustify,
+  StackLayout, GridLayout, FlowLayout, AbsoluteLayout,
+} from './types/layoutIntent';
+export type { StyleIntent, ColorValue, SpacingValue, SizeValue } from './types/styleIntent';
 export type { DataBinding, ApiEndpoint, BindingSource } from './types/dataBinding';
 export type { EventBinding, EventName, Action } from './types/eventBinding';
 export type { RuleRef } from './types/ruleRef';
