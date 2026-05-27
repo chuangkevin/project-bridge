@@ -58,3 +58,57 @@ describe('setProp', () => {
       .toThrow(/node.*not found/i);
   });
 });
+
+import { removeComponent } from '../mutations/removeComponent';
+import { moveComponent } from '../mutations/moveComponent';
+
+describe('removeComponent', () => {
+  it('removes the target node from its parent', () => {
+    let ast = baseAst();
+    const added = addComponent(ast, { parentId: 'n_root', type: 'Text', props: { content: 'hi' } });
+    const after = removeComponent(added.ast, { nodeId: added.newNodeId });
+    expect(after.root.children).toHaveLength(0);
+    expect(added.ast.root.children).toHaveLength(1);
+  });
+
+  it('refuses to remove the root', () => {
+    expect(() => removeComponent(baseAst(), { nodeId: 'n_root' }))
+      .toThrow(/cannot remove root/i);
+  });
+
+  it('throws when node id not found', () => {
+    expect(() => removeComponent(baseAst(), { nodeId: 'n_missing' }))
+      .toThrow(/node.*not found/i);
+  });
+});
+
+describe('moveComponent', () => {
+  it('moves a child to a new parent at given index', () => {
+    let ast = baseAst();
+    const a = addComponent(ast, { parentId: 'n_root', type: 'Container', props: {} });
+    const b = addComponent(a.ast, { parentId: 'n_root', type: 'Container', props: {} });
+    const t = addComponent(b.ast, { parentId: a.newNodeId, type: 'Text', props: { content: 'x' } });
+    const after = moveComponent(t.ast, { nodeId: t.newNodeId, newParentId: b.newNodeId, index: 0 });
+
+    const aNode = after.root.children.find(c => c.id === a.newNodeId);
+    const bNode = after.root.children.find(c => c.id === b.newNodeId);
+    expect(aNode?.children).toHaveLength(0);
+    expect(bNode?.children).toHaveLength(1);
+    expect(bNode?.children[0]?.id).toBe(t.newNodeId);
+  });
+
+  it('refuses to move a node into its own descendant (would create cycle)', () => {
+    let ast = baseAst();
+    const parent = addComponent(ast, { parentId: 'n_root', type: 'Container', props: {} });
+    const child = addComponent(parent.ast, { parentId: parent.newNodeId, type: 'Container', props: {} });
+    expect(() => moveComponent(child.ast, {
+      nodeId: parent.newNodeId,
+      newParentId: child.newNodeId,
+    })).toThrow(/cycle/i);
+  });
+
+  it('refuses to move the root', () => {
+    expect(() => moveComponent(baseAst(), { nodeId: 'n_root', newParentId: 'n_x' }))
+      .toThrow(/cannot move root/i);
+  });
+});
