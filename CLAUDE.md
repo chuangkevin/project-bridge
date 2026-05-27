@@ -12,9 +12,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Domain**: `designbridge.housefun.com.tw` (公司) / `designbridge.sisihome.org` (home)
 - **Port**: 5123 (host) → 3001 (container)
 
+## AI UI Compiler Rebuild (in progress — branch `feat/ai-ui-compiler-ast`)
+
+DesignBridge is mid-rebuild from a chat-driven UI generator into an **AI UI Compiler**: unstructured input → deterministic dual-IR pipeline → Vue 3 + Tailwind code, with skill JSON rules constraining the AST at build time. **AI only proposes; the AST is truth; codegen is mechanical.** This work lives on `feat/ai-ui-compiler-ast` (not yet merged to `main`; the deploy runbook below still describes the deployed v1.5.x system).
+
+- **Spec**: `docs/superpowers/specs/2026-05-26-ai-ui-compiler-redesign.md` (architecture locked, 11 staged plans in §10).
+- **Plans**: `docs/superpowers/plans/2026-05-26-plan-01-…` … `2026-05-27-plan-06b-…`.
+- **Handover / current state**: `docs/superpowers/handover/2026-05-27-m1-ai-ui-compiler-handover.md`.
+- **New packages**: `@designbridge/ast` (`packages/ast`: Semantic UI AST + Ingestion AST + Skill rules + validator + mutations + `verify-ast` CLI) and `@designbridge/codegen` (`packages/codegen`: mock Vue 3 + Tailwind renderer). New server layers: `packages/server/src/{ingestion,semantic}` + `services/compile.ts` + `routes/compile.ts` (`POST /api/projects/:id/compile`). New client: `packages/client/src/{lib,stores,components/compiler,pages/CompilerWorkspace.tsx}`.
+- **Pipeline**: `requirement → parseInput → buildColdStart (AI) → applySkillRules → renderVue`. M1 = Mock backend (visual fidelity only). The old mode UI (DesignPanel/StyleTweakerPanel/ArchitectureTab/ModeRail/WorkspacePage) is being removed; `/project/:id` now routes to `CompilerWorkspace`.
+- **Conventions for new packages**: vitest `^3.2.4` (vite-5 compat), nanoid `^3` (CJS), AI calls go through an injectable `generate` so tests use fakes (no live API).
+
 ## Architecture
 
-- **Monorepo**: pnpm workspaces (`packages/client`, `packages/server`, `packages/e2e`)
+- **Monorepo**: pnpm workspaces (`packages/client`, `packages/server`, `packages/e2e`, `packages/ast`, `packages/codegen`)
 - **Server** (`packages/server`): Express + TypeScript + SQLite (better-sqlite3) + Socket.io + ai-core
 - AI: `@kevinsisi/ai-core` v3.4.1 `MultiProviderClient` — see [`services/provider.ts`](packages/server/src/services/provider.ts)
   - Providers: OpenCode + Gemini (key-pool) + OpenAI/Codex (api/oauth) via ai-core adapters
