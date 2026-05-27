@@ -46,3 +46,13 @@ export type { AstDiff } from './diff/structuralDiff';
 export { toJson } from './serialize/toJson';
 export { fromJson } from './serialize/fromJson';
 export type { FromJsonOptions } from './serialize/fromJson';
+
+export type {
+  IngestionAst, IngestionType,
+  RequirementIngestion, PdfIngestion, PdfPage,
+  ScreenshotIngestion, ScreenshotRegion, ClipboardIngestion, WebpageIngestion,
+} from './ingestion/ingestionAst';
+export {
+  isRequirementIngestion, isPdfIngestion, isScreenshotIngestion,
+  isClipboardIngestion, isWebpageIngestion,
+} from './ingestion/guards';

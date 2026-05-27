@@ -27,3 +27,30 @@ describe('IngestionAst union', () => {
     expect(all.map(a => a.type)).toEqual(['screenshot', 'clipboard', 'webpage']);
   });
 });
+
+import {
+  isRequirementIngestion, isPdfIngestion, isScreenshotIngestion,
+  isClipboardIngestion, isWebpageIngestion,
+} from '../ingestion/guards';
+
+describe('ingestion type guards', () => {
+  const req: IngestionAst = { type: 'requirement', paragraphs: [] };
+  const pdf: IngestionAst = { type: 'pdf', pages: [], pageCount: 0, rawText: '' };
+
+  it('isRequirementIngestion narrows correctly', () => {
+    expect(isRequirementIngestion(req)).toBe(true);
+    expect(isRequirementIngestion(pdf)).toBe(false);
+    if (isRequirementIngestion(req)) expect(Array.isArray(req.paragraphs)).toBe(true);
+  });
+
+  it('isPdfIngestion narrows correctly', () => {
+    expect(isPdfIngestion(pdf)).toBe(true);
+    expect(isPdfIngestion(req)).toBe(false);
+  });
+
+  it('other guards return correct booleans', () => {
+    expect(isScreenshotIngestion(req)).toBe(false);
+    expect(isClipboardIngestion(req)).toBe(false);
+    expect(isWebpageIngestion(req)).toBe(false);
+  });
+});
