@@ -17,3 +17,20 @@ describe('LayoutIntent', () => {
     expect(layout.kind).toBe('flow');
   });
 });
+
+import type { StyleIntent } from '../types/styleIntent';
+
+describe('StyleIntent', () => {
+  it('accepts background + text + spacing tokens', () => {
+    const style: StyleIntent = { background: 'surface-elevated', textColor: 'text-primary', padding: 16, borderRadius: 8 };
+    expect(style.background).toBe('surface-elevated');
+  });
+  it('accepts raw color values (hex / rgb)', () => {
+    const style: StyleIntent = { background: '#1e293b', textColor: 'rgb(241,245,249)' };
+    expect(style.textColor).toMatch(/rgb/);
+  });
+  it('accepts empty object (style is optional in spirit)', () => {
+    const style: StyleIntent = {};
+    expect(Object.keys(style)).toHaveLength(0);
+  });
+});
