@@ -84,6 +84,7 @@ export default function DesignContextPanel({
         <div style={{ display: 'flex', gap: '0' }}>
           <button
             type="button"
+            data-testid="tab-design"
             style={{ ...tabBtnBase, ...(subTab === 'design' ? tabBtnActive : {}) }}
             onClick={() => setSubTab('design')}
           >
@@ -91,6 +92,7 @@ export default function DesignContextPanel({
           </button>
           <button
             type="button"
+            data-testid="tab-style"
             style={{
               ...tabBtnBase,
               ...(subTab === 'style' ? tabBtnActive : {}),

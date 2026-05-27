@@ -132,6 +132,7 @@ export default function WorkspaceHeader({
       <span
         style={{ fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}
         onClick={() => navigate('/')}
+        data-testid="home-btn"
       >
         DesignBridge
       </span>
