@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "artifactId": "home",
+  "kind": "page",
+  "root": {
+    "id": "n_root", "type": "NotARealComponent", "props": {},
+    "layout": { "kind": "flow" }, "style": {},
+    "bindings": [], "events": [], "constraints": [], "children": []
+  }
+}

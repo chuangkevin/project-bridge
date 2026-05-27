@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "artifactId": "home",
+  "kind": "page",
+  "root": {
+    "id": "n_root",
+    "type": "Container",
+    "props": {},
+    "layout": { "kind": "stack", "direction": "vertical" },
+    "style": {},
+    "bindings": [],
+    "events": [],
+    "constraints": [],
+    "children": []
+  }
+}
