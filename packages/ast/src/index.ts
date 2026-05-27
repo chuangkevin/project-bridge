@@ -13,3 +13,7 @@ export { collectIds, hasDuplicateIds } from './ids/collectIds';
 
 export type { PropSpec, PropType, ComponentSpec, ComponentRegistry } from './registry/componentSpec';
 export { BASE_COMPONENTS, getComponentSpec, registerComponent } from './registry/baseComponents';
+
+export { AST_JSON_SCHEMA } from './schema/jsonSchema';
+export { validateAst, isValidAst } from './schema/validate';
+export type { ValidationError, ValidationResult, ValidateOptions } from './schema/validate';
