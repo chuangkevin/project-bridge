@@ -36,3 +36,6 @@ export type { AddConstraintRefInput } from './mutations/addConstraintRef';
 export { findNode } from './query/findNode';
 export { getAncestors } from './query/getAncestors';
 export { getDescendants } from './query/getDescendants';
+
+export { structuralDiff } from './diff/structuralDiff';
+export type { AstDiff } from './diff/structuralDiff';
