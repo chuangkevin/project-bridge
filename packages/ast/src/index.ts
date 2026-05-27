@@ -63,3 +63,4 @@ export type { SkillRule, RuleWhen, RuleAssert, RuleViolation, RuleSeverity } fro
 export { applySkillRules, hasErrorViolations } from './skill/applySkillRules';
 export type { ApplySkillRulesResult } from './skill/applySkillRules';
 export { CORE_RULES } from './skill/coreRules';
+export { validateRuleShape, detectRuleConflicts, detectDeadRules } from './skill/ruleChecks';
