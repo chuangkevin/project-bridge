@@ -40,3 +40,21 @@ describe('addComponent', () => {
     expect(ast.root.children.map(c => (c.props.content as string))).toEqual(['a', 'INSERT', 'b']);
   });
 });
+
+import { setProp } from '../mutations/setProp';
+
+describe('setProp', () => {
+  it('sets a prop on the target node, returns new AST', () => {
+    let ast = baseAst();
+    const added = addComponent(ast, { parentId: 'n_root', type: 'Text', props: { content: 'hi' } });
+    const after = setProp(added.ast, { nodeId: added.newNodeId, key: 'content', value: 'goodbye' });
+    expect(after).not.toBe(added.ast);
+    expect((after.root.children[0]?.props.content)).toBe('goodbye');
+    expect((added.ast.root.children[0]?.props.content)).toBe('hi');
+  });
+
+  it('throws when node id not found', () => {
+    expect(() => setProp(baseAst(), { nodeId: 'n_nope', key: 'x', value: 1 }))
+      .toThrow(/node.*not found/i);
+  });
+});
