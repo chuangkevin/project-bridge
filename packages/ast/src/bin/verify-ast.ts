@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { validateAst } from '../schema/validate';
 import { BASE_COMPONENTS } from '../registry/baseComponents';
+import { applySkillRules, hasErrorViolations } from '../skill/applySkillRules';
+import { CORE_RULES } from '../skill/coreRules';
+import type { SemanticUIAst } from '../types/ast';
 
 function main(): void {
   const args = process.argv.slice(2);
@@ -25,7 +28,16 @@ function main(): void {
     }
     const result = validateAst(parsed, { registry: BASE_COMPONENTS });
     if (result.valid) {
-      console.log(`OK   ${fileArg}`);
+      const { violations } = applySkillRules(parsed as SemanticUIAst, CORE_RULES);
+      if (hasErrorViolations(violations)) {
+        allOk = false;
+        console.error(`FAIL ${fileArg} — rule violations`);
+        for (const v of violations) {
+          if (v.severity === 'error') console.error(`     ${v.ruleId} @ ${v.nodeId}: ${v.message}`);
+        }
+      } else {
+        console.log(`OK   ${fileArg}`);
+      }
     } else {
       allOk = false;
       console.error(`FAIL ${fileArg}`);

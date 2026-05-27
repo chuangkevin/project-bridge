@@ -13,7 +13,8 @@
     }
   },
   "bin": {
-    "verify-ast": "./dist/cjs/bin/verify-ast.js"
+    "verify-ast": "./dist/cjs/bin/verify-ast.js",
+    "verify-rules": "./dist/cjs/bin/verify-rules.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.esm.json",

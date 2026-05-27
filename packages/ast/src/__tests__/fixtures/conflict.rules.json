@@ -1,0 +1,1 @@
+[{"id":"r.a","severity":"error","when":{"type":"Form"},"assert":{"hasDescendantOfType":"Button"},"message":"m"},{"id":"r.b","severity":"error","when":{"type":"Form"},"assert":{"missingDescendantOfType":"Button"},"message":"m"}]
