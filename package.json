@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "prepare": "husky",
+    "prepare": "husky || true",
     "verify-ast": "pnpm exec tsx ./packages/ast/src/bin/verify-ast.ts",
     "dev:server": "pnpm --filter server dev",
     "dev:client": "pnpm --filter client dev",
