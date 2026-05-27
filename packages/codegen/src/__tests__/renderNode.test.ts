@@ -12,7 +12,7 @@ describe('renderNode', () => {
     expect(renderNode(n('Heading', { content: 'Title', level: '3' }), 0)).toContain('<h3>Title</h3>');
     expect(renderNode(n('Heading', { content: 'Default' }), 0)).toContain('<h2>Default</h2>');
   });
-  it('Button → button with escaped label', () => { expect(renderNode(n('Button', { label: 'Go"' }), 0)).toContain('<button type="button">Go&quot;</button>'); });
+  it('Button → button with escaped label', () => { expect(renderNode(n('Button', { label: 'Go"' }), 0)).toContain('<button type="button">Go"</button>'); });
   it('Image → self-closing img', () => {
     const out = renderNode(n('Image', { src: '/x.png', alt: 'pic' }), 0);
     expect(out).toContain('<img'); expect(out).toContain('src="/x.png"'); expect(out).toContain('alt="pic"');

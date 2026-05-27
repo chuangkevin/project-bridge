@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { escapeHtml, escapeAttr, sanitizeArbitrary } from '../escape';
+import { sanitizeClassToken } from '../escape';
 
 describe('escapeHtml', () => {
   it('escapes &, <, >', () => { expect(escapeHtml('a & b <script>')).toBe('a &amp; b &lt;script&gt;'); });
@@ -19,5 +20,19 @@ describe('sanitizeArbitrary', () => {
     expect(sanitizeArbitrary('a"b')).toBeNull();
     expect(sanitizeArbitrary('a<b')).toBeNull();
     expect(sanitizeArbitrary('')).toBeNull();
+  });
+});
+
+describe('sanitizeClassToken', () => {
+  it('keeps full class tokens incl. arbitrary brackets', () => {
+    expect(sanitizeClassToken('font-bold')).toBe('font-bold');
+    expect(sanitizeClassToken('p-[16px]')).toBe('p-[16px]');
+    expect(sanitizeClassToken('hover:bg-[#fff]')).toBe('hover:bg-[#fff]');
+  });
+  it('rejects tokens with quotes, angle brackets, whitespace, backslash, or empty', () => {
+    expect(sanitizeClassToken('a"b')).toBeNull();
+    expect(sanitizeClassToken('a<b')).toBeNull();
+    expect(sanitizeClassToken('a b')).toBeNull();
+    expect(sanitizeClassToken('')).toBeNull();
   });
 });

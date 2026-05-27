@@ -1,5 +1,5 @@
 import type { LayoutIntent, StyleIntent, ComponentNode } from '@designbridge/ast';
-import { sanitizeArbitrary } from './escape';
+import { sanitizeArbitrary, sanitizeClassToken } from './escape';
 
 const ALIGN: Record<string, string> = { start: 'items-start', center: 'items-center', end: 'items-end', stretch: 'items-stretch' };
 const JUSTIFY: Record<string, string> = { start: 'justify-start', center: 'justify-center', end: 'justify-end', between: 'justify-between', around: 'justify-around', evenly: 'justify-evenly' };
@@ -64,9 +64,12 @@ export function styleClasses(style: StyleIntent): string[] {
   if (style.minWidth !== undefined) push('min-w', style.minWidth);
   if (style.maxWidth !== undefined) push('max-w', style.maxWidth);
   if (style.fontSize !== undefined) push('text', style.fontSize);
-  if (style.opacity !== undefined) out.push(`opacity-[${style.opacity}]`);
+  if (style.opacity !== undefined) {
+    const a = typeof style.opacity === 'number' ? String(style.opacity) : sanitizeArbitrary(style.opacity);
+    out.push(a === null ? null : `opacity-[${a}]`);
+  }
   if (Array.isArray(style.rawClasses)) {
-    for (const c of style.rawClasses) { const s = sanitizeArbitrary(c); if (s) out.push(s); }
+    for (const c of style.rawClasses) { const s = sanitizeClassToken(c); if (s) out.push(s); }
   }
   return out.filter((c): c is string => typeof c === 'string' && c.length > 0);
 }

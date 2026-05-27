@@ -19,3 +19,17 @@ export function sanitizeArbitrary(value: string): string | null {
   if (/[\]"'<>\\\n\r\t]/.test(trimmed)) return null;
   return trimmed.replace(/ /g, '_');
 }
+
+/**
+ * Sanitize a full Tailwind class TOKEN (e.g. "font-bold", "p-[16px]", "hover:bg-[#fff]").
+ * Allows class-token characters incl. brackets/#/:/./()%/-/_ but rejects anything that could
+ * break the double-quoted class attribute or inject markup: quotes, `<`, `>`, backslash, whitespace.
+ * Returns null to omit. (Whitespace is rejected so callers must pass ONE token at a time.)
+ */
+export function sanitizeClassToken(value: string): string | null {
+  if (typeof value !== 'string') return null;
+  const t = value.trim();
+  if (t.length === 0) return null;
+  if (/["'<>\\\s]/.test(t)) return null;
+  return t;
+}

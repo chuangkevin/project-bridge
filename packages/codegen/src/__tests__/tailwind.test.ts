@@ -20,6 +20,16 @@ describe('styleClasses', () => {
   it('supports paddingX/paddingY', () => { expect(styleClasses({ paddingX: 12, paddingY: 4 })).toEqual(['px-[12px]', 'py-[4px]']); });
   it('omits a class when the value cannot be sanitized', () => { expect(styleClasses({ background: 'evil]value' })).toEqual([]); });
   it('returns [] for empty style', () => { expect(styleClasses({})).toEqual([]); });
+  it('sanitizes opacity (drops a class-breaking value, keeps a valid one)', () => {
+    expect(styleClasses({ opacity: 0.5 })).toEqual(['opacity-[0.5]']);
+    expect(styleClasses({ opacity: 'evil]value' as unknown as number })).toEqual([]);
+  });
+  it('keeps a legit arbitrary class in rawClasses (not dropped by the [ ] sanitizer)', () => {
+    expect(styleClasses({ rawClasses: ['font-bold', 'p-[16px]'] })).toEqual(['font-bold', 'p-[16px]']);
+  });
+  it('drops a rawClass with injection chars', () => {
+    expect(styleClasses({ rawClasses: ['ok', 'a"b', 'c<d'] })).toEqual(['ok']);
+  });
 });
 describe('classAttr', () => {
   const node = (layout: ComponentNode['layout'], style: ComponentNode['style']): ComponentNode => ({

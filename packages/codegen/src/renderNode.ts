@@ -36,7 +36,8 @@ export function renderNode(node: ComponentNode, depth: number): string {
     case 'Text':
       return `${indent}<span${cls}>${escapeHtml(str(p.content))}</span>`;
     case 'Heading': {
-      const level = ['1', '2', '3', '4', '5', '6'].includes(str(p.level)) ? str(p.level) : '2';
+      const raw = str(p.level);
+      const level = ['1', '2', '3', '4', '5', '6'].includes(raw) ? raw : '2';
       return `${indent}<h${level}${cls}>${escapeHtml(str(p.content))}</h${level}>`;
     }
     case 'Image':
@@ -45,7 +46,7 @@ export function renderNode(node: ComponentNode, depth: number): string {
       return `${indent}<span${cls} aria-hidden="true" data-icon="${escapeAttr(str(p.name))}"></span>`;
 
     case 'Button':
-      return `${indent}<button${cls} type="button">${escapeAttr(str(p.label))}</button>`;
+      return `${indent}<button${cls} type="button">${escapeHtml(str(p.label))}</button>`;
     case 'Link':
       return `${indent}<a${cls} href="${escapeAttr(str(p.href, '#'))}">${escapeHtml(str(p.label))}</a>`;
 

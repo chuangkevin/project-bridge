@@ -4,4 +4,4 @@ export { renderVue, vueFilename } from './renderVue';
 export type { VueArtifact } from './renderVue';
 export { renderNode } from './renderNode';
 export { layoutClasses, styleClasses, classAttr } from './tailwind';
-export { escapeHtml, escapeAttr, sanitizeArbitrary } from './escape';
+export { escapeHtml, escapeAttr, sanitizeArbitrary, sanitizeClassToken } from './escape';
