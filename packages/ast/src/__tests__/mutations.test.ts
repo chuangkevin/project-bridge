@@ -112,3 +112,50 @@ describe('moveComponent', () => {
       .toThrow(/cannot move root/i);
   });
 });
+
+import { addBinding } from '../mutations/addBinding';
+import { addEvent } from '../mutations/addEvent';
+import { addConstraintRef } from '../mutations/addConstraintRef';
+
+describe('addBinding', () => {
+  it('appends a binding to the target node', () => {
+    const added = addComponent(baseAst(), { parentId: 'n_root', type: 'Input', props: {} });
+    const after = addBinding(added.ast, {
+      nodeId: added.newNodeId,
+      binding: { propKey: 'value', source: 'state', path: 'form.email' },
+    });
+    expect(after.root.children[0]?.bindings).toHaveLength(1);
+    expect(after.root.children[0]?.bindings[0]?.path).toBe('form.email');
+  });
+});
+
+describe('addEvent', () => {
+  it('appends an event binding to the target node', () => {
+    const added = addComponent(baseAst(), { parentId: 'n_root', type: 'Button', props: { label: 'X' } });
+    const after = addEvent(added.ast, {
+      nodeId: added.newNodeId,
+      event: { event: 'click', action: { kind: 'navigate', to: '/home' } },
+    });
+    expect(after.root.children[0]?.events).toHaveLength(1);
+    expect(after.root.children[0]?.events[0]?.event).toBe('click');
+  });
+});
+
+describe('addConstraintRef', () => {
+  it('appends a rule reference to the target node', () => {
+    const added = addComponent(baseAst(), { parentId: 'n_root', type: 'Form', props: {} });
+    const after = addConstraintRef(added.ast, {
+      nodeId: added.newNodeId,
+      ruleId: 'houseprice.form.required-submit',
+    });
+    expect(after.root.children[0]?.constraints).toEqual([{ ruleId: 'houseprice.form.required-submit' }]);
+  });
+
+  it('does not add the same ruleId twice', () => {
+    let ast = addComponent(baseAst(), { parentId: 'n_root', type: 'Form', props: {} }).ast;
+    const targetId = ast.root.children[0]!.id;
+    ast = addConstraintRef(ast, { nodeId: targetId, ruleId: 'r.a' });
+    ast = addConstraintRef(ast, { nodeId: targetId, ruleId: 'r.a' });
+    expect(ast.root.children[0]?.constraints).toHaveLength(1);
+  });
+});
