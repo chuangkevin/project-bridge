@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 import * as compileService from '../../services/compile';
-import { compileHandler, mutateHandler } from '../compile';
+import * as store from '../../storage/artifactStore';
+import { compileHandler, mutateHandler, listArtifactsHandler, loadArtifactHandler } from '../compile';
 
 function mockRes() {
   const res = {} as Response & { _status?: number; _json?: unknown };
@@ -60,5 +61,35 @@ describe('mutateHandler', () => {
     await mutateHandler(req, res);
     expect(compileService.compileMutation).toHaveBeenCalled();
     expect(res._json).toEqual(fakeResult);
+  });
+});
+
+describe('listArtifactsHandler', () => {
+  beforeEach(() => vi.restoreAllMocks());
+  it('returns the artifact ids', () => {
+    vi.spyOn(store, 'listArtifacts').mockReturnValue(['home', 'list-page']);
+    const req = { params: { id: 'p1' } } as unknown as Request;
+    const res = mockRes();
+    listArtifactsHandler(req, res);
+    expect(res._json).toEqual({ artifacts: ['home', 'list-page'] });
+  });
+});
+
+describe('loadArtifactHandler', () => {
+  beforeEach(() => vi.restoreAllMocks());
+  it('returns the ast when found', () => {
+    const fakeAst = { schemaVersion: 1, artifactId: 'home', kind: 'page', root: {} };
+    vi.spyOn(store, 'loadArtifact').mockReturnValue(fakeAst as never);
+    const req = { params: { id: 'p1', artifactId: 'home' } } as unknown as Request;
+    const res = mockRes();
+    loadArtifactHandler(req, res);
+    expect(res._json).toEqual({ ast: fakeAst });
+  });
+  it('404s when missing', () => {
+    vi.spyOn(store, 'loadArtifact').mockReturnValue(null);
+    const req = { params: { id: 'p1', artifactId: 'nope' } } as unknown as Request;
+    const res = mockRes();
+    loadArtifactHandler(req, res);
+    expect(res._status).toBe(404);
   });
 });
