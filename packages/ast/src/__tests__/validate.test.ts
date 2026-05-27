@@ -75,6 +75,30 @@ describe('validateAst', () => {
     ast.schemaVersion = 999;
     const result = validateAst(ast, { registry: BASE_COMPONENTS });
     expect(result.valid).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it('rejects a non-string value for an enum prop (Heading.level = number)', () => {
+    const ast = minimalAst();
+    ast.root.children = [{
+      id: 'n_h', type: 'Heading', props: { content: 'Title', level: 1 },
+      layout: { kind: 'flow' }, style: {},
+      bindings: [], events: [], constraints: [], children: [],
+    }];
+    const result = validateAst(ast, { registry: BASE_COMPONENTS });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => /must be a string enum value/.test(e.message))).toBe(true);
+  });
+
+  it('accepts a correct string value for an enum prop (Heading.level = "1")', () => {
+    const ast = minimalAst();
+    ast.root.children = [{
+      id: 'n_h', type: 'Heading', props: { content: 'Title', level: '1' },
+      layout: { kind: 'flow' }, style: {},
+      bindings: [], events: [], constraints: [], children: [],
+    }];
+    const result = validateAst(ast, { registry: BASE_COMPONENTS });
+    expect(result.valid).toBe(true);
   });
 });
 

@@ -1,4 +1,4 @@
-import { AST_SCHEMA_VERSION } from '../index';
+import { AST_SCHEMA_VERSION } from '../version';
 
 export const AST_JSON_SCHEMA = {
   $id: 'https://designbridge/ast.schema.json',

@@ -1,4 +1,4 @@
-export const AST_SCHEMA_VERSION = 1;
+export { AST_SCHEMA_VERSION } from './version';
 
 export type { LayoutIntent } from './types/layoutIntent';
 export type { StyleIntent } from './types/styleIntent';

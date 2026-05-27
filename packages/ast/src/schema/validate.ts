@@ -42,6 +42,7 @@ export function validateAst(ast: unknown, opts: ValidateOptions): ValidationResu
     const spec = opts.registry[n.type];
     if (!spec) {
       errors.push({ path, message: `unknown component type "${n.type}"` });
+      // Unknown type: stop descending — the whole subtree is suspect, report once.
       return;
     }
     if (!spec.allowsChildren && n.children.length > 0) {
@@ -53,7 +54,12 @@ export function validateAst(ast: unknown, opts: ValidateOptions): ValidationResu
       }
       if (propKey in n.props && propSpec.type === 'enum' && propSpec.enumValues) {
         const v = n.props[propKey];
-        if (typeof v === 'string' && !propSpec.enumValues.includes(v)) {
+        if (typeof v !== 'string') {
+          errors.push({
+            path: `${path}/props/${propKey}`,
+            message: `prop "${propKey}" of "${n.type}" must be a string enum value, got ${typeof v}`,
+          });
+        } else if (!propSpec.enumValues.includes(v)) {
           errors.push({
             path: `${path}/props/${propKey}`,
             message: `prop "${propKey}" of "${n.type}" must be one of [${propSpec.enumValues.join(', ')}], got "${v}"`,
