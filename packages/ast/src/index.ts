@@ -39,3 +39,7 @@ export { getDescendants } from './query/getDescendants';
 
 export { structuralDiff } from './diff/structuralDiff';
 export type { AstDiff } from './diff/structuralDiff';
+
+export { toJson } from './serialize/toJson';
+export { fromJson } from './serialize/fromJson';
+export type { FromJsonOptions } from './serialize/fromJson';
