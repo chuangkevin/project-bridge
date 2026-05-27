@@ -7,3 +7,6 @@ export type { EventBinding, EventName, Action } from './types/eventBinding';
 export type { RuleRef } from './types/ruleRef';
 export type { ComponentNode } from './types/componentNode';
 export type { SemanticUIAst, ArtifactKind } from './types/ast';
+
+export { generateNodeId } from './ids/generateNodeId';
+export { collectIds, hasDuplicateIds } from './ids/collectIds';
