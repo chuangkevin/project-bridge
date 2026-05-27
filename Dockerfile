@@ -27,6 +27,8 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
+COPY packages/ast/package.json packages/ast/
+COPY packages/codegen/package.json packages/codegen/
 
 # Gitea CI cannot reach codeload.github.com; rewrite ai-core tarball URL when mirror is provided.
 RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
@@ -38,8 +40,14 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
 RUN pnpm install --frozen-lockfile
 
 # Copy source
+COPY packages/ast/ packages/ast/
+COPY packages/codegen/ packages/codegen/
 COPY packages/server/ packages/server/
 COPY packages/client/ packages/client/
+
+# Build workspace libs FIRST — server + client depend on their dist (types + runtime)
+RUN pnpm --filter @designbridge/ast build
+RUN pnpm --filter @designbridge/codegen build
 
 # Build server (TypeScript → dist/)
 RUN pnpm --filter server build
@@ -82,10 +90,16 @@ COPY --from=builder /app/packages/server/data packages/server/data
 # Copy client build output
 COPY --from=builder /app/packages/client/dist packages/client/dist
 
+# Copy workspace lib build outputs (server requires @designbridge/ast + /codegen at runtime)
+COPY --from=builder /app/packages/ast/dist packages/ast/dist
+COPY --from=builder /app/packages/codegen/dist packages/codegen/dist
+
 # Fresh install production deps on glibc — no musl/glibc mismatch
 COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/.npmrc ./
 COPY --from=builder /app/packages/server/package.json packages/server/
 COPY --from=builder /app/packages/client/package.json packages/client/
+COPY --from=builder /app/packages/ast/package.json packages/ast/
+COPY --from=builder /app/packages/codegen/package.json packages/codegen/
 
 # Keep production install consistent with build stage URL rewrite in company network.
 RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
