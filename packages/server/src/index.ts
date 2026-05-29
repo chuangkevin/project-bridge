@@ -38,6 +38,7 @@ import componentsRouter, { projectComponentsRouter } from './routes/components';
 import openaiOAuthRouter from './routes/openaiOAuth';
 import compileRouter from './routes/compile';
 import mirrorsRouter from './routes/mirrors';
+import themeRouter from './routes/theme';
 import { authMiddleware } from './middleware/auth';
 import { syncSkillsFromDirectory } from './services/skillSync';
 import { startOAuthRefreshScheduler } from './services/provider';
@@ -92,6 +93,7 @@ app.use('/api/projects', projectComponentsRouter);
 app.use('/api/openai-oauth', openaiOAuthRouter);
 app.use('/api/projects', compileRouter);
 app.use('/api/projects', mirrorsRouter);
+app.use('/api/projects', themeRouter);
 
 // Health check
 function sendHealth(_req: express.Request, res: express.Response) {
