@@ -6,6 +6,7 @@ import ArtifactRail from '../components/compiler/ArtifactRail';
 import CompilerChat from '../components/compiler/CompilerChat';
 import PreviewPane from '../components/compiler/PreviewPane';
 import InspectorPane from '../components/compiler/InspectorPane';
+import ThemeMergeDialog from '../components/compiler/ThemeMergeDialog';
 
 const columnBorder = '1px solid var(--border-primary, #e2e8f0)';
 
@@ -14,6 +15,9 @@ const columnBorder = '1px solid var(--border-primary, #e2e8f0)';
 export default function CompilerWorkspace() {
   const { id } = useParams();
   const projectId = useCompilerStore((s) => s.projectId);
+  const pendingThemeProposal = useCompilerStore((s) => s.pendingThemeProposal);
+  const applyThemeMergeAction = useCompilerStore((s) => s.applyThemeMergeAction);
+  const clearPendingThemeProposal = useCompilerStore((s) => s.clearPendingThemeProposal);
 
   useEffect(() => {
     if (id) useCompilerStore.getState().setProjectId(id);
@@ -63,6 +67,14 @@ export default function CompilerWorkspace() {
           <InspectorPane />
         </aside>
       </div>
+      {pendingThemeProposal && (
+        <ThemeMergeDialog
+          current={null}
+          proposal={pendingThemeProposal}
+          onApply={(choice) => void applyThemeMergeAction(choice)}
+          onCancel={clearPendingThemeProposal}
+        />
+      )}
     </div>
   );
 }

@@ -62,7 +62,7 @@ describe('InspectorPane', () => {
     expect(screen.getByText('Copy')).toBeTruthy();
   });
 
-  it('renders mirror metadata + disabled Upgrade-to-AST button', () => {
+  it('renders mirror metadata + enabled Upgrade-to-AST button', () => {
     const m = makeMirror();
     useCompilerStore.setState({ artifacts: [m], activeArtifactId: m.id });
     render(<InspectorPane />);
@@ -70,7 +70,6 @@ describe('InspectorPane', () => {
     expect(screen.getByText(/2026-05-29/)).toBeTruthy();
     expect(screen.getByText(/Warnings/i)).toBeTruthy();
     const btn = screen.getByText('Upgrade to AST') as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(btn.title).toMatch(/10b/i);
+    expect(btn.disabled).toBe(false);
   });
 });

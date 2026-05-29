@@ -3,9 +3,14 @@ import type { SemanticUIAst, RuleViolation } from '@designbridge/ast';
 import {
   compile,
   compileMirror,
+  compileAstFromUrl,
+  upgradeMirrorToAst,
+  applyThemeMerge,
   mutate,
   type VueArtifactDTO,
   type MirrorArtifactDTO,
+  type ThemeProposalDto,
+  type ThemeMergeChoice,
 } from '../lib/compileApi';
 
 export type CompilerStage = 'ingestion' | 'ast' | 'constraint' | 'codegen';
@@ -42,11 +47,16 @@ interface CompilerState {
   stage: CompilerStage;
   isCompiling: boolean;
   threads: Record<string, string[]>;
+  pendingThemeProposal: ThemeProposalDto | null;
   setProjectId: (id: string) => void;
   setStage: (s: CompilerStage) => void;
   selectArtifact: (id: string) => void;
   compileFromRequirement: (requirement: string) => Promise<void>;
   compileMirrorFromUrl: (url: string) => Promise<CompileMirrorOutcome>;
+  compileAstFromUrlAction: (url: string) => Promise<CompileMirrorOutcome>;
+  upgradeMirrorToAstAction: (mirrorId: string) => Promise<CompileMirrorOutcome>;
+  applyThemeMergeAction: (choice: ThemeMergeChoice) => Promise<void>;
+  clearPendingThemeProposal: () => void;
   applyEdit: (instruction: string) => Promise<void>;
 }
 
@@ -73,6 +83,7 @@ export const useCompilerStore = create<CompilerState>((set, get) => ({
   stage: 'ast',
   isCompiling: false,
   threads: {},
+  pendingThemeProposal: null,
 
   setProjectId: (id) => set({ projectId: id }),
   setStage: (s) => set({ stage: s }),
@@ -109,6 +120,61 @@ export const useCompilerStore = create<CompilerState>((set, get) => ({
       throw err;
     }
   },
+
+  compileAstFromUrlAction: async (url) => {
+    const { projectId, artifacts } = get();
+    set({ isCompiling: true });
+    try {
+      const r = await compileAstFromUrl(projectId, { artifactId: slugForIndex(artifacts.length), url });
+      if (!r.ok) {
+        set({ isCompiling: false });
+        return { ok: false, reason: r.reason, detail: r.detail };
+      }
+      const artifact: AstArtifact = { kind: 'ast', id: nextArtifactId(), ast: r.ast, vue: r.vue, violations: r.violations };
+      set((st) => ({
+        artifacts: [...st.artifacts, artifact],
+        activeArtifactId: artifact.id,
+        isCompiling: false,
+        pendingThemeProposal: r.themeProposal,
+      }));
+      return { ok: true };
+    } catch (err) {
+      set({ isCompiling: false });
+      throw err;
+    }
+  },
+
+  upgradeMirrorToAstAction: async (mirrorId) => {
+    const { projectId } = get();
+    set({ isCompiling: true });
+    try {
+      const r = await upgradeMirrorToAst(projectId, mirrorId);
+      if (!r.ok) {
+        set({ isCompiling: false });
+        return { ok: false, reason: r.reason, detail: r.detail };
+      }
+      const artifact: AstArtifact = { kind: 'ast', id: nextArtifactId(), ast: r.ast, vue: r.vue, violations: r.violations };
+      set((st) => ({
+        artifacts: [...st.artifacts, artifact],
+        activeArtifactId: artifact.id,
+        isCompiling: false,
+        pendingThemeProposal: r.themeProposal,
+      }));
+      return { ok: true };
+    } catch (err) {
+      set({ isCompiling: false });
+      throw err;
+    }
+  },
+
+  applyThemeMergeAction: async (choice) => {
+    const { projectId, pendingThemeProposal } = get();
+    if (!pendingThemeProposal) return;
+    await applyThemeMerge(projectId, pendingThemeProposal, choice);
+    set({ pendingThemeProposal: null });
+  },
+
+  clearPendingThemeProposal: () => set({ pendingThemeProposal: null }),
 
   applyEdit: async (instruction) => {
     const { projectId, artifacts, activeArtifactId } = get();

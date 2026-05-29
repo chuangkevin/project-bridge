@@ -21,6 +21,7 @@ export default function CompilerChat() {
   const isCompiling = useCompilerStore((s) => s.isCompiling);
   const compileFromRequirement = useCompilerStore((s) => s.compileFromRequirement);
   const compileMirrorFromUrl = useCompilerStore((s) => s.compileMirrorFromUrl);
+  const compileAstFromUrlAction = useCompilerStore((s) => s.compileAstFromUrlAction);
   const applyEdit = useCompilerStore((s) => s.applyEdit);
 
   const [text, setText] = useState('');
@@ -67,9 +68,13 @@ export default function CompilerChat() {
           setError(`mirror failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`);
           return;
         }
+      } else if (mode === 'ast' && url) {
+        const r = await compileAstFromUrlAction(url);
+        if (!r.ok) {
+          setError(`AST compile failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`);
+          return;
+        }
       } else {
-        // AST path with URL is a Plan 10b feature; fall back to text-only compile for now.
-        setSent((prev) => [...prev, 'AST mode for URLs lands in Plan 10b — falling back to text-only generation.']);
         await compileFromRequirement(text.trim());
       }
       setSent((prev) => [...prev, text.trim()]);

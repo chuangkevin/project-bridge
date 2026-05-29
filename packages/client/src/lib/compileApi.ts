@@ -78,3 +78,69 @@ export function getMirrorUrl(
 ): string {
   return `/api/projects/${encodeURIComponent(projectId)}/mirrors/${encodeURIComponent(artifactId)}/${file}`;
 }
+
+export interface ThemeProposalDto {
+  palette: Array<{ value: string; source?: string }>;
+  typography: {
+    primaryFont: string | null;
+    secondaryFont: string | null;
+    headings: Array<{ tag: string; fontSize: string; fontWeight: string }>;
+    body: { fontFamily: string; fontSize: string; lineHeight?: string } | null;
+  };
+  radius: string[];
+  shadow: string[];
+  source: string;
+}
+
+export interface CompileAstFromUrlOkResult {
+  ok: true;
+  ast: SemanticUIAst;
+  violations: RuleViolation[];
+  vue: VueArtifactDTO;
+  themeProposal: ThemeProposalDto;
+}
+export interface CompileFailResult { ok: false; reason: string; detail?: string; }
+export type CompileAstFromUrlResult = CompileAstFromUrlOkResult | CompileFailResult;
+
+export function compileAstFromUrl(
+  projectId: string,
+  payload: { artifactId?: string; url: string },
+): Promise<CompileAstFromUrlResult> {
+  return postJson(`/api/projects/${projectId}/compile`, {
+    mode: 'ast',
+    source: { kind: 'url', payload: payload.url },
+    artifactId: payload.artifactId,
+  });
+}
+
+export function upgradeMirrorToAst(
+  projectId: string,
+  mirrorId: string,
+  payload: { artifactId?: string } = {},
+): Promise<CompileAstFromUrlResult> {
+  return postJson(`/api/projects/${projectId}/mirrors/${mirrorId}/upgrade-to-ast`, payload);
+}
+
+export interface ThemeFile {
+  schemaVersion: 1;
+  updatedAt: string;
+  palette: Array<{ value: string; source?: string }>;
+  typography: ThemeProposalDto['typography'];
+  radius: string[];
+  shadow: string[];
+}
+
+export type SectionChoice = 'take-new' | 'keep' | 'union';
+export type ThemeMergeChoice = Record<'palette' | 'typography' | 'radius' | 'shadow', SectionChoice>;
+
+export function getTheme(projectId: string): Promise<{ theme: ThemeFile | null }> {
+  return getJson(`/api/projects/${projectId}/theme`);
+}
+
+export function applyThemeMerge(
+  projectId: string,
+  proposal: ThemeProposalDto,
+  choice: ThemeMergeChoice,
+): Promise<{ ok: boolean; theme: ThemeFile }> {
+  return postJson(`/api/projects/${projectId}/theme/merge`, { proposal, choice });
+}

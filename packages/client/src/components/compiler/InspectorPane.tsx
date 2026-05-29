@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useCompilerStore } from '../../stores/useCompilerStore';
 
 const emptyStyle = { padding: 16, fontSize: 13, color: 'var(--text-muted, #94a3b8)' } as const;
@@ -12,12 +13,15 @@ const preStyle = {
 } as const;
 
 /** Right-hand detail pane. AST tree / violations / generated code, keyed to the active stage.
- *  For Mirror artifacts, shows metadata + a (currently disabled) "Upgrade to AST" button. */
+ *  For Mirror artifacts, shows metadata + an "Upgrade to AST" button. */
 export default function InspectorPane() {
   const artifacts = useCompilerStore((s) => s.artifacts);
   const activeArtifactId = useCompilerStore((s) => s.activeArtifactId);
   const stage = useCompilerStore((s) => s.stage);
+  const upgradeMirrorToAstAction = useCompilerStore((s) => s.upgradeMirrorToAstAction);
+  const isCompiling = useCompilerStore((s) => s.isCompiling);
   const active = artifacts.find((a) => a.id === activeArtifactId);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
   if (!active) {
     return <div style={emptyStyle}>No artifact selected.</div>;
@@ -46,22 +50,35 @@ export default function InspectorPane() {
             </ul>
           </div>
         )}
+        {upgradeError && (
+          <div role="alert" style={{ padding: '6px 10px', borderRadius: 6, background: 'rgba(220,38,38,0.1)', color: '#dc2626', fontSize: 12 }}>
+            {upgradeError}
+          </div>
+        )}
         <div style={{ marginTop: 'auto' }}>
           <button
             type="button"
-            disabled
-            title="Available after Plan 10b"
+            disabled={isCompiling}
+            onClick={async () => {
+              setUpgradeError(null);
+              try {
+                const r = await upgradeMirrorToAstAction(active.id);
+                if (!r.ok) setUpgradeError(`upgrade failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`);
+              } catch (err) {
+                setUpgradeError(err instanceof Error ? err.message : String(err));
+              }
+            }}
             style={{
               padding: '6px 12px',
               fontSize: 13,
               borderRadius: 6,
-              border: '1px solid var(--border-primary, #e2e8f0)',
-              cursor: 'not-allowed',
-              background: 'var(--bg-secondary, #fff)',
-              color: 'var(--text-muted, #94a3b8)',
+              border: '1px solid var(--accent, #8E6FA7)',
+              cursor: isCompiling ? 'default' : 'pointer',
+              background: isCompiling ? 'var(--text-muted, #94a3b8)' : 'var(--accent, #8E6FA7)',
+              color: '#fff',
             }}
           >
-            Upgrade to AST
+            {isCompiling ? 'Upgrading…' : 'Upgrade to AST'}
           </button>
         </div>
       </div>
