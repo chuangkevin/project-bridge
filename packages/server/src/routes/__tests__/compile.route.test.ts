@@ -80,14 +80,78 @@ describe('compileHandler — mirror mode', () => {
     expect(res._json).toMatchObject({ ok: false, reason: 'crawl_timeout' });
   });
 
-  it('mode=mirror with source.image returns ok:false image_source_not_supported (10a only)', async () => {
+  it('mode=mirror with source.image identified → runs as mirror+URL transparently', async () => {
+    const visionMod = await import('../../services/visionIdentifySite');
+    vi.spyOn(visionMod, 'identifySite').mockResolvedValue({ ok: true, url: 'https://identified.com' });
+    const fakeMeta = {
+      kind: 'mirror' as const, id: 'ar_si', sourceUrl: 'https://identified.com', sourceType: 'url' as const,
+      crawledAt: '2026-05-29T00:00:00Z',
+      files: { html: 'page.html', css: 'styles.css', screenshot: 'screenshot.png' },
+      warnings: [], editable: false as const,
+    };
+    vi.spyOn(mirrorBuilder, 'buildMirror').mockResolvedValue({ ok: true, meta: fakeMeta } as never);
     const req = {
       params: { id: 'p1' },
       body: { mode: 'mirror', source: { kind: 'image', mimeType: 'image/png', base64: 'x' } },
     } as unknown as Request;
     const res = mockRes();
     await compileHandler(req, res);
-    expect(res._json).toMatchObject({ ok: false, reason: 'image_source_not_supported' });
+    expect(res._json).toMatchObject({ ok: true, artifact: { kind: 'mirror', sourceUrl: 'https://identified.com' } });
+  });
+
+  it('mode=mirror with source.image unidentified → ok:false unidentified_screenshot', async () => {
+    const visionMod = await import('../../services/visionIdentifySite');
+    vi.spyOn(visionMod, 'identifySite').mockResolvedValue({ ok: false, reason: 'unknown_site' });
+    const req = {
+      params: { id: 'p1' },
+      body: { mode: 'mirror', source: { kind: 'image', mimeType: 'image/png', base64: 'x' } },
+    } as unknown as Request;
+    const res = mockRes();
+    await compileHandler(req, res);
+    expect(res._json).toMatchObject({ ok: false, reason: 'unidentified_screenshot' });
+  });
+
+  it('mode=mirror with source.image + vision_unavailable returns vision_unavailable', async () => {
+    const visionMod = await import('../../services/visionIdentifySite');
+    vi.spyOn(visionMod, 'identifySite').mockResolvedValue({ ok: false, reason: 'vision_unavailable' });
+    const req = {
+      params: { id: 'p1' },
+      body: { mode: 'mirror', source: { kind: 'image', mimeType: 'image/png', base64: 'x' } },
+    } as unknown as Request;
+    const res = mockRes();
+    await compileHandler(req, res);
+    expect(res._json).toMatchObject({ ok: false, reason: 'vision_unavailable' });
+  });
+
+  it('mode=ast with source.image runs parseScreenshot → buildColdStart → returns ast (no themeProposal)', async () => {
+    const parseMod = await import('../../ingestion/parseScreenshot');
+    vi.spyOn(parseMod, 'parseScreenshot').mockResolvedValue({
+      ok: true,
+      ingestion: { type: 'screenshot', ocrText: 'x', regions: [] },
+    } as never);
+    vi.spyOn(compileService, 'compileFromIngestion').mockResolvedValue(fakeResult as never);
+    const req = {
+      params: { id: 'p1' },
+      body: { mode: 'ast', source: { kind: 'image', mimeType: 'image/png', base64: 'x' }, artifactId: 'ar_a' },
+    } as unknown as Request;
+    const res = mockRes();
+    await compileHandler(req, res);
+    const body = res._json as { ok: boolean; ast: unknown; themeProposal?: unknown };
+    expect(body.ok).toBe(true);
+    expect(body.ast).toBeDefined();
+    expect(body.themeProposal).toBeUndefined();
+  });
+
+  it('mode=ast with source.image + vision_unavailable returns ok:false', async () => {
+    const parseMod = await import('../../ingestion/parseScreenshot');
+    vi.spyOn(parseMod, 'parseScreenshot').mockResolvedValue({ ok: false, reason: 'vision_unavailable', detail: 'no key' } as never);
+    const req = {
+      params: { id: 'p1' },
+      body: { mode: 'ast', source: { kind: 'image', mimeType: 'image/png', base64: 'x' } },
+    } as unknown as Request;
+    const res = mockRes();
+    await compileHandler(req, res);
+    expect(res._json).toMatchObject({ ok: false, reason: 'vision_unavailable' });
   });
 
   it('mode=mirror without source 400s', async () => {

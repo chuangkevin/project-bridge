@@ -5,8 +5,10 @@ import { listArtifacts, loadArtifact } from '../storage/artifactStore';
 import { loadMirrorMeta } from '../storage/mirrorStore';
 import { buildMirror } from '../services/mirrorBuilder';
 import { parseWebpage } from '../ingestion/parseWebpage';
+import { parseScreenshot } from '../ingestion/parseScreenshot';
 import { ingestionCache } from '../services/ingestionCache';
 import { extractTheme } from '../services/themeExtractor';
+import { identifySite } from '../services/visionIdentifySite';
 
 /** POST /:id/compile — cold start from a text requirement OR mirror-mode URL. */
 export async function compileHandler(req: Request, res: Response): Promise<void> {
@@ -16,8 +18,19 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
 
   if (mode === 'mirror') {
     const source = req.body?.source;
-    if (source?.kind === 'image') {
-      res.json({ ok: false, reason: 'image_source_not_supported' });
+    if (source?.kind === 'image' && typeof source.mimeType === 'string' && typeof source.base64 === 'string') {
+      const idr = await identifySite({ mimeType: source.mimeType, base64: source.base64 });
+      if (!idr.ok) {
+        res.json({ ok: false, reason: idr.reason === 'vision_unavailable' ? 'vision_unavailable' : 'unidentified_screenshot' });
+        return;
+      }
+      try {
+        const result = await buildMirror({ projectId: req.params.id as string, artifactId, url: idr.url });
+        if (!result.ok) { res.json({ ok: false, reason: result.reason, detail: result.detail }); return; }
+        res.json({ ok: true, artifact: result.meta });
+      } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+      }
       return;
     }
     if (!source || source.kind !== 'url' || typeof source.payload !== 'string') {
@@ -30,6 +43,23 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
       res.json({ ok: true, artifact: result.meta });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
+    }
+    return;
+  }
+
+  if (mode === 'ast' && req.body?.source?.kind === 'image') {
+    const source = req.body.source;
+    if (typeof source.mimeType !== 'string' || typeof source.base64 !== 'string') {
+      res.status(400).json({ error: 'ast+image mode requires source.mimeType and source.base64' });
+      return;
+    }
+    const ps = await parseScreenshot({ mimeType: source.mimeType, base64: source.base64 });
+    if (!ps.ok) { res.json({ ok: false, reason: ps.reason, detail: ps.detail }); return; }
+    try {
+      const result = await compileService.compileFromIngestion(ps.ingestion, { artifactId, projectId: req.params.id as string });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.json({ ok: false, reason: 'ast_repair_exhausted', detail: (err as Error).message });
     }
     return;
   }
