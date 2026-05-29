@@ -4,6 +4,9 @@ import * as compileService from '../services/compile';
 import { listArtifacts, loadArtifact } from '../storage/artifactStore';
 import { loadMirrorMeta } from '../storage/mirrorStore';
 import { buildMirror } from '../services/mirrorBuilder';
+import { parseWebpage } from '../ingestion/parseWebpage';
+import { ingestionCache } from '../services/ingestionCache';
+import { extractTheme } from '../services/themeExtractor';
 
 /** POST /:id/compile — cold start from a text requirement OR mirror-mode URL. */
 export async function compileHandler(req: Request, res: Response): Promise<void> {
@@ -31,7 +34,31 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
     return;
   }
 
-  // pure-text mode (and 10a's ast falls back to requirement-only compile)
+  if (mode === 'ast' && req.body?.source?.kind === 'url') {
+    const projectId = req.params.id as string;
+    const url = req.body.source.payload as string;
+    if (typeof url !== 'string' || !url) {
+      res.status(400).json({ error: 'ast+url mode requires source.payload (string)' });
+      return;
+    }
+    let cached = ingestionCache.get(projectId, url);
+    if (!cached) {
+      const parsed = await parseWebpage(url);
+      if (!parsed.ok) { res.json({ ok: false, reason: parsed.reason, detail: parsed.detail }); return; }
+      ingestionCache.set(projectId, url, parsed.ingestion, { assets: parsed.assets });
+      cached = { ingestion: parsed.ingestion, assets: parsed.assets };
+    }
+    try {
+      const result = await compileService.compileFromIngestion(cached.ingestion, { artifactId, projectId });
+      const themeProposal = extractTheme({ dom: cached.ingestion.dom, css: '', sourceUrl: url });
+      res.json({ ok: true, ...result, themeProposal });
+    } catch (err) {
+      res.json({ ok: false, reason: 'ast_repair_exhausted', detail: (err as Error).message });
+    }
+    return;
+  }
+
+  // pure-text mode
   const requirement = req.body?.requirement;
   if (typeof requirement !== 'string' || requirement.trim().length === 0) {
     res.status(400).json({ error: 'requirement (non-empty string) is required' });

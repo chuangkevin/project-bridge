@@ -97,15 +97,60 @@ describe('compileHandler — mirror mode', () => {
     expect(res._status).toBe(400);
   });
 
-  it('mode=ast with source.url falls back to requirement compile (10a no-op for ast)', async () => {
-    vi.spyOn(compileService, 'compileFromInput').mockResolvedValue(fakeResult as never);
+  it('mode=ast with source.url crawls (cache miss), builds AST, returns ast+themeProposal', async () => {
+    const parseMod = await import('../../ingestion/parseWebpage');
+    const cacheMod = await import('../../services/ingestionCache');
+    cacheMod.ingestionCache.clear();
+    vi.spyOn(parseMod, 'parseWebpage').mockResolvedValue({
+      ok: true,
+      ingestion: { type: 'webpage', url: 'https://e.com', dom: '<html><body style="color:#abcdef"><h1 style="font-size:24px;font-weight:700">Hi</h1></body></html>' },
+      assets: [],
+    } as never);
+    vi.spyOn(compileService, 'compileFromIngestion').mockResolvedValue(fakeResult as never);
     const req = {
       params: { id: 'p1' },
-      body: { mode: 'ast', source: { kind: 'url', payload: 'https://e.com' }, requirement: 'login page' },
+      body: { mode: 'ast', source: { kind: 'url', payload: 'https://e.com' }, artifactId: 'ar_a1' },
     } as unknown as Request;
     const res = mockRes();
     await compileHandler(req, res);
-    expect(res._json).toEqual(fakeResult);
+    const body = res._json as { ok: boolean; ast: unknown; themeProposal: { palette: unknown[] } };
+    expect(body.ok).toBe(true);
+    expect(body.ast).toBeDefined();
+    expect(body.themeProposal).toBeDefined();
+    expect(body.themeProposal.palette.length).toBeGreaterThan(0);
+  });
+
+  it('mode=ast with source.url crawl_timeout returns ok:false', async () => {
+    const parseMod = await import('../../ingestion/parseWebpage');
+    const cacheMod = await import('../../services/ingestionCache');
+    cacheMod.ingestionCache.clear();
+    vi.spyOn(parseMod, 'parseWebpage').mockResolvedValue({ ok: false, reason: 'crawl_timeout', detail: 'timed out' } as never);
+    const req = {
+      params: { id: 'p1' },
+      body: { mode: 'ast', source: { kind: 'url', payload: 'https://e.com' } },
+    } as unknown as Request;
+    const res = mockRes();
+    await compileHandler(req, res);
+    expect(res._json).toMatchObject({ ok: false, reason: 'crawl_timeout' });
+  });
+
+  it('mode=ast with source.url reuses cached ingestion on second call', async () => {
+    const parseMod = await import('../../ingestion/parseWebpage');
+    const cacheMod = await import('../../services/ingestionCache');
+    cacheMod.ingestionCache.clear();
+    const parseSpy = vi.spyOn(parseMod, 'parseWebpage').mockResolvedValue({
+      ok: true,
+      ingestion: { type: 'webpage', url: 'https://e.com', dom: '<x/>' },
+      assets: [],
+    } as never);
+    vi.spyOn(compileService, 'compileFromIngestion').mockResolvedValue(fakeResult as never);
+
+    const make = (): Request =>
+      ({ params: { id: 'p1' }, body: { mode: 'ast', source: { kind: 'url', payload: 'https://e.com' } } } as unknown as Request);
+
+    await compileHandler(make(), mockRes());
+    await compileHandler(make(), mockRes());
+    expect(parseSpy).toHaveBeenCalledTimes(1);
   });
 });
 
