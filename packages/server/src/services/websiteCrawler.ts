@@ -354,3 +354,46 @@ export async function closeBrowser(): Promise<void> {
     browserInstance = null;
   }
 }
+
+export interface RawCrawlResult {
+  url: string;
+  success: boolean;
+  error?: string;
+  /** Full outerHTML of the page (after networkidle). */
+  html: string;
+  /** Each `<style>` block's text content, concatenated in order. */
+  inlineStylesheets: string[];
+  /** Base64 PNG screenshot. */
+  screenshot?: string;
+}
+
+/** Like crawlWebsite but returns raw DOM + inline stylesheets — for the Mirror builder. */
+export async function crawlWebsiteRaw(url: string): Promise<RawCrawlResult> {
+  try { new URL(url); } catch { return { url, success: false, error: 'invalid_url', html: '', inlineStylesheets: [] }; }
+  let browser: Browser | null = null;
+  try {
+    browser = await getBrowser();
+    const context = await browser.newContext(getCrawlerContextOptions());
+    const page = await context.newPage();
+    await applyCrawlerStealth(page);
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
+    const html = await page.content();
+    if ((response && response.status() === 403) || looksForbiddenHtml(html)) {
+      await context.close();
+      return { url, success: false, error: 'forbidden', html: '', inlineStylesheets: [] };
+    }
+    const screenshotBuffer = await page.screenshot({ fullPage: false });
+    const screenshot = screenshotBuffer.toString('base64');
+    const inlineStylesheets = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('style')).map(s => s.textContent || '')
+    );
+    await context.close();
+    return { url, success: true, html, inlineStylesheets, screenshot };
+  } catch (err: any) {
+    if (err.message?.includes('timeout') || err.message?.includes('Timeout')) {
+      return { url, success: false, error: 'timeout', html: '', inlineStylesheets: [] };
+    }
+    return { url, success: false, error: err.message?.slice(0, 200) || 'unknown', html: '', inlineStylesheets: [] };
+  }
+}
