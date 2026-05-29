@@ -2,17 +2,46 @@ import { Router, type Request, type Response } from 'express';
 import type { SemanticUIAst } from '@designbridge/ast';
 import * as compileService from '../services/compile';
 import { listArtifacts, loadArtifact } from '../storage/artifactStore';
+import { loadMirrorMeta } from '../storage/mirrorStore';
+import { buildMirror } from '../services/mirrorBuilder';
 
-/** POST /:id/compile — cold start from a text requirement. */
+/** POST /:id/compile — cold start from a text requirement OR mirror-mode URL. */
 export async function compileHandler(req: Request, res: Response): Promise<void> {
-  const artifactId = typeof req.body?.artifactId === 'string' && req.body.artifactId.trim() ? req.body.artifactId.trim() : 'artifact';
+  const mode: string = req.body?.mode ?? 'pure-text';
+  const artifactId: string = typeof req.body?.artifactId === 'string' && req.body.artifactId.trim()
+    ? req.body.artifactId.trim() : 'artifact';
+
+  if (mode === 'mirror') {
+    const source = req.body?.source;
+    if (source?.kind === 'image') {
+      res.json({ ok: false, reason: 'image_source_not_supported' });
+      return;
+    }
+    if (!source || source.kind !== 'url' || typeof source.payload !== 'string') {
+      res.status(400).json({ error: 'mirror mode requires source.kind="url" and source.payload (string)' });
+      return;
+    }
+    try {
+      const result = await buildMirror({ projectId: req.params.id as string, artifactId, url: source.payload });
+      if (!result.ok) { res.json({ ok: false, reason: result.reason, detail: result.detail }); return; }
+      res.json({ ok: true, artifact: result.meta });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+    return;
+  }
+
+  // pure-text mode (and 10a's ast falls back to requirement-only compile)
   const requirement = req.body?.requirement;
   if (typeof requirement !== 'string' || requirement.trim().length === 0) {
     res.status(400).json({ error: 'requirement (non-empty string) is required' });
     return;
   }
   try {
-    const result = await compileService.compileFromInput({ kind: 'requirement', text: requirement }, { artifactId, projectId: req.params.id as string });
+    const result = await compileService.compileFromInput(
+      { kind: 'requirement', text: requirement },
+      { artifactId, projectId: req.params.id as string },
+    );
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -35,16 +64,20 @@ export async function mutateHandler(req: Request, res: Response): Promise<void> 
   }
 }
 
-/** GET /:id/artifacts — list persisted artifact ids for a project. */
+/** GET /:id/artifacts — list persisted artifact entries (AST + Mirror) for a project. */
 export function listArtifactsHandler(req: Request, res: Response): void {
   res.json({ artifacts: listArtifacts(req.params.id as string) });
 }
 
-/** GET /:id/artifacts/:artifactId — load a single persisted artifact. */
+/** GET /:id/artifacts/:artifactId — load a single persisted artifact (AST or Mirror metadata). */
 export function loadArtifactHandler(req: Request, res: Response): void {
-  const ast = loadArtifact(req.params.id as string, req.params.artifactId as string);
-  if (!ast) { res.status(404).json({ error: 'artifact not found' }); return; }
-  res.json({ ast });
+  const projectId = req.params.id as string;
+  const artifactId = req.params.artifactId as string;
+  const ast = loadArtifact(projectId, artifactId);
+  if (ast) { res.json({ kind: 'ast', ast }); return; }
+  const mirror = loadMirrorMeta(projectId, artifactId);
+  if (mirror) { res.json({ kind: 'mirror', mirror }); return; }
+  res.status(404).json({ error: 'artifact not found' });
 }
 
 const router = Router();
