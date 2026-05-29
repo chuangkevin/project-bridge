@@ -42,7 +42,7 @@ function normHex(c: string): string {
 export function extractTheme(params: { dom: string; css: string; sourceUrl: string }): ThemeProposal {
   const $ = cheerio.load(params.dom);
   const styles: string[] = [params.css];
-  $('[style]').each((_, el) => styles.push($(el).attr('style') || ''));
+  $('[style]').each((_, el) => { styles.push($(el).attr('style') || ''); });
   const allCss = styles.join('\n');
 
   const colorSet = new Set<string>();
