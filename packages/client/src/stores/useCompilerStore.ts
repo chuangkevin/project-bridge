@@ -3,7 +3,9 @@ import type { SemanticUIAst, RuleViolation } from '@designbridge/ast';
 import {
   compile,
   compileMirror,
+  compileMirrorFromImage,
   compileAstFromUrl,
+  compileAstFromImage,
   upgradeMirrorToAst,
   applyThemeMerge,
   mutate,
@@ -53,7 +55,9 @@ interface CompilerState {
   selectArtifact: (id: string) => void;
   compileFromRequirement: (requirement: string) => Promise<void>;
   compileMirrorFromUrl: (url: string) => Promise<CompileMirrorOutcome>;
+  compileMirrorFromImageAction: (image: { mimeType: string; base64: string }) => Promise<CompileMirrorOutcome>;
   compileAstFromUrlAction: (url: string) => Promise<CompileMirrorOutcome>;
+  compileAstFromImageAction: (image: { mimeType: string; base64: string }) => Promise<CompileMirrorOutcome>;
   upgradeMirrorToAstAction: (mirrorId: string) => Promise<CompileMirrorOutcome>;
   applyThemeMergeAction: (choice: ThemeMergeChoice) => Promise<void>;
   clearPendingThemeProposal: () => void;
@@ -137,6 +141,51 @@ export const useCompilerStore = create<CompilerState>((set, get) => ({
         isCompiling: false,
         pendingThemeProposal: r.themeProposal,
       }));
+      return { ok: true };
+    } catch (err) {
+      set({ isCompiling: false });
+      throw err;
+    }
+  },
+
+  compileMirrorFromImageAction: async (image) => {
+    const { projectId, artifacts } = get();
+    const mirrorIndex = artifacts.filter((a) => a.kind === 'mirror').length;
+    set({ isCompiling: true });
+    try {
+      const r = await compileMirrorFromImage(projectId, {
+        artifactId: slugForMirror(mirrorIndex),
+        mimeType: image.mimeType,
+        base64: image.base64,
+      });
+      if (!r.ok) {
+        set({ isCompiling: false });
+        return { ok: false, reason: r.reason, detail: r.detail };
+      }
+      const artifact = fromMirrorDto(r.artifact);
+      set((st) => ({ artifacts: [...st.artifacts, artifact], activeArtifactId: artifact.id, isCompiling: false }));
+      return { ok: true };
+    } catch (err) {
+      set({ isCompiling: false });
+      throw err;
+    }
+  },
+
+  compileAstFromImageAction: async (image) => {
+    const { projectId, artifacts } = get();
+    set({ isCompiling: true });
+    try {
+      const r = await compileAstFromImage(projectId, {
+        artifactId: slugForIndex(artifacts.length),
+        mimeType: image.mimeType,
+        base64: image.base64,
+      });
+      if (!r.ok) {
+        set({ isCompiling: false });
+        return { ok: false, reason: r.reason, detail: r.detail };
+      }
+      const artifact: AstArtifact = { kind: 'ast', id: nextArtifactId(), ast: r.ast, vue: r.vue, violations: r.violations };
+      set((st) => ({ artifacts: [...st.artifacts, artifact], activeArtifactId: artifact.id, isCompiling: false }));
       return { ok: true };
     } catch (err) {
       set({ isCompiling: false });

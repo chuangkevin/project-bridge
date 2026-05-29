@@ -112,4 +112,40 @@ describe('CompilerChat', () => {
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(screen.queryByTestId('mirror-intent-card')).toBeNull();
   });
+
+  it('pasted image triggers MirrorIntentCard on Send', async () => {
+    render(<CompilerChat />);
+    const input = screen.getByLabelText('compiler chat input');
+    // Simulate paste with an image item
+    const blob = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' });
+    Object.defineProperty(blob, 'name', { value: 'shot.png' });
+    fireEvent.paste(input, {
+      clipboardData: {
+        items: [{ type: 'image/png', getAsFile: () => blob as File }],
+      },
+    });
+    // Wait for FileReader to resolve via microtask flush
+    await waitFor(() => expect(screen.getByText(/Attached/i)).toBeTruthy());
+    fireEvent.click(screen.getByText('Send'));
+    await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
+  });
+
+  it('confirming Mirror with image invokes compileMirrorFromImage with the attached image', async () => {
+    const spy = vi.spyOn(compileApi, 'compileMirrorFromImage').mockResolvedValue({
+      ok: true,
+      artifact: { kind: 'mirror', id: 'mirror-1', sourceUrl: 'https://identified.com', sourceType: 'url', crawledAt: 'x', files: { html: 'page.html', css: 'styles.css', screenshot: 'screenshot.png' }, warnings: [], editable: false },
+    });
+    render(<CompilerChat />);
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+    fireEvent.paste(screen.getByLabelText('compiler chat input'), {
+      clipboardData: { items: [{ type: 'image/png', getAsFile: () => blob as File }] },
+    });
+    await waitFor(() => expect(screen.getByText(/Attached/i)).toBeTruthy());
+    fireEvent.click(screen.getByText('Send'));
+    await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText(/Mirror —/i));
+    fireEvent.click(screen.getByText('Confirm'));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[0][1]).toMatchObject({ mimeType: 'image/png' });
+  });
 });

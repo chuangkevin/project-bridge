@@ -53,6 +53,14 @@ export function compileMirror(projectId: string, payload: { artifactId?: string;
   });
 }
 
+export function compileMirrorFromImage(projectId: string, payload: { artifactId?: string; mimeType: string; base64: string }): Promise<CompileMirrorResult> {
+  return postJson(`/api/projects/${projectId}/compile`, {
+    mode: 'mirror',
+    source: { kind: 'image', mimeType: payload.mimeType, base64: payload.base64 },
+    artifactId: payload.artifactId,
+  });
+}
+
 export function mutate(projectId: string, body: { ast: SemanticUIAst; instruction: string }): Promise<CompileAstResult> {
   return postJson(`/api/projects/${projectId}/compile/mutate`, body);
 }
@@ -109,6 +117,25 @@ export function compileAstFromUrl(
   return postJson(`/api/projects/${projectId}/compile`, {
     mode: 'ast',
     source: { kind: 'url', payload: payload.url },
+    artifactId: payload.artifactId,
+  });
+}
+
+export interface CompileAstFromImageOkResult {
+  ok: true;
+  ast: SemanticUIAst;
+  violations: RuleViolation[];
+  vue: VueArtifactDTO;
+}
+export type CompileAstFromImageResult = CompileAstFromImageOkResult | CompileFailResult;
+
+export function compileAstFromImage(
+  projectId: string,
+  payload: { artifactId?: string; mimeType: string; base64: string },
+): Promise<CompileAstFromImageResult> {
+  return postJson(`/api/projects/${projectId}/compile`, {
+    mode: 'ast',
+    source: { kind: 'image', mimeType: payload.mimeType, base64: payload.base64 },
     artifactId: payload.artifactId,
   });
 }
