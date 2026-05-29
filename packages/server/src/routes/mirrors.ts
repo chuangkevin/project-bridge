@@ -1,6 +1,11 @@
 import { Router, type Request, type Response } from 'express';
+import express from 'express';
 import { renderMirror } from '@designbridge/codegen';
 import { readMirrorFile, loadMirrorMeta } from '../storage/mirrorStore';
+import { ingestionCache } from '../services/ingestionCache';
+import { parseWebpage } from '../ingestion/parseWebpage';
+import { compileFromIngestion } from '../services/compile';
+import { extractTheme } from '../services/themeExtractor';
 
 export interface MirrorsRouterOpts { baseDir?: string; }
 
@@ -64,6 +69,31 @@ export function createMirrorsRouter(opts: MirrorsRouterOpts = {}): Router {
         .send(readMirrorFile(req.params.id as string, req.params.artifactId as string, `assets/${filename}`, { baseDir: opts.baseDir }));
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
+    }
+  });
+
+  router.post('/:id/mirrors/:artifactId/upgrade-to-ast', express.json(), async (req: Request, res: Response) => {
+    const projectId = req.params.id as string;
+    const mirrorId = req.params.artifactId as string;
+    const newArtifactId = typeof req.body?.artifactId === 'string' && req.body.artifactId.trim()
+      ? req.body.artifactId.trim() : `${mirrorId}_ast`;
+
+    const meta = loadMirrorMeta(projectId, mirrorId, { baseDir: opts.baseDir });
+    if (!meta) { res.status(404).json({ error: 'mirror not found' }); return; }
+
+    let cached = ingestionCache.get(projectId, meta.sourceUrl);
+    if (!cached) {
+      const parsed = await parseWebpage(meta.sourceUrl);
+      if (!parsed.ok) { res.json({ ok: false, reason: parsed.reason, detail: parsed.detail }); return; }
+      ingestionCache.set(projectId, meta.sourceUrl, parsed.ingestion, { assets: parsed.assets });
+      cached = { ingestion: parsed.ingestion, assets: parsed.assets };
+    }
+    try {
+      const result = await compileFromIngestion(cached.ingestion, { artifactId: newArtifactId, projectId });
+      const themeProposal = extractTheme({ dom: cached.ingestion.dom, css: '', sourceUrl: meta.sourceUrl });
+      res.json({ ok: true, ...result, themeProposal });
+    } catch (err) {
+      res.json({ ok: false, reason: 'ast_repair_exhausted', detail: (err as Error).message });
     }
   });
 
