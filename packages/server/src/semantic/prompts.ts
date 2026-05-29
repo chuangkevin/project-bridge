@@ -13,7 +13,16 @@ export function ingestionToText(ingestion: IngestionAst): string {
   switch (ingestion.type) {
     case 'requirement': return ingestion.paragraphs.join('\n\n');
     case 'pdf': return ingestion.rawText;
-    case 'screenshot': return ingestion.ocrText;
+    case 'screenshot':
+      return [
+        'Screenshot OCR text (all visible text):',
+        ingestion.ocrText,
+        '',
+        'High-level layout regions (from vision; pixel coordinates approximate):',
+        ...ingestion.regions.map(r => `- ${r.text ?? '(unlabeled)'} at (${r.x},${r.y}) ${r.width}x${r.height}`),
+        '',
+        'Translate the structure (in region order) into a Semantic UI AST.',
+      ].join('\n');
     case 'clipboard': return ingestion.payload;
     case 'webpage':
       return [
