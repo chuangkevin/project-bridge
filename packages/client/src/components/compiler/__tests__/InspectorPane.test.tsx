@@ -6,6 +6,7 @@ import { useCompilerStore, type Artifact } from '../../../stores/useCompilerStor
 import type { RuleViolation } from '@designbridge/ast';
 
 const makeArtifact = (violations: RuleViolation[] = []): Artifact => ({
+  kind: 'ast',
   id: 'art_1',
   ast: {
     schemaVersion: 1,
@@ -15,6 +16,15 @@ const makeArtifact = (violations: RuleViolation[] = []): Artifact => ({
   },
   vue: { filename: 'Home.vue', code: '<template><button type="button">Go</button></template>' },
   violations,
+});
+
+const makeMirror = (): Artifact => ({
+  kind: 'mirror',
+  id: 'mirror-1',
+  sourceUrl: 'https://example.com',
+  sourceType: 'url',
+  crawledAt: '2026-05-29T00:00:00Z',
+  warnings: [{ code: 'asset_404', url: 'https://cdn.example/x.png' }],
 });
 
 beforeEach(() => {
@@ -50,5 +60,17 @@ describe('InspectorPane', () => {
     render(<InspectorPane />);
     expect(screen.getByText(/<button type="button">Go<\/button>/)).toBeTruthy();
     expect(screen.getByText('Copy')).toBeTruthy();
+  });
+
+  it('renders mirror metadata + disabled Upgrade-to-AST button', () => {
+    const m = makeMirror();
+    useCompilerStore.setState({ artifacts: [m], activeArtifactId: m.id });
+    render(<InspectorPane />);
+    expect(screen.getByText('https://example.com')).toBeTruthy();
+    expect(screen.getByText(/2026-05-29/)).toBeTruthy();
+    expect(screen.getByText(/Warnings/i)).toBeTruthy();
+    const btn = screen.getByText('Upgrade to AST') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.title).toMatch(/10b/i);
   });
 });

@@ -24,6 +24,7 @@ export default function ArtifactRail() {
     <ul style={{ listStyle: 'none', margin: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {artifacts.map((a) => {
         const active = a.id === activeArtifactId;
+        const label = a.kind === 'mirror' ? a.id : a.ast.artifactId;
         return (
           <li key={a.id}>
             <button
@@ -43,7 +44,12 @@ export default function ArtifactRail() {
                 fontWeight: active ? 600 : 400,
               }}
             >
-              {a.ast.artifactId}
+              {a.kind === 'mirror' && (
+                <span title="Mirror — read-only" style={{ marginRight: 6 }}>
+                  🔒
+                </span>
+              )}
+              {label}
             </button>
           </li>
         );

@@ -6,6 +6,7 @@ import { useCompilerStore, type Artifact } from '../../../stores/useCompilerStor
 import type { RuleViolation } from '@designbridge/ast';
 
 const makeArtifact = (violations: RuleViolation[] = []): Artifact => ({
+  kind: 'ast',
   id: 'art_1',
   ast: {
     schemaVersion: 1,
@@ -15,6 +16,15 @@ const makeArtifact = (violations: RuleViolation[] = []): Artifact => ({
   },
   vue: { filename: 'Home.vue', code: '<template><button type="button">Go</button></template>' },
   violations,
+});
+
+const makeMirror = (): Artifact => ({
+  kind: 'mirror',
+  id: 'mirror-1',
+  sourceUrl: 'https://example.com',
+  sourceType: 'url',
+  crawledAt: '2026-05-29T00:00:00Z',
+  warnings: [],
 });
 
 beforeEach(() => {
@@ -51,5 +61,13 @@ describe('PreviewPane', () => {
     useCompilerStore.setState({ artifacts: [a], activeArtifactId: a.id, stage: 'constraint' });
     render(<PreviewPane />);
     expect(screen.getByText('No rule violations.')).toBeTruthy();
+  });
+
+  it('renders Mirror iframe pointing at the mirrors route when active artifact is mirror', () => {
+    const m = makeMirror();
+    useCompilerStore.setState({ artifacts: [m], activeArtifactId: m.id, stage: 'ast', projectId: 'p1' });
+    render(<PreviewPane />);
+    const iframe = screen.getByTitle('Mirror preview') as HTMLIFrameElement;
+    expect(iframe.getAttribute('src')).toBe('/api/projects/p1/mirrors/mirror-1/page.html');
   });
 });

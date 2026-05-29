@@ -11,7 +11,8 @@ const preStyle = {
   color: 'var(--text-primary, #1e293b)',
 } as const;
 
-/** Right-hand detail pane. AST tree / violations / generated code, keyed to the active stage. */
+/** Right-hand detail pane. AST tree / violations / generated code, keyed to the active stage.
+ *  For Mirror artifacts, shows metadata + a (currently disabled) "Upgrade to AST" button. */
 export default function InspectorPane() {
   const artifacts = useCompilerStore((s) => s.artifacts);
   const activeArtifactId = useCompilerStore((s) => s.activeArtifactId);
@@ -22,8 +23,53 @@ export default function InspectorPane() {
     return <div style={emptyStyle}>No artifact selected.</div>;
   }
 
+  if (active.kind === 'mirror') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 12, gap: 8, fontSize: 13 }}>
+        <div>
+          <span style={{ color: 'var(--text-secondary, #64748b)' }}>Source: </span>
+          <a href={active.sourceUrl} target="_blank" rel="noreferrer">
+            {active.sourceUrl}
+          </a>
+        </div>
+        <div>
+          <span style={{ color: 'var(--text-secondary, #64748b)' }}>Crawled: </span>
+          {active.crawledAt}
+        </div>
+        {active.warnings.length > 0 && (
+          <div>
+            <div style={{ color: '#d97706', fontWeight: 600 }}>Warnings ({active.warnings.length}):</div>
+            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-secondary, #64748b)' }}>
+              {active.warnings.slice(0, 10).map((w, i) => (
+                <li key={i}>{w.code}{w.url ? ` — ${w.url}` : ''}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div style={{ marginTop: 'auto' }}>
+          <button
+            type="button"
+            disabled
+            title="Available after Plan 10b"
+            style={{
+              padding: '6px 12px',
+              fontSize: 13,
+              borderRadius: 6,
+              border: '1px solid var(--border-primary, #e2e8f0)',
+              cursor: 'not-allowed',
+              background: 'var(--bg-secondary, #fff)',
+              color: 'var(--text-muted, #94a3b8)',
+            }}
+          >
+            Upgrade to AST
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (stage === 'codegen') {
-    const copy = () => {
+    const copy = (): void => {
       navigator.clipboard?.writeText(active.vue.code);
     };
     return (

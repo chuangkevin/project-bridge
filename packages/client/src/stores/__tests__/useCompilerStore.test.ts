@@ -28,7 +28,8 @@ describe('useCompilerStore', () => {
     vi.spyOn(api, 'mutate').mockResolvedValue(dto('Submit') as never);
     await useCompilerStore.getState().applyEdit('rename to Submit');
     const active = useCompilerStore.getState().artifacts.find(a => a.id === useCompilerStore.getState().activeArtifactId);
-    expect(active?.vue.code).toContain('Submit');
+    if (active?.kind !== 'ast') throw new Error('expected active artifact to be AST');
+    expect(active.vue.code).toContain('Submit');
   });
 
   it('setStage updates the current pipeline stage', () => {

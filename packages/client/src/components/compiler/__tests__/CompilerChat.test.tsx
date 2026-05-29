@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import CompilerChat from '../CompilerChat';
-import { useCompilerStore, type AstArtifact, type Artifact } from '../../../stores/useCompilerStore';
+import { useCompilerStore, type AstArtifact } from '../../../stores/useCompilerStore';
 import * as compileApi from '../../../lib/compileApi';
 import type { CompileAstResult } from '../../../lib/compileApi';
 
