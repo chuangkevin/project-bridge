@@ -9,3 +9,5 @@ export { renderVueProduction } from './renderVueProduction';
 export { renderProductionNode } from './renderProductionNode';
 export { collectStatePaths, buildStateInit } from './productionState';
 export { collectApiLoaders, buildScriptSetup } from './productionScript';
+export { renderMirror } from './renderMirror';
+export type { RenderMirrorParams } from './renderMirror';
