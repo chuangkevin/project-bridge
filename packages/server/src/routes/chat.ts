@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { requireAuth } from '../middleware/auth.js';
 import { getProject } from '../services/projectService.js';
@@ -11,7 +12,8 @@ import { appendTurn, type TurnMode } from '../services/turnService.js';
 import { addFact } from '../services/factService.js';
 import { parseFactsFromResponse } from '../services/factExtractor.js';
 import { getAttachment, type Attachment } from '../services/ingestionService.js';
-import { buildSystemPrompt } from '../services/chatOrchestrator.js';
+import { buildSystemPrompt, parseArtifactsFromResponse } from '../services/chatOrchestrator.js';
+import { createArtifact } from '../services/artifactService.js';
 
 const VALID_MODES: TurnMode[] = ['consult', 'architect', 'design'];
 
@@ -19,7 +21,7 @@ function sse(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-export function buildChatRouter(db: Database.Database): Router {
+export function buildChatRouter(db: Database.Database, dataDir: string): Router {
   const r = Router({ mergeParams: true });
   r.use(requireAuth);
 
@@ -132,7 +134,10 @@ export function buildChatRouter(db: Database.Database): Router {
 
       // Extract facts + persist turn
       const thinkingText = extractTagText(fullText, 'thinking');
-      const answerText = stripTagText(fullText, 'thinking').replace(/<facts>[\s\S]*?<\/facts>/g, '').trim();
+      const answerText = stripTagText(fullText, 'thinking')
+        .replace(/<facts>[\s\S]*?<\/facts>/g, '')
+        .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+        .trim();
       const facts = parseFactsFromResponse(fullText);
 
       const turn = appendTurn(db, {
@@ -143,6 +148,20 @@ export function buildChatRouter(db: Database.Database): Router {
         skillsUsed: forcedSkill ? [forcedSkill.name] : undefined,
       });
       for (const f of facts) addFact(db, { projectId, turnId: turn.id, kind: f.kind, text: f.text });
+
+      // Persist artifacts found in the response
+      const artifactBlocks = parseArtifactsFromResponse(fullText);
+      const artifactsRoot = join(dataDir, 'projects', projectId, 'artifacts');
+      for (const block of artifactBlocks) {
+        const ext = block.kind === 'vue-sfc' ? 'vue' : 'json';
+        const a = createArtifact(db, {
+          projectId, createdByTurn: turn.id,
+          kind: block.kind, name: block.name,
+          payload: block.payload, payloadExt: ext,
+          artifactsRoot,
+        });
+        sse(res, 'artifact', { id: a.id, kind: a.kind, name: a.name });
+      }
 
       sse(res, 'done', { turnId: turn.id });
     } catch (err) {
