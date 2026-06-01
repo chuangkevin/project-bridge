@@ -3,14 +3,17 @@
   "version": "1.5.1",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "legacy/packages/*"
   ],
   "scripts": {
-    "dev:server": "pnpm --filter server dev",
-    "dev:client": "pnpm --filter client dev",
-    "test:e2e": "pnpm --filter e2e test",
-    "test:e2e:smoke": "pnpm --filter e2e test:smoke",
-    "test:e2e:headed": "pnpm --filter e2e test:headed"
+    "dev:server-legacy": "pnpm --filter ./legacy/packages/server dev",
+    "dev:client-legacy": "pnpm --filter ./legacy/packages/client dev",
+    "dev:server": "echo 'new server not yet wired; run pnpm --filter server dev once Plan 1 done'",
+    "dev:client": "echo 'new client not yet wired'",
+    "test:e2e": "pnpm --filter ./legacy/packages/e2e test",
+    "test:e2e:smoke": "pnpm --filter ./legacy/packages/e2e test:smoke",
+    "test:e2e:headed": "pnpm --filter ./legacy/packages/e2e test:headed"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
