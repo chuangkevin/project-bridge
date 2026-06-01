@@ -1,0 +1,90 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import request from 'supertest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createApp } from '../../index';
+import { appendTurn } from '../../services/turnService';
+import { addFact } from '../../services/factService';
+
+let dataDir: string;
+let app: ReturnType<typeof createApp>;
+let token: string;
+let projectId: string;
+let turnId: string;
+
+beforeEach(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'fr-'));
+  app = createApp({ dataDir });
+  const r = await request(app).post('/api/auth/setup').send({ name: 'A', email: 'a@x.com', password: 'pw12345678' });
+  token = r.body.token;
+  const p = await request(app).post('/api/projects').set('Authorization', `Bearer ${token}`).send({ name: 'P' });
+  projectId = p.body.id;
+  turnId = appendTurn(app.locals.db, { projectId, mode: 'consult', userText: 'x', aiResponse: { text: '' } }).id;
+});
+afterEach(() => { app.locals.db?.close(); rmSync(dataDir, { recursive: true, force: true }); });
+
+const auth = () => ({ Authorization: `Bearer ${token}` });
+
+describe('facts routes', () => {
+  it('GET facts empty initially', async () => {
+    const r = await request(app).get(`/api/projects/${projectId}/facts`).set(auth());
+    expect(r.body.facts).toEqual([]);
+  });
+
+  it('POST creates a fact (use existing turnId)', async () => {
+    const r = await request(app).post(`/api/projects/${projectId}/facts`).set(auth())
+      .send({ turnId, kind: 'requirement', text: 'r1' });
+    expect(r.status).toBe(201);
+    expect(r.body.id).toBeDefined();
+    expect(r.body.kind).toBe('requirement');
+  });
+
+  it('POST validates kind enum', async () => {
+    const r = await request(app).post(`/api/projects/${projectId}/facts`).set(auth())
+      .send({ turnId, kind: 'invalid', text: 'r1' });
+    expect(r.status).toBe(400);
+  });
+
+  it('POST validates non-empty text', async () => {
+    const r = await request(app).post(`/api/projects/${projectId}/facts`).set(auth())
+      .send({ turnId, kind: 'requirement', text: '' });
+    expect(r.status).toBe(400);
+  });
+
+  it('GET with ?kind filter', async () => {
+    const db = app.locals.db;
+    addFact(db, { projectId, turnId, kind: 'requirement', text: 'r' });
+    addFact(db, { projectId, turnId, kind: 'page', text: 'p' });
+    const r = await request(app).get(`/api/projects/${projectId}/facts?kind=page`).set(auth());
+    expect(r.body.facts).toHaveLength(1);
+    expect(r.body.facts[0].kind).toBe('page');
+  });
+
+  it('PATCH replaces text with supersede (new fact + old marked superseded_by new)', async () => {
+    const db = app.locals.db;
+    const old = addFact(db, { projectId, turnId, kind: 'requirement', text: 'old' });
+    const r = await request(app).patch(`/api/projects/${projectId}/facts/${old.id}`).set(auth())
+      .send({ text: 'new' });
+    expect(r.status).toBe(200);
+    expect(r.body.text).toBe('new');
+    expect(r.body.id).not.toBe(old.id);
+    const list = (await request(app).get(`/api/projects/${projectId}/facts`).set(auth())).body.facts;
+    expect(list).toHaveLength(1);
+    expect(list[0].text).toBe('new');
+  });
+
+  it('DELETE marks superseded (soft delete) — listFacts no longer returns it', async () => {
+    const db = app.locals.db;
+    const f = addFact(db, { projectId, turnId, kind: 'requirement', text: 'x' });
+    const r = await request(app).delete(`/api/projects/${projectId}/facts/${f.id}`).set(auth());
+    expect(r.status).toBe(200);
+    const list = (await request(app).get(`/api/projects/${projectId}/facts`).set(auth())).body.facts;
+    expect(list).toEqual([]);
+  });
+
+  it('401 without auth', async () => {
+    const r = await request(app).get(`/api/projects/${projectId}/facts`);
+    expect(r.status).toBe(401);
+  });
+});
