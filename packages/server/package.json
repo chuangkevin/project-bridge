@@ -11,9 +11,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@kevinsisi/ai-core": "github:kevinsisi/ai-core#v3.4.2",
     "better-sqlite3": "^11.5.0",
     "bcrypt": "^5.1.1",
     "express": "^5.0.0",
+    "openai": "^4.73.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

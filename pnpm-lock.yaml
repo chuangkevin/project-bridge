@@ -224,6 +224,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@kevinsisi/ai-core':
+        specifier: github:kevinsisi/ai-core#v3.4.2
+        version: https://codeload.github.com/kevinsisi/ai-core/tar.gz/fe28b11b4ba4faddf4ad708ed09ed5a43f269b3f(better-sqlite3@11.10.0)
       bcrypt:
         specifier: ^5.1.1
         version: 5.1.1
@@ -233,6 +236,9 @@ importers:
       express:
         specifier: ^5.0.0
         version: 5.2.1
+      openai:
+        specifier: ^4.73.0
+        version: 4.104.0(ws@8.18.3)
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
