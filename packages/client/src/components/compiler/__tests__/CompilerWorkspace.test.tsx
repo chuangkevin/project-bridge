@@ -26,12 +26,12 @@ describe('CompilerWorkspace', () => {
     expect(useCompilerStore.getState().projectId).toBe('p1');
   });
 
-  it('mounts StageTabs (all four stage aria-labels present)', () => {
+  it('mounts StageTabs (three user-facing tabs; ingestion is hidden)', () => {
     renderAt('/project/p1');
-    expect(screen.getByLabelText('Ingestion')).toBeTruthy();
     expect(screen.getByLabelText('AST')).toBeTruthy();
     expect(screen.getByLabelText('Constraint')).toBeTruthy();
     expect(screen.getByLabelText('Codegen')).toBeTruthy();
+    expect(screen.queryByLabelText('Ingestion')).toBeNull();
   });
 
   it('mounts CompilerChat (chat input present)', () => {
@@ -42,6 +42,6 @@ describe('CompilerWorkspace', () => {
   it('shows an empty-state (no artifacts / no preview yet, in 繁中)', () => {
     renderAt('/project/p1');
     expect(screen.getByText(/尚無產出/)).toBeTruthy();
-    expect(screen.getByText(/AI UI 編譯器/)).toBeTruthy();
+    expect(screen.getByText(/在左側對話輸入需求/)).toBeTruthy();
   });
 });

@@ -6,12 +6,6 @@ const URL_RE = /https?:\/\/[^\s<>"']+/;
 const MIRROR_HINTS = [/照著抄/, /完整複製/, /仿這個/, /1\s*:\s*1/, /pixel[-\s]*perfect/i, /mirror/i];
 const AST_HINTS = [/參考/, /像這個風格/, /套這個感/, /inspired\s*by/i];
 
-const EXAMPLE_PROMPTS: { label: string; prompt: string }[] = [
-  { label: '登入頁', prompt: '幫我做一個包含 Email、密碼、登入按鈕的登入頁面' },
-  { label: '價格表', prompt: '一個 SaaS 三方案價格表，附常見問題' },
-  { label: '儀表板', prompt: '管理後台儀表板：上方統計卡片、左側功能選單、中間圖表' },
-];
-
 function suggestedFor(text: string): 'mirror' | 'ast' | undefined {
   if (MIRROR_HINTS.some(r => r.test(text))) return 'mirror';
   if (AST_HINTS.some(r => r.test(text))) return 'ast';
@@ -104,14 +98,15 @@ export default function CompilerChat() {
 
     const value = text.trim();
     if (!value) return;
+    // Optimistic: show the message immediately so the user sees what they sent while compiling.
+    setSent((prev) => [...prev, value]);
+    setText('');
     try {
       if (hasActive) {
         await applyEdit(value);
       } else {
         await compileFromRequirement(value);
       }
-      setSent((prev) => [...prev, value]);
-      setText('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -149,7 +144,12 @@ export default function CompilerChat() {
     }
   };
 
-  const showEmptyState = sent.length === 0 && !pending && !attachment && !error;
+  const showEmptyState = sent.length === 0
+    && text.length === 0
+    && !pending
+    && !attachment
+    && !error
+    && !isCompiling;
 
   return (
     <div
@@ -178,84 +178,13 @@ export default function CompilerChat() {
         {showEmptyState && (
           <div
             style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-              padding: '12px 4px',
-              color: 'var(--text-secondary)',
+              padding: '4px 2px',
+              fontSize: 12,
+              lineHeight: 1.6,
+              color: 'var(--text-muted)',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-              }}
-            >
-              <div
-                aria-hidden
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 12,
-                  background: 'linear-gradient(135deg, var(--accent-grad-start), var(--accent-grad-end))',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 22,
-                  color: '#fff',
-                  boxShadow: 'var(--shadow-md)',
-                }}
-              >
-                ✨
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-                來開始一個畫面
-              </div>
-              <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-                用一句話描述需求，
-                <br />
-                或貼上 / 拖入一張截圖、一個網址。
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                }}
-              >
-                範例
-              </div>
-              {EXAMPLE_PROMPTS.map((ex) => (
-                <button
-                  key={ex.label}
-                  type="button"
-                  onClick={() => setText(ex.prompt)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border-subtle)',
-                    background: 'var(--bg-card)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                    transition: 'border-color 140ms, background 140ms',
-                  }}
-                >
-                  <span style={{ color: 'var(--text-accent, var(--accent))', fontWeight: 600 }}>
-                    {ex.label}
-                  </span>
-                  <span style={{ marginLeft: 8 }}>{ex.prompt}</span>
-                </button>
-              ))}
-            </div>
+            在下方輸入需求，或貼上 / 拖入截圖、網址。
           </div>
         )}
 

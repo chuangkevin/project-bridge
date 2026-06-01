@@ -19,80 +19,11 @@ export default function PreviewPane() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: 32,
+          padding: 24,
         }}
       >
-        <div
-          style={{
-            maxWidth: 480,
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 14,
-            color: 'var(--text-secondary)',
-          }}
-        >
-          <div
-            aria-hidden
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 18,
-              background:
-                'linear-gradient(135deg, var(--accent-grad-start), var(--accent-grad-end))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 32,
-              color: '#fff',
-              boxShadow: 'var(--shadow-lg)',
-            }}
-          >
-            🎨
-          </div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-            AI UI 編譯器
-          </div>
-          <div style={{ fontSize: 14, lineHeight: 1.7 }}>
-            把需求、截圖或網址丟進左邊的對話欄，
-            <br />
-            系統會先做語意理解，套規則，最後產出
-            <br />
-            可預覽 / 可編輯 / 可下載的 Vue 介面。
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              gap: 12,
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              marginTop: 4,
-            }}
-          >
-            {[
-              { icon: '📝', label: '文字需求' },
-              { icon: '🖼', label: '截圖' },
-              { icon: '🔗', label: '網址' },
-            ].map((t) => (
-              <div
-                key={t.label}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  borderRadius: 999,
-                  border: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-card)',
-                  fontSize: 12,
-                }}
-              >
-                <span aria-hidden>{t.icon}</span>
-                <span>{t.label}</span>
-              </div>
-            ))}
-          </div>
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.6 }}>
+          在左側對話輸入需求後，預覽會顯示在這裡。
         </div>
       </div>
     );

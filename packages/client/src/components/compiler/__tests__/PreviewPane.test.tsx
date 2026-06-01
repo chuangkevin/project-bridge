@@ -36,7 +36,7 @@ afterEach(() => cleanup());
 describe('PreviewPane', () => {
   it('shows empty state when there is no active artifact', () => {
     render(<PreviewPane />);
-    expect(screen.getByText(/AI UI 編譯器/)).toBeTruthy();
+    expect(screen.getByText(/在左側對話輸入需求/)).toBeTruthy();
   });
 
   it('renders a sandboxed iframe with the preview srcdoc at stage ast', () => {
