@@ -9,6 +9,7 @@ import { parseScreenshot } from '../ingestion/parseScreenshot';
 import { ingestionCache } from '../services/ingestionCache';
 import { extractTheme } from '../services/themeExtractor';
 import { identifySite } from '../services/visionIdentifySite';
+import { startJsonKeepalive, endJsonKeepalive } from '../utils/keepalive';
 
 /** POST /:id/compile — cold start from a text requirement OR mirror-mode URL. */
 export async function compileHandler(req: Request, res: Response): Promise<void> {
@@ -19,17 +20,19 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
   if (mode === 'mirror') {
     const source = req.body?.source;
     if (source?.kind === 'image' && typeof source.mimeType === 'string' && typeof source.base64 === 'string') {
-      const idr = await identifySite({ mimeType: source.mimeType, base64: source.base64 });
-      if (!idr.ok) {
-        res.json({ ok: false, reason: idr.reason === 'vision_unavailable' ? 'vision_unavailable' : 'unidentified_screenshot' });
-        return;
-      }
+      const ka = startJsonKeepalive(res);
       try {
+        const idr = await identifySite({ mimeType: source.mimeType, base64: source.base64 });
+        if (!idr.ok) {
+          endJsonKeepalive(res, ka, { ok: false, reason: idr.reason === 'vision_unavailable' ? 'vision_unavailable' : 'unidentified_screenshot' });
+          return;
+        }
         const result = await buildMirror({ projectId: req.params.id as string, artifactId, url: idr.url });
-        if (!result.ok) { res.json({ ok: false, reason: result.reason, detail: result.detail }); return; }
-        res.json({ ok: true, artifact: result.meta });
+        if (!result.ok) { endJsonKeepalive(res, ka, { ok: false, reason: result.reason, detail: result.detail }); return; }
+        endJsonKeepalive(res, ka, { ok: true, artifact: result.meta });
       } catch (err) {
-        res.status(500).json({ error: (err as Error).message });
+        if (!res.headersSent) res.status(500);
+        endJsonKeepalive(res, ka, { error: (err as Error).message });
       }
       return;
     }
@@ -37,12 +40,14 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'mirror mode requires source.kind="url" and source.payload (string)' });
       return;
     }
+    const ka = startJsonKeepalive(res);
     try {
       const result = await buildMirror({ projectId: req.params.id as string, artifactId, url: source.payload });
-      if (!result.ok) { res.json({ ok: false, reason: result.reason, detail: result.detail }); return; }
-      res.json({ ok: true, artifact: result.meta });
+      if (!result.ok) { endJsonKeepalive(res, ka, { ok: false, reason: result.reason, detail: result.detail }); return; }
+      endJsonKeepalive(res, ka, { ok: true, artifact: result.meta });
     } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
+      if (!res.headersSent) res.status(500);
+      endJsonKeepalive(res, ka, { error: (err as Error).message });
     }
     return;
   }
@@ -53,13 +58,14 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'ast+image mode requires source.mimeType and source.base64' });
       return;
     }
-    const ps = await parseScreenshot({ mimeType: source.mimeType, base64: source.base64 });
-    if (!ps.ok) { res.json({ ok: false, reason: ps.reason, detail: ps.detail }); return; }
+    const ka = startJsonKeepalive(res);
     try {
+      const ps = await parseScreenshot({ mimeType: source.mimeType, base64: source.base64 });
+      if (!ps.ok) { endJsonKeepalive(res, ka, { ok: false, reason: ps.reason, detail: ps.detail }); return; }
       const result = await compileService.compileFromIngestion(ps.ingestion, { artifactId, projectId: req.params.id as string });
-      res.json({ ok: true, ...result });
+      endJsonKeepalive(res, ka, { ok: true, ...result });
     } catch (err) {
-      res.json({ ok: false, reason: 'ast_repair_exhausted', detail: (err as Error).message });
+      endJsonKeepalive(res, ka, { ok: false, reason: 'ast_repair_exhausted', detail: (err as Error).message });
     }
     return;
   }
@@ -71,19 +77,20 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'ast+url mode requires source.payload (string)' });
       return;
     }
-    let cached = ingestionCache.get(projectId, url);
-    if (!cached) {
-      const parsed = await parseWebpage(url);
-      if (!parsed.ok) { res.json({ ok: false, reason: parsed.reason, detail: parsed.detail }); return; }
-      ingestionCache.set(projectId, url, parsed.ingestion, { assets: parsed.assets });
-      cached = { ingestion: parsed.ingestion, assets: parsed.assets };
-    }
+    const ka = startJsonKeepalive(res);
     try {
+      let cached = ingestionCache.get(projectId, url);
+      if (!cached) {
+        const parsed = await parseWebpage(url);
+        if (!parsed.ok) { endJsonKeepalive(res, ka, { ok: false, reason: parsed.reason, detail: parsed.detail }); return; }
+        ingestionCache.set(projectId, url, parsed.ingestion, { assets: parsed.assets });
+        cached = { ingestion: parsed.ingestion, assets: parsed.assets };
+      }
       const result = await compileService.compileFromIngestion(cached.ingestion, { artifactId, projectId });
       const themeProposal = extractTheme({ dom: cached.ingestion.dom, css: '', sourceUrl: url });
-      res.json({ ok: true, ...result, themeProposal });
+      endJsonKeepalive(res, ka, { ok: true, ...result, themeProposal });
     } catch (err) {
-      res.json({ ok: false, reason: 'ast_repair_exhausted', detail: (err as Error).message });
+      endJsonKeepalive(res, ka, { ok: false, reason: 'ast_repair_exhausted', detail: (err as Error).message });
     }
     return;
   }
@@ -94,14 +101,16 @@ export async function compileHandler(req: Request, res: Response): Promise<void>
     res.status(400).json({ error: 'requirement (non-empty string) is required' });
     return;
   }
+  const ka = startJsonKeepalive(res);
   try {
     const result = await compileService.compileFromInput(
       { kind: 'requirement', text: requirement },
       { artifactId, projectId: req.params.id as string },
     );
-    res.json(result);
+    endJsonKeepalive(res, ka, result);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    if (!res.headersSent) res.status(500);
+    endJsonKeepalive(res, ka, { error: (err as Error).message });
   }
 }
 
@@ -113,11 +122,13 @@ export async function mutateHandler(req: Request, res: Response): Promise<void> 
     res.status(400).json({ error: 'ast (object) and instruction (non-empty string) are required' });
     return;
   }
+  const ka = startJsonKeepalive(res);
   try {
     const result = await compileService.compileMutation(ast, instruction, { projectId: req.params.id as string });
-    res.json(result);
+    endJsonKeepalive(res, ka, result);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    if (!res.headersSent) res.status(500);
+    endJsonKeepalive(res, ka, { error: (err as Error).message });
   }
 }
 
