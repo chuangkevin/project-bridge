@@ -11,14 +11,12 @@
  * which exported a singleton). New server uses per-app db instances passed via
  * `createApp(deps)`. Call `initProjectBridgeAdapter(db)` from createApp before
  * constructing the provider client.
- *
- * TODO: Replace `readSetting` / `writeSetting` inline helpers with imports from
- * ./settings.js after Plan 2 Task 4.
  */
 
 import { KeyPool } from "@kevinsisi/ai-core";
 import type { StorageAdapter, ApiKey } from "@kevinsisi/ai-core";
 import type Database from "better-sqlite3";
+import { readSetting } from "./settings.js";
 
 // api_key_leases table is now created by migration 002_settings_apikey.sql.
 
@@ -61,18 +59,6 @@ function getDb(): Database.Database {
  */
 export function initProjectBridgeAdapter(db: Database.Database): void {
   _db = db;
-}
-
-// TODO: Replace with imports from ./settings.js after Plan 2 Task 4.
-function readSetting(key: string): string | null {
-  try {
-    const db = getDb();
-    const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as SettingsRow | undefined;
-    const v = row?.value?.trim();
-    return v && v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
 }
 
 function isValidKeyFormat(key: string): boolean {
@@ -188,7 +174,7 @@ function loadRawKeys(): string[] {
     keys.push(...envKeys);
   }
 
-  const multi = readSetting('gemini_api_keys');
+  const multi = readSetting(getDb(), 'gemini_api_keys');
   if (multi) {
     keys.push(
       ...multi
@@ -198,7 +184,7 @@ function loadRawKeys(): string[] {
     );
   }
 
-  const single = readSetting('gemini_api_key');
+  const single = readSetting(getDb(), 'gemini_api_key');
   if (single) {
     const key = single.trim();
     if (key) keys.push(key);

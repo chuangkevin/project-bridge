@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import { pathToFileURL } from 'node:url';
 import { openDb } from './db/connection.js';
 import { runMigrations, defaultMigrationsDir } from './db/migrator.js';
+import { initProvider } from './services/provider.js';
 import { authMiddleware } from './middleware/auth.js';
 import { buildAuthRouter } from './routes/auth.js';
 import { buildProjectsRouter } from './routes/projects.js';
@@ -13,6 +14,7 @@ export interface AppDeps {
 export function createApp(deps: AppDeps): Express {
   const db = openDb(deps.dataDir);
   runMigrations(db, defaultMigrationsDir());
+  initProvider(db);
 
   const app = express();
   app.use(express.json({ limit: '10mb' }));
