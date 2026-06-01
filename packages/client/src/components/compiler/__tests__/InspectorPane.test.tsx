@@ -36,7 +36,7 @@ afterEach(() => cleanup());
 describe('InspectorPane', () => {
   it('shows empty state when there is no active artifact', () => {
     render(<InspectorPane />);
-    expect(screen.getByText('No artifact selected.')).toBeTruthy();
+    expect(screen.getByText(/尚未選擇產出/)).toBeTruthy();
   });
 
   it('renders the AST JSON (with root type) at stage ast', () => {
@@ -59,7 +59,7 @@ describe('InspectorPane', () => {
     useCompilerStore.setState({ artifacts: [a], activeArtifactId: a.id, stage: 'codegen' });
     render(<InspectorPane />);
     expect(screen.getByText(/<button type="button">Go<\/button>/)).toBeTruthy();
-    expect(screen.getByText('Copy')).toBeTruthy();
+    expect(screen.getByText(/複製/)).toBeTruthy();
   });
 
   it('renders mirror metadata + enabled Upgrade-to-AST button', () => {
@@ -68,8 +68,8 @@ describe('InspectorPane', () => {
     render(<InspectorPane />);
     expect(screen.getByText('https://example.com')).toBeTruthy();
     expect(screen.getByText(/2026-05-29/)).toBeTruthy();
-    expect(screen.getByText(/Warnings/i)).toBeTruthy();
-    const btn = screen.getByText('Upgrade to AST') as HTMLButtonElement;
+    expect(screen.getByText(/警告/)).toBeTruthy();
+    const btn = screen.getByText(/升級為 AST/) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
   });
 });
