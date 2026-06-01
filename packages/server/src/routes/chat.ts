@@ -1,0 +1,167 @@
+import { Router, type Request, type Response } from 'express';
+import type Database from 'better-sqlite3';
+import { requireAuth } from '../middleware/auth.js';
+import { getProject } from '../services/projectService.js';
+import { buildMemorySnapshot } from '../services/memorySnapshot.js';
+import { listSkills, readSkill, getSystemPromptSkillList } from '../services/skillRegistry.js';
+import { parseSlashCommand } from '../services/slashCommand.js';
+import { callProvider } from '../services/callProvider.js';
+import { startSseKeepalive, stopSseKeepalive } from '../utils/sseKeepalive.js';
+import { appendTurn, type TurnMode } from '../services/turnService.js';
+import { addFact } from '../services/factService.js';
+import { parseFactsFromResponse } from '../services/factExtractor.js';
+import { getAttachment, type Attachment } from '../services/ingestionService.js';
+import { buildSystemPrompt } from '../services/chatOrchestrator.js';
+
+const VALID_MODES: TurnMode[] = ['consult', 'architect', 'design'];
+
+function sse(res: Response, event: string, data: unknown): void {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+export function buildChatRouter(db: Database.Database): Router {
+  const r = Router({ mergeParams: true });
+  r.use(requireAuth);
+
+  r.post('/', async (req: Request, res: Response) => {
+    const projectId = req.params.id as string;
+    const project = getProject(db, projectId);
+    if (!project || project.ownerId !== req.user!.id) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: '專案不存在' } });
+      return;
+    }
+
+    const { mode, text, attachmentIds } = req.body ?? {};
+    if (!(VALID_MODES as string[]).includes(mode)) {
+      res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: 'mode 必須是 consult/architect/design' } });
+      return;
+    }
+    if (typeof text !== 'string' || !text.trim()) {
+      res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: '需要 text' } });
+      return;
+    }
+
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const keepalive = startSseKeepalive(res, 15_000);
+
+    try {
+      sse(res, 'phase', { phase: 'loading_memory' });
+      const snapshot = buildMemorySnapshot(db, projectId, {});
+
+      // Skills
+      const slashCmd = parseSlashCommand(text.trim());
+      const forcedSkill = slashCmd ? readSkill(slashCmd.skill, { projectId }) : null;
+      const skillDescriptions = getSystemPromptSkillList({ projectId });
+      const allSkillNames = listSkills({ projectId }).map(s => s.name);
+      sse(res, 'phase', { phase: 'selecting_skills', skills: allSkillNames });
+
+      // Attachments
+      const attachments: Attachment[] = [];
+      if (Array.isArray(attachmentIds)) {
+        for (const aid of attachmentIds) {
+          const a = getAttachment(db, String(aid));
+          if (a && a.projectId === projectId) attachments.push(a);
+        }
+      }
+
+      // Compose system prompt
+      const userSystem = buildSystemPrompt({
+        mode, memorySnapshot: snapshot, skillDescriptions,
+        forcedSkillBody: forcedSkill?.body,
+        attachments: attachments.map(a => ({ kind: a.kind, parsedText: a.parsedText, originalName: a.originalName })),
+      });
+
+      sse(res, 'phase', { phase: 'thinking' });
+
+      // Stream from provider
+      let inThinkingBlock = false;
+      let buffer = '';
+      let fullText = '';
+
+      const cleanText = slashCmd ? slashCmd.rest : text.trim();
+      for await (const tok of callProvider({ mode, prompt: cleanText, systemInstruction: userSystem, streaming: true })) {
+        fullText += tok;
+        buffer += tok;
+        // Detect <thinking>...</thinking> blocks and route tokens accordingly
+        while (true) {
+          if (!inThinkingBlock) {
+            const openIdx = buffer.indexOf('<thinking>');
+            if (openIdx === -1) {
+              // Emit as 'token' but hold back the last 10 chars in case it's a partial '<thinking>'
+              if (buffer.length > 10) {
+                const emit = buffer.slice(0, buffer.length - 10);
+                if (emit) sse(res, 'token', { text: emit });
+                buffer = buffer.slice(buffer.length - 10);
+              }
+              break;
+            }
+            // Emit text before the open tag as 'token'
+            if (openIdx > 0) sse(res, 'token', { text: buffer.slice(0, openIdx) });
+            buffer = buffer.slice(openIdx + '<thinking>'.length);
+            inThinkingBlock = true;
+            // Note: phase 'thinking' was already emitted at start. The block can be detected mid-stream too.
+          } else {
+            const closeIdx = buffer.indexOf('</thinking>');
+            if (closeIdx === -1) {
+              // Emit as thinking_token, hold back last 11 chars
+              if (buffer.length > 11) {
+                const emit = buffer.slice(0, buffer.length - 11);
+                if (emit) sse(res, 'thinking_token', { text: emit });
+                buffer = buffer.slice(buffer.length - 11);
+              }
+              break;
+            }
+            // Emit text before the close as thinking_token
+            if (closeIdx > 0) sse(res, 'thinking_token', { text: buffer.slice(0, closeIdx) });
+            buffer = buffer.slice(closeIdx + '</thinking>'.length);
+            inThinkingBlock = false;
+            sse(res, 'phase', { phase: 'answering' });
+          }
+        }
+      }
+      // Flush any remaining buffer
+      if (buffer) {
+        if (inThinkingBlock) sse(res, 'thinking_token', { text: buffer });
+        else sse(res, 'token', { text: buffer });
+      }
+
+      // Extract facts + persist turn
+      const thinkingText = extractTagText(fullText, 'thinking');
+      const answerText = stripTagText(fullText, 'thinking').replace(/<facts>[\s\S]*?<\/facts>/g, '').trim();
+      const facts = parseFactsFromResponse(fullText);
+
+      const turn = appendTurn(db, {
+        projectId,
+        mode: mode as TurnMode,
+        userText: text.trim(),
+        aiResponse: { text: answerText, thinking: thinkingText || undefined },
+        skillsUsed: forcedSkill ? [forcedSkill.name] : undefined,
+      });
+      for (const f of facts) addFact(db, { projectId, turnId: turn.id, kind: f.kind, text: f.text });
+
+      sse(res, 'done', { turnId: turn.id });
+    } catch (err) {
+      sse(res, 'error', { code: 'INTERNAL_ERROR', message: (err as Error).message });
+    } finally {
+      stopSseKeepalive(keepalive);
+      res.end();
+    }
+  });
+
+  return r;
+}
+
+function extractTagText(s: string, tag: string): string {
+  const re = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i');
+  return s.match(re)?.[1]?.trim() ?? '';
+}
+
+function stripTagText(s: string, tag: string): string {
+  const re = new RegExp(`<${tag}>[\\s\\S]*?<\\/${tag}>`, 'gi');
+  return s.replace(re, '');
+}
