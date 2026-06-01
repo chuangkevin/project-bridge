@@ -11,6 +11,7 @@ import { buildProjectsRouter } from './routes/projects.js';
 import { buildOpenaiOAuthRouter } from './routes/openaiOAuth.js';
 import { buildTurnsRouter } from './routes/turns.js';
 import { buildFactsRouter } from './routes/facts.js';
+import { buildSkillsRouter, buildProjectSkillsRouter } from './routes/skills.js';
 
 export interface AppDeps {
   dataDir: string;
@@ -22,12 +23,13 @@ export function createApp(deps: AppDeps): Express {
   initProvider(db);
 
   const here = dirname(fileURLToPath(import.meta.url));
-  initSkillRegistry({
+  const skillDeps = {
     db,
     builtinDir: join(here, '..', 'skills', 'builtin'),
     globalDir: join(deps.dataDir, 'skills', 'global'),
     pluginsDir: join(deps.dataDir, 'skills', 'plugins'),
-  });
+  };
+  initSkillRegistry(skillDeps);
 
   const app = express();
   app.use(express.json({ limit: '10mb' }));
@@ -39,6 +41,8 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/openai-oauth', buildOpenaiOAuthRouter(db));
   app.use('/api/projects/:id/turns', buildTurnsRouter(db));
   app.use('/api/projects/:id/facts', buildFactsRouter(db));
+  app.use('/api/skills', buildSkillsRouter(skillDeps));
+  app.use('/api/projects/:id/skills', buildProjectSkillsRouter(skillDeps));
 
   app.get('/api/health', (_req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };
