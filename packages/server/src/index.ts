@@ -7,6 +7,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { buildAuthRouter } from './routes/auth.js';
 import { buildProjectsRouter } from './routes/projects.js';
 import { buildOpenaiOAuthRouter } from './routes/openaiOAuth.js';
+import { buildTurnsRouter } from './routes/turns.js';
 
 export interface AppDeps {
   dataDir: string;
@@ -25,6 +26,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/auth', buildAuthRouter(db));
   app.use('/api/projects', buildProjectsRouter(db));
   app.use('/api/openai-oauth', buildOpenaiOAuthRouter(db));
+  app.use('/api/projects/:id/turns', buildTurnsRouter(db));
 
   app.get('/api/health', (_req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };
