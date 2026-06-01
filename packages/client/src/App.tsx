@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import ProjectsPage from './pages/ProjectsPage';
 import WorkspacePage from './pages/WorkspacePage';
+import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
   const { user, loading, hydrate } = useAuthStore();
@@ -27,6 +28,7 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to="/projects" /> : <LoginPage />} />
       <Route path="/projects" element={user ? <ProjectsPage /> : <Navigate to={needsSetup ? '/setup' : '/login'} />} />
       <Route path="/projects/:id" element={user ? <WorkspacePage /> : <Navigate to="/login" />} />
+      <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/login" />} />
       <Route path="*" element={<Navigate to={user ? '/projects' : (needsSetup ? '/setup' : '/login')} />} />
     </Routes>
   );
