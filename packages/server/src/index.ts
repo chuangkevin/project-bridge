@@ -2,6 +2,8 @@ import express, { type Express } from 'express';
 import { pathToFileURL } from 'node:url';
 import { openDb } from './db/connection.js';
 import { runMigrations, defaultMigrationsDir } from './db/migrator.js';
+import { authMiddleware } from './middleware/auth.js';
+import { buildAuthRouter } from './routes/auth.js';
 
 export interface AppDeps {
   dataDir: string;
@@ -14,6 +16,9 @@ export function createApp(deps: AppDeps): Express {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
   (app as Express & { locals: { db: ReturnType<typeof openDb> } }).locals.db = db;
+
+  app.use(authMiddleware(db));
+  app.use('/api/auth', buildAuthRouter(db));
 
   app.get('/api/health', (_req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };

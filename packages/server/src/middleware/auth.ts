@@ -4,7 +4,10 @@ import { getSessionUser, type User } from '../services/authService.js';
 
 declare global {
   namespace Express {
-    interface Request { user?: User; }
+    interface Request {
+      user?: User;
+      sessionToken?: string;
+    }
   }
 }
 
@@ -13,7 +16,10 @@ export function authMiddleware(db: Database.Database) {
     const token = extractToken(req);
     if (token) {
       const user = getSessionUser(db, token);
-      if (user) req.user = user;
+      if (user) {
+        req.user = user;
+        req.sessionToken = token;
+      }
     }
     next();
   };
