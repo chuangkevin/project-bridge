@@ -12,8 +12,9 @@
   },
   "dependencies": {
     "@kevinsisi/ai-core": "github:kevinsisi/ai-core#v3.4.2",
-    "better-sqlite3": "^11.5.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "bcrypt": "^5.1.1",
+    "better-sqlite3": "^11.5.0",
     "express": "^5.0.0",
     "gray-matter": "^4.0.3",
     "openai": "^4.73.0",
