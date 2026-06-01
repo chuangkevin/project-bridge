@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "maintenance": "tsx scripts/maintenance.ts"
   },
   "dependencies": {
     "@kevinsisi/ai-core": "github:kevinsisi/ai-core#v3.4.2",
