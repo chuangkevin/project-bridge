@@ -12,6 +12,10 @@ import { buildOpenaiOAuthRouter } from './routes/openaiOAuth.js';
 import { buildTurnsRouter } from './routes/turns.js';
 import { buildFactsRouter } from './routes/facts.js';
 import { buildSkillsRouter, buildProjectSkillsRouter } from './routes/skills.js';
+import { buildMcpRouter } from './routes/mcp.js';
+import { buildPluginsRouter } from './routes/plugins.js';
+import { loadPlugins } from './services/pluginLoader.js';
+import { initMcpRegistry } from './services/mcpRegistry.js';
 
 export interface AppDeps {
   dataDir: string;
@@ -31,6 +35,12 @@ export function createApp(deps: AppDeps): Express {
   };
   initSkillRegistry(skillDeps);
 
+  const pluginsRoot = join(deps.dataDir, 'skills', 'plugins');
+  const plugins = loadPlugins(pluginsRoot);
+  const allMcpServers = plugins.flatMap(p => p.mcpServers);
+  // Async, but createApp is sync — fire and forget; failures are logged
+  void initMcpRegistry(allMcpServers);
+
   const app = express();
   app.use(express.json({ limit: '10mb' }));
   (app as Express & { locals: { db: ReturnType<typeof openDb> } }).locals.db = db;
@@ -43,6 +53,8 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/facts', buildFactsRouter(db));
   app.use('/api/skills', buildSkillsRouter(skillDeps));
   app.use('/api/projects/:id/skills', buildProjectSkillsRouter(skillDeps));
+  app.use('/api/mcp', buildMcpRouter());
+  app.use('/api/plugins', buildPluginsRouter(pluginsRoot));
 
   app.get('/api/health', (_req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };
