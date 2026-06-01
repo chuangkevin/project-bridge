@@ -10,38 +10,31 @@ export default function ArtifactRail() {
     return (
       <div
         style={{
-          padding: '24px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 10,
-          textAlign: 'center',
+          padding: '20px 12px',
+          fontSize: 12,
+          lineHeight: 1.55,
           color: 'var(--text-muted)',
+          textAlign: 'center',
+          wordBreak: 'break-word',
         }}
       >
         <div
           aria-hidden
           style={{
-            width: 40,
-            height: 40,
+            width: 36,
+            height: 36,
             borderRadius: 10,
             background: 'var(--accent-glass)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 20,
+            fontSize: 18,
+            margin: '0 auto 8px',
           }}
         >
           📦
         </div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-          尚無產出
-        </div>
-        <div style={{ fontSize: 12, lineHeight: 1.55 }}>
-          在對話欄輸入需求、貼上截圖或網址，
-          <br />
-          系統會編譯出 UI 並列在這裡。
-        </div>
+        <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>尚無產出</div>
       </div>
     );
   }
