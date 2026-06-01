@@ -1,8 +1,10 @@
 import express, { type Express } from 'express';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { openDb } from './db/connection.js';
 import { runMigrations, defaultMigrationsDir } from './db/migrator.js';
 import { initProvider } from './services/provider.js';
+import { initSkillRegistry } from './services/skillRegistry.js';
 import { authMiddleware } from './middleware/auth.js';
 import { buildAuthRouter } from './routes/auth.js';
 import { buildProjectsRouter } from './routes/projects.js';
@@ -18,6 +20,14 @@ export function createApp(deps: AppDeps): Express {
   const db = openDb(deps.dataDir);
   runMigrations(db, defaultMigrationsDir());
   initProvider(db);
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  initSkillRegistry({
+    db,
+    builtinDir: join(here, '..', 'skills', 'builtin'),
+    globalDir: join(deps.dataDir, 'skills', 'global'),
+    pluginsDir: join(deps.dataDir, 'skills', 'plugins'),
+  });
 
   const app = express();
   app.use(express.json({ limit: '10mb' }));
