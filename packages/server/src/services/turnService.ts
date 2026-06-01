@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { v4 as uuid } from 'uuid';
+import { emitToProject } from '../realtime/socketServer.js';
 
 export type TurnMode = 'consult' | 'architect' | 'design';
 
@@ -49,7 +50,9 @@ export function appendTurn(db: Database.Database, input: AppendTurnInput): Turn 
     input.modelUsed ?? null,
     input.tokens ? JSON.stringify(input.tokens) : null,
   );
-  return getTurn(db, id)!;
+  const turn = getTurn(db, id)!;
+  emitToProject(input.projectId, 'turn:created', { id: turn.id, mode: turn.mode });
+  return turn;
 }
 
 export interface ListTurnsOpts {

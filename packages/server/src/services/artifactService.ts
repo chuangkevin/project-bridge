@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { emitToProject } from '../realtime/socketServer.js';
 
 export type ArtifactKind = 'vue-sfc' | 'page-graph' | 'design-tokens';
 
@@ -54,12 +55,14 @@ export function createArtifact(db: Database.Database, opts: {
     for (const p of prior) upd.run(id, p.id);
   }
 
-  return {
+  const artifact: Artifact = {
     id, projectId: opts.projectId, createdByTurn: opts.createdByTurn,
     kind: opts.kind, name: opts.name, payloadPath: relPath,
     metadata: opts.metadata ?? null, supersededBy: null,
     createdAt: new Date().toISOString(),
   };
+  emitToProject(opts.projectId, 'artifact:created', { id: artifact.id, kind: artifact.kind, name: artifact.name });
+  return artifact;
 }
 
 export function listArtifacts(db: Database.Database, projectId: string, opts: { kind?: ArtifactKind; includeSuperseded?: boolean } = {}): Artifact[] {

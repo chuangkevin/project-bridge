@@ -1,6 +1,8 @@
 import express, { type Express } from 'express';
+import { createServer } from 'node:http';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { initSocketServer } from './realtime/socketServer.js';
 import { openDb } from './db/connection.js';
 import { runMigrations, defaultMigrationsDir } from './db/migrator.js';
 import { initProvider } from './services/provider.js';
@@ -74,7 +76,10 @@ if (process.argv[1] != null && import.meta.url === pathToFileURL(process.argv[1]
   const port = Number(process.env.PORT) || 3001;
   const host = process.env.HOST || '127.0.0.1';
   const dataDir = process.env.DATA_DIR || './data';
-  createApp({ dataDir }).listen(port, host, () => {
+  const app = createApp({ dataDir });
+  const httpServer = createServer(app);
+  initSocketServer(httpServer, app.locals.db);
+  httpServer.listen(port, host, () => {
     console.log(`[server] listening on http://${host}:${port}  (dataDir=${dataDir})`);
   });
 }

@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { v4 as uuid } from 'uuid';
+import { emitToProject } from '../realtime/socketServer.js';
 
 export type FactKind = 'requirement' | 'page' | 'constraint' | 'decision';
 
@@ -26,7 +27,9 @@ export function addFact(db: Database.Database, input: AddFactInput): ExtractedFa
     INSERT INTO extracted_facts (id, project_id, turn_id, kind, text)
     VALUES (?, ?, ?, ?, ?)
   `).run(id, input.projectId, input.turnId, input.kind, input.text);
-  return getFact(db, id)!;
+  const fact = getFact(db, id)!;
+  emitToProject(input.projectId, 'fact:created', { id: fact.id, kind: fact.kind });
+  return fact;
 }
 
 export interface ListFactsOpts { kind?: FactKind; }
