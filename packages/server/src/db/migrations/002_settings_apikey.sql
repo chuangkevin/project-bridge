@@ -4,32 +4,33 @@ CREATE TABLE settings (
   value TEXT NOT NULL
 );
 
--- ai-core ProjectBridgeAdapter 期待這 3 表 schema 不變
+-- ai-core ProjectBridgeAdapter expects these EXACT schemas (from legacy v1.5)
+-- DO NOT change column names / types without coordinating with the adapter port.
+
 CREATE TABLE api_key_leases (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider    TEXT NOT NULL,
-  key_hash    TEXT NOT NULL,
-  leased_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  released_at TIMESTAMP
+  api_key     TEXT PRIMARY KEY,
+  lease_until INTEGER NOT NULL,
+  lease_token TEXT NOT NULL,
+  updated_at  TEXT DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_apikey_leases_active ON api_key_leases(provider, released_at);
 
 CREATE TABLE api_key_cooldowns (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider       TEXT NOT NULL,
-  key_hash       TEXT NOT NULL,
-  cooldown_until TIMESTAMP NOT NULL,
-  reason         TEXT
+  api_key_suffix TEXT PRIMARY KEY,
+  cooldown_until INTEGER NOT NULL,
+  reason         TEXT DEFAULT '429',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_apikey_cooldowns_provider ON api_key_cooldowns(provider, cooldown_until);
 
 CREATE TABLE api_key_usage (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider          TEXT NOT NULL,
-  key_hash          TEXT NOT NULL,
-  call_type         TEXT,
-  prompt_tokens     INTEGER NOT NULL DEFAULT 0,
-  completion_tokens INTEGER NOT NULL DEFAULT 0,
-  recorded_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  api_key_suffix    TEXT NOT NULL,
+  model             TEXT NOT NULL,
+  call_type         TEXT NOT NULL,
+  prompt_tokens     INTEGER DEFAULT 0,
+  completion_tokens INTEGER DEFAULT 0,
+  total_tokens      INTEGER DEFAULT 0,
+  project_id        TEXT,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_apikey_usage_recorded ON api_key_usage(provider, recorded_at);
+CREATE INDEX idx_api_key_usage_suffix     ON api_key_usage(api_key_suffix);
+CREATE INDEX idx_api_key_usage_created_at ON api_key_usage(created_at);
