@@ -219,6 +219,54 @@ AI 在任何模式回應前，被餵：
 | 架構 | 調整 page graph | ✅ page-graph |
 | 設計 | 重生當前 page 的 Vue SFC | ✅ vue-sfc |
 
+### 3.8 輸入管道（Ingestion）— 文件 / 圖片 / 剪貼簿
+
+任何模式的輸入框都支援：
+
+| 輸入類型 | 來源 | Server 處理 | AI 看到 |
+|---|---|---|---|
+| **純文字** | 鍵盤 | 直接附在 prompt | 文字 |
+| **網址** | 文字裡含 URL | server 抓取網頁 → 純文字 + 主圖（M1 簡化版 fetch + readability） | 文字 + 圖（vision provider） |
+| **PDF** | 上傳 button / 拖入 | `pdf-parse` 解析 → 純文字（保留段落） | 文字（每頁標 page N） |
+| **DOCX** | 上傳 / 拖入 | `mammoth` 解析 → 純文字 | 文字 |
+| **圖片**（PNG/JPG/WebP） | 上傳 / 拖入 / **剪貼簿貼上** | 縮放至 ≤ 2048px、轉 base64 | 多模態 vision input |
+| **截圖**（剪貼簿） | `Ctrl+V` 在 input | 同圖片，加標記 `source: clipboard` | 多模態 |
+
+**UI**：
+- 輸入框底部一排小按鈕：📎（檔案）/ 📋（剪貼簿）/ 🔗（URL）；也接受拖拉直接進輸入框
+- 已附加的檔案顯示為「附件卡」在輸入框上方，可移除
+- 多個附件可同送（M1 上限 5 個 / 單檔 ≤ 20MB）
+
+**儲存**：
+- 上傳檔案存到 `data/projects/<project-id>/uploads/<uuid>.<ext>`，metadata 寫進 Turn 的 attachments 欄位
+- AI 看到的是「解析後內容」，不重新解析；原檔保留作為佐證
+- Turn 結構擴：
+  ```typescript
+  Turn {
+    ...
+    attachments?: Attachment[]
+  }
+  Attachment {
+    id: string
+    kind: 'pdf' | 'docx' | 'image' | 'url-snapshot'
+    originalName: string          // 'spec.pdf'
+    storedPath: string            // data/.../<uuid>.pdf
+    parsedText?: string           // 給 AI 看的內容
+    imageBase64?: string          // 給 vision provider
+    mimeType: string
+    sizeBytes: number
+  }
+  ```
+
+**Vision 觸發條件**：當 attachment 有 image 且 model 支援 vision（Gemini、Claude、GPT-4o 等），自動切到 vision-capable model；不支援則 fallback 為「附了圖但 AI 看不到」+ 提示使用者描述。
+
+**M1 範圍**：
+- ✅ PDF（pdf-parse）、DOCX（mammoth）、Image（多模態）、剪貼簿貼上、URL fetch
+- ✅ 拖拉、`Ctrl+V`、按鈕三種輸入方式
+- ❌ OCR（影像內文字辨識）— 多模態 vision 已涵蓋多數場景，純 OCR M2 再說
+- ❌ 影片、音訊
+- ❌ Excel / PPT 解析（M2）
+
 ---
 
 ## 4. Skill + MCP 系統
@@ -708,7 +756,10 @@ data: {"text": "..."}
 
 1. 使用者 review 本 spec（這份檔案）
 2. 進 `superpowers:writing-plans` skill 產實作計畫
-3. 計畫分階段：M1 = 核心 3 模式 + 共用記憶 + skill + Vue SFC 預覽；M2 = 合議制完整、script setup、plugin marketplace 等
+3. **M1 = 完整可上線產品**（17 個 plan，含合議制、ingestion、RWD、備份、e2e baseline）
+4. **M2 後**：Vue `<script setup>` codegen（state/event/API stub）、plugin remote marketplace、git auto-commit、AI prompt injection 防護、效能/load test 全面
+
+詳見 [`../plans/2026-06-01-m1-plan-index.md`](../plans/2026-06-01-m1-plan-index.md)。
 
 ---
 
