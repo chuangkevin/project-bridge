@@ -47,7 +47,7 @@
 | 14 | Settings + Skills UI | 加 / 編 skill、安裝 plugin、設每模式 model、share token UI、看 token 用量 | 8 | _待寫_ |
 | 15 | **Backup + maintenance** | nightly tar `data/`、30 天保留、健康監控、log rotation | 1 | _待寫_ |
 | 16 | **RWD / mobile** | 平板（768-1280px）+ 手機（&lt; 768px）佈局可用 | 8, 9, 10, 11 | _待寫_ |
-| 17 | **E2E + a11y baseline** | Playwright 跑核心 happy path、WCAG AA 對比度 spot check | 全部 | _待寫_ |
+| 17 | **手動 smoke + a11y baseline** | smoke markdown checklist + WCAG AA 對比度 spot check（不寫 Playwright） | 全部 | _待寫_ |
 
 ## M2 後再做（明確不在 M1）
 

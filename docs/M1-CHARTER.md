@@ -190,7 +190,7 @@
 | 14 | Settings + Skills UI | 加/編 skill、裝 plugin、per-mode model、share UI、token 用量 | 8 |
 | 15 | **Backup + maintenance** | nightly tar + 30 天保留 + log rotation | 1 |
 | 16 | **RWD / mobile** | 平板（768–1280）+ 手機（< 768）佈局 | 8, 9, 10, 11 |
-| 17 | **E2E + a11y baseline** | Playwright happy path + WCAG AA spot check | 全部 |
+| 17 | **手動 smoke + a11y baseline** | smoke checklist 打勾 + WCAG AA 對比度 spot check | 全部 |
 
 ---
 
@@ -221,7 +221,9 @@
 | Socket.io 廣播 | A client 建 turn，B client 收到 `turn:added` |
 | Plugin install | 指定路徑 → skill 出現在 `GET /api/skills` |
 
-### 4.3 E2E（Playwright）
+### 4.3 手動 smoke 測試（不寫 Playwright）
+
+每個 plan acceptance 都用**人工逐項操作**驗。寫成 markdown checklist 放 `docs/smoke/<plan>.md`，每次跑完打勾。
 
 | Scenario | 步驟 |
 |---|---|
@@ -233,6 +235,11 @@
 | **Clipboard 截圖** | `Ctrl+V` 貼上截圖 → 顯示 attachment 卡 → AI 收到 multimodal input |
 | **Plugin 安裝** | 設定頁 → 安裝本地 hpsk plugin → skill list 出現 hpsk:price-doc |
 | **RWD** | 視窗縮到 700px → 底部 tab nav 切換面板 |
+
+不寫 Playwright 自動化的 trade-off：
+- 省工時，沒有 e2e 維護成本
+- 重構時要靠手動 regression（charter 與 plan 內列出的 smoke checklist 是唯一保護）
+- 上線後若回歸頻繁，再回頭補 Playwright（M2+）
 
 ### 4.4 a11y baseline
 
