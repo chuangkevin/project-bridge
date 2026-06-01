@@ -166,6 +166,37 @@
   background: transparent; border: none; color: var(--text-muted); cursor: pointer;
 }
 
+.council {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.council__item {
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--border-subtle);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.council__item--active {
+  border-left-color: var(--accent);
+  background: rgba(124, 92, 191, 0.10);
+  box-shadow: 0 0 0 1px var(--border-accent);
+}
+.council__label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.council__text {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.council-thinking { background: transparent; padding: 0; border: none; max-height: none; }
+
 .slash-popup {
   position: absolute;
   bottom: calc(100% - 4px);

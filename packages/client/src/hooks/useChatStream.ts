@@ -2,7 +2,10 @@ import { useState, useRef, useCallback, type Dispatch, type SetStateAction } fro
 import { createSseParser } from '../lib/sseParser';
 import { getToken } from '../lib/api';
 
-export type ChatPhase = 'idle' | 'loading_memory' | 'selecting_skills' | 'thinking' | 'answering' | 'done' | 'error';
+export type ChatPhase = 'idle' | 'loading_memory' | 'selecting_skills' | 'thinking' | 'answering' | 'done' | 'error'
+  | 'council_start' | 'council_pm' | 'council_designer' | 'council_engineer' | 'council_moderator';
+
+export interface CouncilEntry { persona: 'pm' | 'designer' | 'engineer' | 'moderator'; text: string; }
 
 export interface ChatStreamState {
   phase: ChatPhase;
@@ -11,10 +14,13 @@ export interface ChatStreamState {
   answerText: string;
   error: string | null;
   turnId: string | null;
+  council: CouncilEntry[];
+  activeCouncilPersona: CouncilEntry['persona'] | null;
 }
 
 const INITIAL: ChatStreamState = {
   phase: 'idle', selectedSkills: [], thinkingText: '', answerText: '', error: null, turnId: null,
+  council: [], activeCouncilPersona: null,
 };
 
 export interface SendParams {
@@ -22,6 +28,7 @@ export interface SendParams {
   mode: 'consult' | 'architect' | 'design';
   text: string;
   attachmentIds?: string[];
+  council?: boolean;
 }
 
 export function useChatStream(): {
@@ -54,7 +61,7 @@ export function useChatStream(): {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ mode: params.mode, text: params.text, attachmentIds: params.attachmentIds }),
+        body: JSON.stringify({ mode: params.mode, text: params.text, attachmentIds: params.attachmentIds, council: params.council }),
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {
@@ -91,11 +98,38 @@ function handleEvent(ev: { event: string; data: string }, setState: Dispatch<Set
   try {
     if (ev.event === 'phase') {
       const parsed = JSON.parse(ev.data);
-      setState((s) => ({
-        ...s,
-        phase: parsed.phase as ChatPhase,
-        selectedSkills: Array.isArray(parsed.skills) ? parsed.skills : s.selectedSkills,
-      }));
+      if (parsed.phase === 'council_start') {
+        setState((s) => ({ ...s, phase: 'council_start', council: [], activeCouncilPersona: null }));
+      } else if (parsed.phase?.startsWith('council_') && !parsed.phase.endsWith('_done')) {
+        setState((s) => ({
+          ...s,
+          phase: parsed.phase as ChatPhase,
+          activeCouncilPersona: parsed.persona ?? s.activeCouncilPersona,
+        }));
+      } else if (parsed.phase?.endsWith('_done')) {
+        setState((s) => ({
+          ...s,
+          activeCouncilPersona: s.activeCouncilPersona === parsed.persona ? null : s.activeCouncilPersona,
+        }));
+      } else {
+        setState((s) => ({
+          ...s,
+          phase: parsed.phase as ChatPhase,
+          selectedSkills: Array.isArray(parsed.skills) ? parsed.skills : s.selectedSkills,
+        }));
+      }
+    } else if (ev.event === 'council_token') {
+      const parsed = JSON.parse(ev.data);
+      const persona = parsed.persona as CouncilEntry['persona'];
+      setState((s) => {
+        const idx = s.council.findIndex(c => c.persona === persona);
+        if (idx === -1) {
+          return { ...s, council: [...s.council, { persona, text: parsed.text ?? '' }] };
+        }
+        const next = [...s.council];
+        next[idx] = { ...next[idx], text: next[idx].text + (parsed.text ?? '') };
+        return { ...s, council: next };
+      });
     } else if (ev.event === 'thinking_token') {
       const parsed = JSON.parse(ev.data);
       setState((s) => ({ ...s, thinkingText: s.thinkingText + (parsed.text ?? '') }));
@@ -104,7 +138,7 @@ function handleEvent(ev: { event: string; data: string }, setState: Dispatch<Set
       setState((s) => ({ ...s, answerText: s.answerText + (parsed.text ?? '') }));
     } else if (ev.event === 'done') {
       const parsed = JSON.parse(ev.data);
-      setState((s) => ({ ...s, phase: 'done', turnId: parsed.turnId ?? null }));
+      setState((s) => ({ ...s, phase: 'done', turnId: parsed.turnId ?? null, activeCouncilPersona: null }));
     } else if (ev.event === 'error') {
       const parsed = JSON.parse(ev.data);
       setState((s) => ({ ...s, phase: 'error', error: parsed.message || 'unknown error' }));

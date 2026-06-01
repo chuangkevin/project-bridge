@@ -1,8 +1,17 @@
 import type { Turn } from '../../../hooks/useTurns';
 import { useState } from 'react';
 
+const PERSONA_LABEL: Record<string, string> = {
+  pm: '📋 PM',
+  designer: '🎨 Designer',
+  engineer: '⚙️ Engineer',
+  moderator: '🧑‍⚖️ Moderator',
+};
+
 export default function TurnBubble({ turn }: { turn: Turn }) {
   const [showThinking, setShowThinking] = useState(false);
+  const isCouncil = (turn.skillsUsed ?? []).includes('council-moderator');
+
   return (
     <>
       <div className="bubble bubble--user">{turn.userText}</div>
@@ -16,9 +25,19 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
                 cursor: 'pointer', fontSize: 11, marginBottom: 4, padding: 0,
               }}
             >
-              {showThinking ? '▼ 隱藏推理' : '▶ 顯示推理'}
+              {showThinking ? '▼ 隱藏合議討論' : '▶ 顯示合議討論'}
             </button>
-            {showThinking && (
+            {showThinking && isCouncil && (
+              <div className="bubble__thinking council-thinking">
+                {turn.aiResponse.thinking.split('### ').filter(Boolean).map((block, i) => (
+                  <div key={i} className="council__item">
+                    <div className="council__label">{PERSONA_LABEL[block.split('\n')[0].toLowerCase()] ?? block.split('\n')[0]}</div>
+                    <div className="council__text">{block.split('\n').slice(1).join('\n').trim()}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {showThinking && !isCouncil && (
               <div className="bubble__thinking">{turn.aiResponse.thinking}</div>
             )}
           </>

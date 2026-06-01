@@ -5,8 +5,20 @@ const PHASE_LABEL: Record<string, string> = {
   selecting_skills: '選擇技能…',
   thinking: '推理中…',
   answering: '回答中…',
+  council_start: '合議啟動…',
+  council_pm: 'PM 分析中…',
+  council_designer: 'Designer 分析中…',
+  council_engineer: 'Engineer 分析中…',
+  council_moderator: 'Moderator 彙整中…',
   done: '完成',
   error: '失敗',
+};
+
+const PERSONA_LABEL: Record<string, string> = {
+  pm: '📋 PM',
+  designer: '🎨 Designer',
+  engineer: '⚙️ Engineer',
+  moderator: '🧑‍⚖️ Moderator',
 };
 
 export default function PhaseIndicator({ state, userText }: { state: ChatStreamState; userText: string }) {
@@ -24,6 +36,19 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
                 ({state.selectedSkills.slice(0, 3).join(', ')}{state.selectedSkills.length > 3 ? '…' : ''})
               </span>
             )}
+          </div>
+        )}
+        {state.council.length > 0 && (
+          <div className="council">
+            {state.council.map((c) => (
+              <div
+                key={c.persona}
+                className={`council__item${state.activeCouncilPersona === c.persona ? ' council__item--active' : ''}`}
+              >
+                <div className="council__label">{PERSONA_LABEL[c.persona] ?? c.persona}</div>
+                <div className="council__text">{c.text}</div>
+              </div>
+            ))}
           </div>
         )}
         {state.thinkingText && (

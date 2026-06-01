@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
@@ -9,6 +9,7 @@ export default function ConsultStage() {
   const { projectId } = useWorkspaceStore();
   const { turns, refresh } = useTurns(projectId);
   const { state, send, reset } = useChatStream();
+  const [councilEnabled, setCouncilEnabled] = useState(false);
 
   const pending = useMemo(() => {
     if (state.phase === 'idle') return null;
@@ -23,7 +24,7 @@ export default function ConsultStage() {
   const handleSend = async (text: string, attachmentIds: string[]) => {
     if (!projectId) return;
     pendingUserTextRef.current = text;
-    await send({ projectId, mode: 'consult', text, attachmentIds });
+    await send({ projectId, mode: 'consult', text, attachmentIds, council: councilEnabled });
     if (pendingUserTextRef.current) {
       await refresh();
       pendingUserTextRef.current = '';
@@ -33,6 +34,12 @@ export default function ConsultStage() {
 
   return (
     <div className="chat">
+      <div style={{ padding: 'var(--space-2) var(--space-5)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+          <input type="checkbox" checked={councilEnabled} onChange={(e) => setCouncilEnabled(e.target.checked)} />
+          合議模式（PM / Designer / Engineer / Moderator 四方討論）
+        </label>
+      </div>
       <Transcript turns={turns} pending={pending} />
       <Composer
         projectId={projectId ?? ''}
