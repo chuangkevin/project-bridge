@@ -98,4 +98,50 @@ describe('POST /api/projects/:id/chat', () => {
     await request(app).post(`/api/projects/${projectId}/chat`).set(auth()).send({ mode: 'consult', text: '/consult-clarify-first hello' });
     expect(captured).toContain('Consult'); // matches built-in skill body
   });
+
+  it('council mode runs four personas and emits council_token events', async () => {
+    const callCount = { n: 0 };
+    vi.spyOn(providerModule, 'getProvider').mockReturnValue({
+      streamContent: async function* (params: { systemInstruction?: string }) {
+        callCount.n += 1;
+        const which = params.systemInstruction?.match(/council-(pm|designer|engineer|moderator)/);
+        yield `[${which?.[1] ?? 'unknown'}] reply`;
+      },
+      generateContent: vi.fn(),
+    } as never);
+
+    const r = await request(app).post(`/api/projects/${projectId}/chat`).set(auth())
+      .send({ mode: 'consult', text: 'design a counter', council: true });
+
+    expect(callCount.n).toBe(4);
+    expect(r.text).toContain('council_pm');
+    expect(r.text).toContain('council_designer');
+    expect(r.text).toContain('council_engineer');
+    expect(r.text).toContain('council_moderator');
+    expect(r.text).toContain('event: council_token');
+  });
+
+  it('council=true on non-consult mode is ignored', async () => {
+    mockProvider(['only-one-call']);
+    const r = await request(app).post(`/api/projects/${projectId}/chat`).set(auth())
+      .send({ mode: 'architect', text: 'hi', council: true });
+    expect(r.text).not.toContain('council_token');
+  });
+
+  it('AI emitting artifact tag persists artifact + emits artifact SSE event + GET artifacts shows record', async () => {
+    mockProvider([
+      'Here is the page structure.\n',
+      '<artifact kind="page-graph" name="ia">{"nodes":[{"id":"home","label":"首頁"}],"edges":[]}</artifact>',
+    ]);
+    const r = await request(app).post(`/api/projects/${projectId}/chat`).set(auth()).send({ mode: 'architect', text: '設計頁面結構' });
+    expect(r.status).toBe(200);
+    expect(r.text).toContain('event: artifact');
+    // artifact block should NOT appear in turn answer text
+    const turns = await request(app).get(`/api/projects/${projectId}/turns`).set(auth());
+    expect(turns.body.turns[0].aiResponse.text).not.toContain('<artifact');
+    // GET artifacts shows the persisted record
+    const artifacts = await request(app).get(`/api/projects/${projectId}/artifacts?kind=page-graph`).set(auth());
+    expect(artifacts.body.artifacts).toHaveLength(1);
+    expect(artifacts.body.artifacts[0].name).toBe('ia');
+  });
 });

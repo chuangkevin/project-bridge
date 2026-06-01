@@ -14,6 +14,7 @@ import { parseFactsFromResponse } from '../services/factExtractor.js';
 import { getAttachment, type Attachment } from '../services/ingestionService.js';
 import { buildSystemPrompt, parseArtifactsFromResponse } from '../services/chatOrchestrator.js';
 import { createArtifact } from '../services/artifactService.js';
+import { runCouncil } from '../services/councilOrchestrator.js';
 
 const VALID_MODES: TurnMode[] = ['consult', 'architect', 'design'];
 
@@ -33,7 +34,7 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       return;
     }
 
-    const { mode, text, attachmentIds } = req.body ?? {};
+    const { mode, text, attachmentIds, council: councilFlag } = req.body ?? {};
     if (!(VALID_MODES as string[]).includes(mode)) {
       res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: 'mode 必須是 consult/architect/design' } });
       return;
@@ -80,7 +81,46 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
 
       sse(res, 'phase', { phase: 'thinking' });
 
-      // Stream from provider
+      // Council mode — only available in consult mode per Plan 12 boundary
+      const useCouncil = mode === 'consult' && councilFlag === true;
+
+      if (useCouncil) {
+        sse(res, 'phase', { phase: 'council_start' });
+        const cleanText = slashCmd ? slashCmd.rest : text.trim();
+        const gen = runCouncil({ baseSystemPrompt: userSystem, userText: cleanText, mode, projectId });
+        let stepResult: IteratorResult<unknown, { transcripts: Record<string, string>; finalAnswer: string }>;
+        while (true) {
+          stepResult = await gen.next() as IteratorResult<unknown, { transcripts: Record<string, string>; finalAnswer: string }>;
+          if (stepResult.done) break;
+          const ev = stepResult.value as { kind: string; persona: string; text?: string };
+          if (ev.kind === 'persona_start') {
+            sse(res, 'phase', { phase: `council_${ev.persona}`, persona: ev.persona });
+          } else if (ev.kind === 'persona_token') {
+            sse(res, 'council_token', { persona: ev.persona, text: ev.text });
+          } else if (ev.kind === 'persona_end') {
+            sse(res, 'phase', { phase: `council_${ev.persona}_done`, persona: ev.persona });
+          }
+        }
+
+        const { transcripts, finalAnswer } = stepResult!.value;
+        const answerText = finalAnswer;
+        const thinkingText = ['pm', 'designer', 'engineer']
+          .map(p => `### ${p.toUpperCase()}\n${transcripts[p]}`)
+          .join('\n\n');
+
+        const turn = appendTurn(db, {
+          projectId,
+          mode: mode as TurnMode,
+          userText: text.trim(),
+          aiResponse: { text: answerText, thinking: thinkingText },
+          skillsUsed: ['council-pm', 'council-designer', 'council-engineer', 'council-moderator'],
+        });
+
+        sse(res, 'done', { turnId: turn.id });
+        return; // cleanup handled by finally block
+      }
+
+      // Stream from provider (non-council path)
       let inThinkingBlock = false;
       let buffer = '';
       let fullText = '';
