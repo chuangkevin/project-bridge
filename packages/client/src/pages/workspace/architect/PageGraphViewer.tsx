@@ -1,6 +1,12 @@
 import { ReactFlow, Background, Controls, MiniMap, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { useGraphAutofit } from '../../../hooks/useGraphAutofit';
+
+function AutoFit({ containerRef }: { containerRef: React.RefObject<HTMLElement | null> }) {
+  useGraphAutofit(containerRef);
+  return null;
+}
 
 export interface PageGraphPayload {
   version?: number;
@@ -20,6 +26,7 @@ function autoLayout(nodes: PageGraphPayload['nodes']): Record<string, { x: numbe
 }
 
 export default function PageGraphViewer({ payload }: { payload: PageGraphPayload }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const { rfNodes, rfEdges } = useMemo(() => {
     const positions = autoLayout(payload.nodes);
     const rfNodes = payload.nodes.map((n) => ({
@@ -57,13 +64,14 @@ export default function PageGraphViewer({ payload }: { payload: PageGraphPayload
   }
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
       <ReactFlow
         nodes={rfNodes}
         edges={rfEdges}
         fitView
         proOptions={{ hideAttribution: true }}
       >
+        <AutoFit containerRef={containerRef} />
         <Background color="var(--border-subtle)" gap={20} />
         <Controls />
         <MiniMap pannable zoomable style={{ background: 'var(--bg-card)' }} nodeColor="var(--accent)" />
