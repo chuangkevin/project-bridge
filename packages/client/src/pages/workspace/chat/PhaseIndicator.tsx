@@ -28,8 +28,8 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
       <div className="bubble bubble--user">{userText}</div>
       <div className="bubble bubble--ai">
         {isStreaming && (
-          <div className="phase-indicator">
-            <span className="phase-indicator__dot" />
+          <div className="phase-indicator" role="status" aria-live="polite">
+            <span className="phase-indicator__dot" aria-hidden="true" />
             <span>{PHASE_LABEL[state.phase] ?? state.phase}</span>
             {state.selectedSkills.length > 0 && state.phase === 'selecting_skills' && (
               <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
@@ -44,6 +44,8 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
               <div
                 key={c.persona}
                 className={`council__item${state.activeCouncilPersona === c.persona ? ' council__item--active' : ''}`}
+                role="region"
+                aria-label={`${PERSONA_LABEL[c.persona] ?? c.persona} 的意見`}
               >
                 <div className="council__label">{PERSONA_LABEL[c.persona] ?? c.persona}</div>
                 <div className="council__text">{c.text}</div>

@@ -19,7 +19,7 @@ export default function RightInspector() {
   }, [projectId, selectedTurnId, selectedFactId, selectedSkillName]);
 
   return (
-    <aside className="workspace__right" data-collapsed={rightCollapsed}>
+    <aside className="workspace__right" data-collapsed={rightCollapsed} role="complementary" aria-label="詳細資訊">
       <div style={{ padding: 'var(--space-4)' }}>
         <button
           onClick={toggleRight}

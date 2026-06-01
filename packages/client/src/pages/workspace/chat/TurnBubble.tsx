@@ -20,6 +20,8 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
           <>
             <button
               onClick={() => setShowThinking(!showThinking)}
+              aria-expanded={showThinking}
+              aria-controls={`thinking-${turn.id}`}
               style={{
                 background: 'transparent', border: 'none', color: 'var(--text-muted)',
                 cursor: 'pointer', fontSize: 11, marginBottom: 4, padding: 0,
@@ -28,7 +30,7 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
               {showThinking ? '▼ 隱藏合議討論' : '▶ 顯示合議討論'}
             </button>
             {showThinking && isCouncil && (
-              <div className="bubble__thinking council-thinking">
+              <div id={`thinking-${turn.id}`} className="bubble__thinking council-thinking">
                 {turn.aiResponse.thinking.split('### ').filter(Boolean).map((block, i) => (
                   <div key={i} className="council__item">
                     <div className="council__label">{PERSONA_LABEL[block.split('\n')[0].toLowerCase()] ?? block.split('\n')[0]}</div>
@@ -38,7 +40,7 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
               </div>
             )}
             {showThinking && !isCouncil && (
-              <div className="bubble__thinking">{turn.aiResponse.thinking}</div>
+              <div id={`thinking-${turn.id}`} className="bubble__thinking">{turn.aiResponse.thinking}</div>
             )}
           </>
         )}
