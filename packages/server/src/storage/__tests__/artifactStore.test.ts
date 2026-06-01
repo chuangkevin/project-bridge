@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { saveArtifact, loadArtifact, listArtifacts, deleteArtifact } from '../artifactStore';
 import { AST_SCHEMA_VERSION, type SemanticUIAst } from '@designbridge/ast';
 
@@ -27,10 +27,23 @@ describe('artifactStore', () => {
   it('lists artifact ids for a project', () => {
     saveArtifact('proj1', ast('home'), { baseDir });
     saveArtifact('proj1', ast('list-page'), { baseDir });
-    expect(listArtifacts('proj1', { baseDir }).sort()).toEqual(['home', 'list-page']);
+    expect(listArtifacts('proj1', { baseDir }).sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: 'home', kind: 'ast' },
+      { id: 'list-page', kind: 'ast' },
+    ]);
   });
   it('lists empty for an unknown project', () => {
     expect(listArtifacts('ghost', { baseDir })).toEqual([]);
+  });
+  it('lists both AST and Mirror artifacts', () => {
+    saveArtifact('proj1', ast('home'), { baseDir });
+    const mirrorPath = join(baseDir, 'projects', 'proj1', 'artifacts', 'ar_m.mirror.json');
+    mkdirSync(dirname(mirrorPath), { recursive: true });
+    writeFileSync(mirrorPath, '{}');
+    expect(listArtifacts('proj1', { baseDir }).sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: 'ar_m', kind: 'mirror' },
+      { id: 'home', kind: 'ast' },
+    ]);
   });
   it('deletes an artifact', () => {
     saveArtifact('proj1', ast('home'), { baseDir });

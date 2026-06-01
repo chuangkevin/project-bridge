@@ -1,10 +1,12 @@
 import { useCompilerStore } from '../../stores/useCompilerStore';
 import { buildPreviewHtml } from '../../lib/previewHtml';
+import { getMirrorUrl } from '../../lib/compileApi';
 
 const emptyStyle = { padding: 16, fontSize: 13, color: 'var(--text-muted, #94a3b8)' } as const;
 
 /** The central preview anchor. What it renders depends on the active pipeline stage. */
 export default function PreviewPane() {
+  const projectId = useCompilerStore((s) => s.projectId);
   const artifacts = useCompilerStore((s) => s.artifacts);
   const activeArtifactId = useCompilerStore((s) => s.activeArtifactId);
   const stage = useCompilerStore((s) => s.stage);
@@ -12,6 +14,17 @@ export default function PreviewPane() {
 
   if (!active) {
     return <div style={emptyStyle}>Describe a UI in chat to compile it.</div>;
+  }
+
+  if (active.kind === 'mirror') {
+    return (
+      <iframe
+        title="Mirror preview"
+        sandbox="allow-same-origin"
+        src={getMirrorUrl(projectId, active.id, 'page.html')}
+        style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
+      />
+    );
   }
 
   if (stage === 'codegen') {

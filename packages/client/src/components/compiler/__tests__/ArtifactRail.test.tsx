@@ -5,6 +5,7 @@ import ArtifactRail from '../ArtifactRail';
 import { useCompilerStore, type Artifact } from '../../../stores/useCompilerStore';
 
 const makeArtifact = (id: string, artifactId: string): Artifact => ({
+  kind: 'ast',
   id,
   ast: {
     schemaVersion: 1,
@@ -14,6 +15,15 @@ const makeArtifact = (id: string, artifactId: string): Artifact => ({
   },
   vue: { filename: `${artifactId}.vue`, code: '<template><div /></template>' },
   violations: [],
+});
+
+const makeMirror = (id: string, sourceUrl: string): Artifact => ({
+  kind: 'mirror',
+  id,
+  sourceUrl,
+  sourceType: 'url',
+  crawledAt: '2026-05-29T00:00:00Z',
+  warnings: [],
 });
 
 beforeEach(() => {
@@ -44,5 +54,14 @@ describe('ArtifactRail', () => {
     render(<ArtifactRail />);
     fireEvent.click(screen.getByText('page-2'));
     expect(useCompilerStore.getState().activeArtifactId).toBe('art_2');
+  });
+
+  it('renders 🔒 icon for mirror artifacts', () => {
+    const a = makeArtifact('art_1', 'home');
+    const m = makeMirror('mirror-1', 'https://example.com');
+    useCompilerStore.setState({ artifacts: [a, m], activeArtifactId: a.id });
+    render(<ArtifactRail />);
+    expect(screen.getByText('mirror-1').textContent).toContain('🔒');
+    expect(screen.getByText('home').textContent).not.toContain('🔒');
   });
 });

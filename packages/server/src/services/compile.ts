@@ -1,6 +1,6 @@
 import {
   applySkillRules, CORE_RULES,
-  type SemanticUIAst, type RuleViolation, type SkillRule,
+  type IngestionAst, type SemanticUIAst, type RuleViolation, type SkillRule,
 } from '@designbridge/ast';
 import { renderVue, type VueArtifact } from '@designbridge/codegen';
 import { buildColdStart, applyMutation, type GenerateFn } from '../semantic';
@@ -26,6 +26,11 @@ export interface CompileOptions {
 /** Cold start: raw input → IngestionAst → AI AST → skill check → Vue. */
 export async function compileFromInput(input: RawInput, options: CompileOptions): Promise<CompileResult> {
   const ingestion = await parseInput(input);
+  return compileFromIngestion(ingestion, options);
+}
+
+/** Same as compileFromInput, but takes a pre-built ingestion (e.g. WebpageIngestion from parseWebpage). */
+export async function compileFromIngestion(ingestion: IngestionAst, options: CompileOptions): Promise<CompileResult> {
   const ast = await buildColdStart(ingestion, {
     artifactId: options.artifactId,
     generate: options.generate,

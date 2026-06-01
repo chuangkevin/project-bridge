@@ -1,14 +1,35 @@
 import { toJson, type IngestionAst, type SemanticUIAst, type ComponentRegistry } from '@designbridge/ast';
 import { describeComponentCatalog } from './componentCatalog';
 
+/** Max chars of DOM text we feed to the AI for a webpage ingestion. Large pages get truncated. */
+export const WEBPAGE_DOM_MAX_CHARS = 30_000;
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max)}\n<!-- truncated -->`;
+}
+
 /** Flatten an IngestionAst into the text the AI should interpret. */
 export function ingestionToText(ingestion: IngestionAst): string {
   switch (ingestion.type) {
     case 'requirement': return ingestion.paragraphs.join('\n\n');
     case 'pdf': return ingestion.rawText;
-    case 'screenshot': return ingestion.ocrText;
+    case 'screenshot':
+      return [
+        'Screenshot OCR text (all visible text):',
+        ingestion.ocrText,
+        '',
+        'High-level layout regions (from vision; pixel coordinates approximate):',
+        ...ingestion.regions.map(r => `- ${r.text ?? '(unlabeled)'} at (${r.x},${r.y}) ${r.width}x${r.height}`),
+        '',
+        'Translate the structure (in region order) into a Semantic UI AST.',
+      ].join('\n');
     case 'clipboard': return ingestion.payload;
-    case 'webpage': return ingestion.dom;
+    case 'webpage':
+      return [
+        `Source URL: ${ingestion.url}`,
+        'DOM (script/iframe stripped; translate the structure into a Semantic UI AST that visually reproduces the page):',
+        truncate(ingestion.dom, WEBPAGE_DOM_MAX_CHARS),
+      ].join('\n');
     default: { const _x: never = ingestion; return ''; }
   }
 }

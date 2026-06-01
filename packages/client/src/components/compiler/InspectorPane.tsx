@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useCompilerStore } from '../../stores/useCompilerStore';
 
 const emptyStyle = { padding: 16, fontSize: 13, color: 'var(--text-muted, #94a3b8)' } as const;
@@ -11,19 +12,81 @@ const preStyle = {
   color: 'var(--text-primary, #1e293b)',
 } as const;
 
-/** Right-hand detail pane. AST tree / violations / generated code, keyed to the active stage. */
+/** Right-hand detail pane. AST tree / violations / generated code, keyed to the active stage.
+ *  For Mirror artifacts, shows metadata + an "Upgrade to AST" button. */
 export default function InspectorPane() {
   const artifacts = useCompilerStore((s) => s.artifacts);
   const activeArtifactId = useCompilerStore((s) => s.activeArtifactId);
   const stage = useCompilerStore((s) => s.stage);
+  const upgradeMirrorToAstAction = useCompilerStore((s) => s.upgradeMirrorToAstAction);
+  const isCompiling = useCompilerStore((s) => s.isCompiling);
   const active = artifacts.find((a) => a.id === activeArtifactId);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
   if (!active) {
     return <div style={emptyStyle}>No artifact selected.</div>;
   }
 
+  if (active.kind === 'mirror') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 12, gap: 8, fontSize: 13 }}>
+        <div>
+          <span style={{ color: 'var(--text-secondary, #64748b)' }}>Source: </span>
+          <a href={active.sourceUrl} target="_blank" rel="noreferrer">
+            {active.sourceUrl}
+          </a>
+        </div>
+        <div>
+          <span style={{ color: 'var(--text-secondary, #64748b)' }}>Crawled: </span>
+          {active.crawledAt}
+        </div>
+        {active.warnings.length > 0 && (
+          <div>
+            <div style={{ color: '#d97706', fontWeight: 600 }}>Warnings ({active.warnings.length}):</div>
+            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-secondary, #64748b)' }}>
+              {active.warnings.slice(0, 10).map((w, i) => (
+                <li key={i}>{w.code}{w.url ? ` — ${w.url}` : ''}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {upgradeError && (
+          <div role="alert" style={{ padding: '6px 10px', borderRadius: 6, background: 'rgba(220,38,38,0.1)', color: '#dc2626', fontSize: 12 }}>
+            {upgradeError}
+          </div>
+        )}
+        <div style={{ marginTop: 'auto' }}>
+          <button
+            type="button"
+            disabled={isCompiling}
+            onClick={async () => {
+              setUpgradeError(null);
+              try {
+                const r = await upgradeMirrorToAstAction(active.id);
+                if (!r.ok) setUpgradeError(`upgrade failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`);
+              } catch (err) {
+                setUpgradeError(err instanceof Error ? err.message : String(err));
+              }
+            }}
+            style={{
+              padding: '6px 12px',
+              fontSize: 13,
+              borderRadius: 6,
+              border: '1px solid var(--accent, #8E6FA7)',
+              cursor: isCompiling ? 'default' : 'pointer',
+              background: isCompiling ? 'var(--text-muted, #94a3b8)' : 'var(--accent, #8E6FA7)',
+              color: '#fff',
+            }}
+          >
+            {isCompiling ? 'Upgrading…' : 'Upgrade to AST'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (stage === 'codegen') {
-    const copy = () => {
+    const copy = (): void => {
       navigator.clipboard?.writeText(active.vue.code);
     };
     return (

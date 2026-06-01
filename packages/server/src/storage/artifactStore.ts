@@ -39,12 +39,22 @@ export function loadArtifact(projectId: string, artifactId: string, opts: StoreO
   return fromJson(readFileSync(p, 'utf8'), { registry: BASE_COMPONENTS });
 }
 
-/** List the artifactId slugs stored for a project. */
-export function listArtifacts(projectId: string, opts: StoreOpts = {}): string[] {
+export interface ArtifactListEntry {
+  id: string;
+  kind: 'ast' | 'mirror';
+}
+
+/** List artifacts (AST + Mirror) stored for a project, with kind discriminator. */
+export function listArtifacts(projectId: string, opts: StoreOpts = {}): ArtifactListEntry[] {
   const baseDir = opts.baseDir ?? defaultBaseDir();
   const dir = artifactsDir(baseDir, projectId);
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter(f => f.endsWith('.ast.json')).map(f => f.replace(/\.ast\.json$/, ''));
+  const out: ArtifactListEntry[] = [];
+  for (const f of readdirSync(dir)) {
+    if (f.endsWith('.ast.json')) out.push({ id: f.replace(/\.ast\.json$/, ''), kind: 'ast' });
+    else if (f.endsWith('.mirror.json')) out.push({ id: f.replace(/\.mirror\.json$/, ''), kind: 'mirror' });
+  }
+  return out;
 }
 
 export function deleteArtifact(projectId: string, artifactId: string, opts: StoreOpts = {}): void {

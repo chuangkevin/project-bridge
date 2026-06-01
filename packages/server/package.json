@@ -19,6 +19,7 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.0.0",
     "canvas": "^2.11.2",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
@@ -43,8 +44,10 @@
     "@types/express": "^5.0.0",
     "@types/multer": "^1.4.12",
     "@types/pdf-parse": "^1.1.4",
+    "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",
     "@types/yauzl": "^2.10.3",
+    "supertest": "^7.2.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.6.0",
     "vitest": "^3.2.4"
