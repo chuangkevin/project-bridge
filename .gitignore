@@ -21,6 +21,9 @@ packages/server/test-e2e-generate.js
 # Superpowers brainstorm artifacts (per-session mockups + server state)
 .superpowers/
 
+# TypeScript build cache
+**/tsconfig.tsbuildinfo
+
 # Runtime SQLite DB (new server)
 # Un-ignore the new server's data/ dir (the bare "data/" above is too broad),
 # then re-ignore only the runtime DB files inside it.
