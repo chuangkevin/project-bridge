@@ -17,3 +17,6 @@ packages/server/test-e2e-generate.js
 
 # Crawl artifacts
 /d:/tmp/houseprice-*
+
+# Superpowers brainstorm artifacts (per-session mockups + server state)
+.superpowers/
