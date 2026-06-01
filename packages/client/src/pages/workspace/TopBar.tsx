@@ -35,6 +35,16 @@ export default function TopBar({ projectName }: { projectName: string }) {
           >{MODE_LABELS[m]}</button>
         ))}
       </div>
+      <select
+        className="mode-tabs-mobile"
+        value={mode}
+        onChange={(e) => setMode(e.target.value as Mode)}
+        aria-label="模式"
+      >
+        {(['consult', 'architect', 'design'] as Mode[]).map((m) => (
+          <option key={m} value={m}>{MODE_LABELS[m]}</option>
+        ))}
+      </select>
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-3)' }}>
         <Link to="/settings" style={{ color: 'var(--text-muted)', fontSize: 13 }}>設定</Link>
         <button
