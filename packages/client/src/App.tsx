@@ -7,8 +7,10 @@ import SetupPage from './pages/SetupPage';
 import ProjectsPage from './pages/ProjectsPage';
 import WorkspacePage from './pages/WorkspacePage';
 import SettingsPage from './pages/SettingsPage';
+import { useViewportHeight } from './hooks/useViewportHeight';
 
 export default function App() {
+  useViewportHeight();
   const { user, loading, hydrate } = useAuthStore();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
 
