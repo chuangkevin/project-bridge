@@ -11,24 +11,24 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('StageTabs', () => {
-  it('renders all four stage labels', () => {
+  it('renders all four stage tabs (looked up by aria-label so visible labels can be localised)', () => {
     render(<StageTabs />);
-    expect(screen.getByText('Ingestion')).toBeTruthy();
-    expect(screen.getByText('AST')).toBeTruthy();
-    expect(screen.getByText('Constraint')).toBeTruthy();
-    expect(screen.getByText('Codegen')).toBeTruthy();
+    expect(screen.getByLabelText('Ingestion')).toBeTruthy();
+    expect(screen.getByLabelText('AST')).toBeTruthy();
+    expect(screen.getByLabelText('Constraint')).toBeTruthy();
+    expect(screen.getByLabelText('Codegen')).toBeTruthy();
   });
 
-  it('clicking Codegen sets the store stage to codegen', () => {
+  it('clicking the Codegen tab sets the store stage to codegen', () => {
     render(<StageTabs />);
-    fireEvent.click(screen.getByText('Codegen'));
+    fireEvent.click(screen.getByLabelText('Codegen'));
     expect(useCompilerStore.getState().stage).toBe('codegen');
   });
 
   it('marks the active stage button with aria-pressed', () => {
     useCompilerStore.setState({ stage: 'ast' });
     render(<StageTabs />);
-    expect(screen.getByText('AST').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Codegen').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByLabelText('AST').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('Codegen').getAttribute('aria-pressed')).toBe('false');
   });
 });

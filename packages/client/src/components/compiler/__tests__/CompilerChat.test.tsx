@@ -25,6 +25,10 @@ const makeArtifact = (): AstArtifact => ({
   violations: [],
 });
 
+const clickSend = () => fireEvent.click(screen.getByLabelText('Send'));
+const clickConfirm = () => fireEvent.click(screen.getByLabelText('Confirm'));
+const clickCancel = () => fireEvent.click(screen.getByLabelText('Cancel'));
+
 beforeEach(() => {
   vi.restoreAllMocks();
   useCompilerStore.setState({ projectId: 'p1', artifacts: [], activeArtifactId: null, stage: 'ast', isCompiling: false, threads: {} });
@@ -37,7 +41,7 @@ describe('CompilerChat', () => {
     const spy = vi.spyOn(compileApi, 'compile').mockResolvedValue(dto('Go'));
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: 'a form' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy).toHaveBeenCalledWith('p1', { artifactId: 'home', requirement: 'a form' });
   });
@@ -48,7 +52,7 @@ describe('CompilerChat', () => {
     const spy = vi.spyOn(compileApi, 'mutate').mockResolvedValue(dto('Red'));
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: 'make it red' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[0][0]).toBe('p1');
     expect(spy.mock.calls[0][1].instruction).toBe('make it red');
@@ -58,7 +62,7 @@ describe('CompilerChat', () => {
     vi.spyOn(compileApi, 'compile').mockRejectedValue(new Error('boom'));
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: 'a form' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
     expect(screen.getByRole('alert').textContent).toContain('boom');
   });
@@ -66,7 +70,7 @@ describe('CompilerChat', () => {
   it('shows MirrorIntentCard when input contains a URL on first send', async () => {
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: 'mirror this https://example.com' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
     expect(screen.getAllByText(/https:\/\/example\.com/).length).toBeGreaterThan(0);
   });
@@ -78,9 +82,9 @@ describe('CompilerChat', () => {
     });
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: '完整複製 https://example.com' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
-    fireEvent.click(screen.getByText('Confirm'));
+    clickConfirm();
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[0][1]).toMatchObject({ url: 'https://example.com' });
   });
@@ -89,18 +93,18 @@ describe('CompilerChat', () => {
     vi.spyOn(compileApi, 'compileMirror').mockResolvedValue({ ok: false, reason: 'crawl_timeout' });
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: 'mirror https://example.com' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
-    fireEvent.click(screen.getByText('Confirm'));
+    clickConfirm();
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/crawl_timeout/));
   });
 
   it('cancelling the intent card clears it', async () => {
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: 'https://example.com' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
-    fireEvent.click(screen.getByText('Cancel'));
+    clickCancel();
     expect(screen.queryByTestId('mirror-intent-card')).toBeNull();
   });
 
@@ -108,7 +112,7 @@ describe('CompilerChat', () => {
     const spy = vi.spyOn(compileApi, 'compile').mockResolvedValue(dto('Go'));
     render(<CompilerChat />);
     fireEvent.change(screen.getByLabelText('compiler chat input'), { target: { value: 'just a login page' } });
-    fireEvent.click(screen.getByText('Send'));
+    clickSend();
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(screen.queryByTestId('mirror-intent-card')).toBeNull();
   });
@@ -116,7 +120,6 @@ describe('CompilerChat', () => {
   it('pasted image triggers MirrorIntentCard on Send', async () => {
     render(<CompilerChat />);
     const input = screen.getByLabelText('compiler chat input');
-    // Simulate paste with an image item
     const blob = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' });
     Object.defineProperty(blob, 'name', { value: 'shot.png' });
     fireEvent.paste(input, {
@@ -124,9 +127,8 @@ describe('CompilerChat', () => {
         items: [{ type: 'image/png', getAsFile: () => blob as File }],
       },
     });
-    // Wait for FileReader to resolve via microtask flush
-    await waitFor(() => expect(screen.getByText(/Attached/i)).toBeTruthy());
-    fireEvent.click(screen.getByText('Send'));
+    await waitFor(() => expect(screen.getByText(/已附加|Attached/i)).toBeTruthy());
+    clickSend();
     await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
   });
 
@@ -140,11 +142,13 @@ describe('CompilerChat', () => {
     fireEvent.paste(screen.getByLabelText('compiler chat input'), {
       clipboardData: { items: [{ type: 'image/png', getAsFile: () => blob as File }] },
     });
-    await waitFor(() => expect(screen.getByText(/Attached/i)).toBeTruthy());
-    fireEvent.click(screen.getByText('Send'));
+    await waitFor(() => expect(screen.getByText(/已附加|Attached/i)).toBeTruthy());
+    clickSend();
     await waitFor(() => expect(screen.getByTestId('mirror-intent-card')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText(/Mirror —/i));
-    fireEvent.click(screen.getByText('Confirm'));
+    // First radio in MirrorIntentCard is Mirror — click it
+    const radios = screen.getAllByRole('radio') as HTMLInputElement[];
+    fireEvent.click(radios[0]);
+    clickConfirm();
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[0][1]).toMatchObject({ mimeType: 'image/png' });
   });

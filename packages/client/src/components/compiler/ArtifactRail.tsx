@@ -1,6 +1,6 @@
 import { useCompilerStore } from '../../stores/useCompilerStore';
 
-/** Vertical list of compiled artifacts. Click to make one active. */
+/** 垂直清單，顯示已編譯的產出（Mirror / AST）。點擊切換為作用中項目。 */
 export default function ArtifactRail() {
   const artifacts = useCompilerStore((s) => s.artifacts);
   const activeArtifactId = useCompilerStore((s) => s.activeArtifactId);
@@ -10,50 +10,95 @@ export default function ArtifactRail() {
     return (
       <div
         style={{
-          padding: 12,
-          fontSize: 13,
-          color: 'var(--text-muted, #94a3b8)',
+          padding: '24px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
+          textAlign: 'center',
+          color: 'var(--text-muted)',
         }}
       >
-        No artifacts yet
+        <div
+          aria-hidden
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            background: 'var(--accent-glass)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 20,
+          }}
+        >
+          📦
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          尚無產出
+        </div>
+        <div style={{ fontSize: 12, lineHeight: 1.55 }}>
+          在對話欄輸入需求、貼上截圖或網址，
+          <br />
+          系統會編譯出 UI 並列在這裡。
+        </div>
       </div>
     );
   }
 
   return (
-    <ul style={{ listStyle: 'none', margin: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {artifacts.map((a) => {
-        const active = a.id === activeArtifactId;
-        const label = a.kind === 'mirror' ? a.id : a.ast.artifactId;
-        return (
-          <li key={a.id}>
-            <button
-              type="button"
-              aria-pressed={active}
-              onClick={() => selectArtifact(a.id)}
-              style={{
-                width: '100%',
-                textAlign: 'left',
-                padding: '8px 10px',
-                borderRadius: 6,
-                border: '1px solid var(--border-primary, #e2e8f0)',
-                cursor: 'pointer',
-                fontSize: 13,
-                background: active ? 'var(--accent-light, rgba(142,111,167,0.08))' : 'var(--bg-secondary, #fff)',
-                color: active ? 'var(--accent, #8E6FA7)' : 'var(--text-primary, #1e293b)',
-                fontWeight: active ? 600 : 400,
-              }}
-            >
-              {a.kind === 'mirror' && (
-                <span title="Mirror — read-only" style={{ marginRight: 6 }}>
-                  🔒
+    <div style={{ padding: '8px 8px 16px' }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+          padding: '6px 10px',
+        }}
+      >
+        產出（{artifacts.length}）
+      </div>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {artifacts.map((a) => {
+          const active = a.id === activeArtifactId;
+          const label = a.kind === 'mirror' ? a.id : a.ast.artifactId;
+          return (
+            <li key={a.id}>
+              <button
+                type="button"
+                aria-pressed={active}
+                onClick={() => selectArtifact(a.id)}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid',
+                  borderColor: active ? 'var(--border-accent-hi, var(--accent))' : 'var(--border-subtle, transparent)',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  background: active ? 'var(--accent-glass)' : 'transparent',
+                  color: active ? 'var(--text-accent, var(--accent))' : 'var(--text-primary)',
+                  fontWeight: active ? 600 : 400,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  transition: 'background 140ms, border-color 140ms',
+                }}
+              >
+                <span aria-hidden style={{ fontSize: 14, flexShrink: 0 }}>
+                  {a.kind === 'mirror' ? '🔒' : '🧩'}
                 </span>
-              )}
-              {label}
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                  {label}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

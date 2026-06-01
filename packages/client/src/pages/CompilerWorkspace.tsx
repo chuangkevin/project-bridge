@@ -9,30 +9,47 @@ import PreviewPane from '../components/compiler/PreviewPane';
 import InspectorPane from '../components/compiler/InspectorPane';
 import ThemeMergeDialog from '../components/compiler/ThemeMergeDialog';
 
-const columnBorder = '1px solid var(--border-primary, #e2e8f0)';
+const columnBorder = '1px solid var(--border-primary)';
 
 type MobilePane = 'rail' | 'chat' | 'preview' | 'inspector';
 
-const RAIL_WIDTH: Record<LayoutMode, number> = { desktop: 200, compact: 180, mobile: 0 };
-const CHAT_WIDTH: Record<LayoutMode, number | string> = { desktop: 320, compact: 280, mobile: '100%' };
-const INSPECTOR_WIDTH: Record<LayoutMode, number> = { desktop: 360, compact: 320, mobile: 0 };
+const RAIL_WIDTH: Record<LayoutMode, number> = { desktop: 220, compact: 200, mobile: 0 };
+const CHAT_WIDTH: Record<LayoutMode, number | string> = { desktop: 360, compact: 320, mobile: '100%' };
+const INSPECTOR_WIDTH: Record<LayoutMode, number> = { desktop: 380, compact: 340, mobile: 0 };
 
-const ICON_BTN: React.CSSProperties = {
-  padding: '4px 8px',
-  fontSize: 14,
-  borderRadius: 6,
-  border: '1px solid var(--border-primary, #e2e8f0)',
-  background: 'var(--bg-secondary, #fff)',
-  color: 'var(--text-primary, #1e293b)',
-  cursor: 'pointer',
-  lineHeight: 1,
+const MOBILE_LABEL: Record<MobilePane, string> = {
+  rail: '產出',
+  chat: '對話',
+  preview: '預覽',
+  inspector: '檢視',
 };
 
-/** AI UI Compiler workspace.
- *  Layout adapts to viewport:
- *  - desktop (≥1280): rail | chat | preview | inspector, all visible
- *  - compact (768–1280): rail/inspector collapsible (default closed) via header toggles
- *  - mobile (<768): tab nav switches one pane at a time
+const ICON_BTN: React.CSSProperties = {
+  padding: '6px 10px',
+  fontSize: 14,
+  borderRadius: 8,
+  border: '1px solid var(--border-accent)',
+  background: 'var(--bg-card)',
+  color: 'var(--text-primary)',
+  cursor: 'pointer',
+  lineHeight: 1,
+  transition: 'background 160ms, border-color 160ms',
+};
+
+function shortProjectLabel(id: string | undefined): string {
+  if (!id) return '未命名專案';
+  // UUID v4: 8-4-4-4-12. Show first 8 + "…" for compact identifier.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return `專案 ${id.slice(0, 8)}`;
+  }
+  return id;
+}
+
+/** AI UI 編譯器工作區。
+ *  響應式：
+ *  - desktop (≥1280px)：產出列 | 對話 | 預覽 | 檢視，四欄全顯
+ *  - compact (768–1280px)：產出列/檢視欄預設收合，header 切換按鈕展開
+ *  - mobile (<768px)：底部 tab nav 切換單一面板
  */
 export default function CompilerWorkspace() {
   const { id } = useParams();
@@ -44,7 +61,7 @@ export default function CompilerWorkspace() {
   const { mode } = useViewport();
   const [railOpen, setRailOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [mobilePane, setMobilePane] = useState<MobilePane>('preview');
+  const [mobilePane, setMobilePane] = useState<MobilePane>('chat');
 
   useEffect(() => {
     if (id) useCompilerStore.getState().setProjectId(id);
@@ -71,18 +88,19 @@ export default function CompilerWorkspace() {
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        background: 'var(--bg-primary, #f8fafc)',
-        color: 'var(--text-primary, #1e293b)',
+        background: 'var(--bg-root, var(--bg-primary))',
+        color: 'var(--text-primary)',
       }}
     >
       <header
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: mode === 'mobile' ? 8 : 12,
-          padding: '8px 12px',
+          gap: mode === 'mobile' ? 8 : 14,
+          padding: '10px 16px',
           borderBottom: columnBorder,
-          background: 'var(--bg-secondary, #fff)',
+          background: 'var(--glass-floating, var(--bg-secondary))',
+          backdropFilter: 'var(--glass-blur-md, none)',
           flexShrink: 0,
           flexWrap: mode === 'mobile' ? 'wrap' : 'nowrap',
         }}
@@ -90,49 +108,85 @@ export default function CompilerWorkspace() {
         {mode !== 'mobile' && (
           <button
             type="button"
-            aria-label="Toggle artifact rail"
+            aria-label="切換產出列"
             aria-pressed={railOpen}
             onClick={() => setRailOpen((o) => !o)}
             style={ICON_BTN}
-            title={railOpen ? 'Hide artifacts' : 'Show artifacts'}
+            title={railOpen ? '隱藏產出列' : '展開產出列'}
           >
             📁
           </button>
         )}
-        <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {mode === 'mobile' ? projectId || '—' : `Project: ${projectId || '—'}`}
-        </span>
+        <div
+          title={projectId || ''}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            color: 'var(--text-accent, var(--text-primary))',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 6,
+              background: 'linear-gradient(135deg, var(--accent-grad-start), var(--accent-grad-end))',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 13,
+              color: '#fff',
+            }}
+          >
+            ⌘
+          </span>
+          {shortProjectLabel(projectId)}
+        </div>
         <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
           <StageTabs />
         </div>
         {mode !== 'mobile' && (
           <button
             type="button"
-            aria-label="Toggle inspector"
+            aria-label="切換檢視欄"
             aria-pressed={inspectorOpen}
             onClick={() => setInspectorOpen((o) => !o)}
             style={ICON_BTN}
-            title={inspectorOpen ? 'Hide inspector' : 'Show inspector'}
+            title={inspectorOpen ? '隱藏檢視欄' : '展開檢視欄'}
           >
             🔍
           </button>
         )}
         <Link
           to="/settings"
-          style={{ fontSize: 13, color: 'var(--accent, #8E6FA7)', whiteSpace: 'nowrap' }}
+          style={{
+            fontSize: 13,
+            color: 'var(--text-accent, var(--accent))',
+            whiteSpace: 'nowrap',
+            textDecoration: 'none',
+            padding: '6px 10px',
+            borderRadius: 8,
+            border: '1px solid transparent',
+            transition: 'background 160ms, border-color 160ms',
+          }}
         >
-          {mode === 'mobile' ? '⚙' : 'Settings'}
+          {mode === 'mobile' ? '⚙' : '⚙ 設定'}
         </Link>
       </header>
 
       {mode === 'mobile' && (
         <nav
           role="tablist"
-          aria-label="Workspace pane"
+          aria-label="工作區面板"
           style={{
             display: 'flex',
             borderBottom: columnBorder,
-            background: 'var(--bg-secondary, #fff)',
+            background: 'var(--bg-secondary)',
             flexShrink: 0,
           }}
         >
@@ -147,18 +201,17 @@ export default function CompilerWorkspace() {
                 onClick={() => setMobilePane(p)}
                 style={{
                   flex: 1,
-                  padding: '8px 4px',
-                  fontSize: 12,
+                  padding: '10px 4px',
+                  fontSize: 13,
                   fontWeight: active ? 600 : 400,
                   border: 'none',
-                  borderBottom: active ? '2px solid var(--accent, #8E6FA7)' : '2px solid transparent',
+                  borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
                   background: 'transparent',
-                  color: active ? 'var(--accent, #8E6FA7)' : 'var(--text-secondary, #64748b)',
+                  color: active ? 'var(--text-accent, var(--accent))' : 'var(--text-secondary)',
                   cursor: 'pointer',
-                  textTransform: 'capitalize',
                 }}
               >
-                {p === 'rail' ? 'Files' : p}
+                {MOBILE_LABEL[p]}
               </button>
             );
           })}
@@ -174,6 +227,7 @@ export default function CompilerWorkspace() {
             overflow: 'auto',
             flexShrink: 0,
             transition: 'width 180ms ease',
+            background: 'var(--bg-primary)',
             ...(mode === 'mobile' && showRail ? { flex: 1, width: '100%' } : {}),
           }}
         >
@@ -188,6 +242,7 @@ export default function CompilerWorkspace() {
             overflow: 'hidden',
             flexShrink: 0,
             display: 'flex',
+            background: 'var(--bg-secondary)',
             ...(mode === 'mobile' && !showChat ? { display: 'none' } : {}),
             ...(mode === 'mobile' && showChat ? { flex: 1, width: '100%' } : {}),
           }}
@@ -202,6 +257,7 @@ export default function CompilerWorkspace() {
             minWidth: 0,
             overflow: 'hidden',
             display: showPreview ? 'flex' : 'none',
+            background: 'var(--bg-primary)',
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -217,6 +273,7 @@ export default function CompilerWorkspace() {
             overflow: 'auto',
             flexShrink: 0,
             transition: 'width 180ms ease',
+            background: 'var(--bg-secondary)',
             ...(mode === 'mobile' && showInspector ? { flex: 1, width: '100%' } : {}),
           }}
         >

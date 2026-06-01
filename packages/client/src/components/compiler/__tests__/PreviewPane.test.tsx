@@ -36,14 +36,14 @@ afterEach(() => cleanup());
 describe('PreviewPane', () => {
   it('shows empty state when there is no active artifact', () => {
     render(<PreviewPane />);
-    expect(screen.getByText('Describe a UI in chat to compile it.')).toBeTruthy();
+    expect(screen.getByText(/AI UI 編譯器/)).toBeTruthy();
   });
 
   it('renders a sandboxed iframe with the preview srcdoc at stage ast', () => {
     const a = makeArtifact();
     useCompilerStore.setState({ artifacts: [a], activeArtifactId: a.id, stage: 'ast' });
     render(<PreviewPane />);
-    const iframe = screen.getByTitle('preview') as HTMLIFrameElement;
+    const iframe = screen.getByTitle('預覽') as HTMLIFrameElement;
     const srcdoc = iframe.getAttribute('srcdoc') ?? '';
     expect(srcdoc).toContain('<button type="button">Go</button>');
     expect(srcdoc).toContain('cdn.tailwindcss.com');
@@ -56,18 +56,18 @@ describe('PreviewPane', () => {
     expect(screen.getByText(/<button type="button">Go<\/button>/)).toBeTruthy();
   });
 
-  it('shows "No rule violations." at stage constraint with no violations', () => {
+  it('shows "無規則違規" at stage constraint with no violations', () => {
     const a = makeArtifact([]);
     useCompilerStore.setState({ artifacts: [a], activeArtifactId: a.id, stage: 'constraint' });
     render(<PreviewPane />);
-    expect(screen.getByText('No rule violations.')).toBeTruthy();
+    expect(screen.getByText(/無規則違規/)).toBeTruthy();
   });
 
   it('renders Mirror iframe pointing at the mirrors route when active artifact is mirror', () => {
     const m = makeMirror();
     useCompilerStore.setState({ artifacts: [m], activeArtifactId: m.id, stage: 'ast', projectId: 'p1' });
     render(<PreviewPane />);
-    const iframe = screen.getByTitle('Mirror preview') as HTMLIFrameElement;
+    const iframe = screen.getByTitle('Mirror 預覽') as HTMLIFrameElement;
     expect(iframe.getAttribute('src')).toBe('/api/projects/p1/mirrors/mirror-1/page.html');
   });
 });

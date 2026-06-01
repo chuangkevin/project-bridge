@@ -26,12 +26,12 @@ describe('CompilerWorkspace', () => {
     expect(useCompilerStore.getState().projectId).toBe('p1');
   });
 
-  it('mounts StageTabs (all four stage labels present)', () => {
+  it('mounts StageTabs (all four stage aria-labels present)', () => {
     renderAt('/project/p1');
-    expect(screen.getByText('Ingestion')).toBeTruthy();
-    expect(screen.getByText('AST')).toBeTruthy();
-    expect(screen.getByText('Constraint')).toBeTruthy();
-    expect(screen.getByText('Codegen')).toBeTruthy();
+    expect(screen.getByLabelText('Ingestion')).toBeTruthy();
+    expect(screen.getByLabelText('AST')).toBeTruthy();
+    expect(screen.getByLabelText('Constraint')).toBeTruthy();
+    expect(screen.getByLabelText('Codegen')).toBeTruthy();
   });
 
   it('mounts CompilerChat (chat input present)', () => {
@@ -39,9 +39,9 @@ describe('CompilerWorkspace', () => {
     expect(screen.getByLabelText('compiler chat input')).toBeTruthy();
   });
 
-  it('shows an empty-state (no artifacts / no preview yet)', () => {
+  it('shows an empty-state (no artifacts / no preview yet, in 繁中)', () => {
     renderAt('/project/p1');
-    expect(screen.getByText('No artifacts yet')).toBeTruthy();
-    expect(screen.getByText('Describe a UI in chat to compile it.')).toBeTruthy();
+    expect(screen.getByText(/尚無產出/)).toBeTruthy();
+    expect(screen.getByText(/AI UI 編譯器/)).toBeTruthy();
   });
 });

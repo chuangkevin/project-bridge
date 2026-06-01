@@ -1,20 +1,20 @@
 import { useCompilerStore, type CompilerStage } from '../../stores/useCompilerStore';
 
-const STAGES: { key: CompilerStage; label: string }[] = [
-  { key: 'ingestion', label: 'Ingestion' },
-  { key: 'ast', label: 'AST' },
-  { key: 'constraint', label: 'Constraint' },
-  { key: 'codegen', label: 'Codegen' },
+const STAGES: { key: CompilerStage; label: string; aria: string }[] = [
+  { key: 'ingestion', label: '需求', aria: 'Ingestion' },
+  { key: 'ast', label: 'AST', aria: 'AST' },
+  { key: 'constraint', label: '規則', aria: 'Constraint' },
+  { key: 'codegen', label: '程式', aria: 'Codegen' },
 ];
 
-/** Four pipeline-stage tabs. Active stage drives what the Preview/Inspector panes show. */
+/** 四個 pipeline 階段分頁，作用中階段決定預覽 / 檢視欄要顯示什麼。 */
 export default function StageTabs() {
   const stage = useCompilerStore((s) => s.stage);
   const setStage = useCompilerStore((s) => s.setStage);
 
   return (
-    <div role="tablist" aria-label="Compiler stages" style={{ display: 'flex', gap: 4 }}>
-      {STAGES.map(({ key, label }) => {
+    <div role="tablist" aria-label="編譯流程分頁" style={{ display: 'flex', gap: 4 }}>
+      {STAGES.map(({ key, label, aria }) => {
         const active = stage === key;
         return (
           <button
@@ -23,16 +23,21 @@ export default function StageTabs() {
             role="tab"
             aria-pressed={active}
             aria-selected={active}
+            aria-label={aria}
             onClick={() => setStage(key)}
             style={{
               padding: '6px 14px',
-              borderRadius: 6,
-              border: '1px solid var(--border-primary, #e2e8f0)',
+              borderRadius: 8,
+              border: '1px solid',
+              borderColor: active ? 'var(--border-accent-hi, var(--accent))' : 'var(--border-subtle, transparent)',
               cursor: 'pointer',
               fontSize: 13,
               fontWeight: active ? 600 : 400,
-              background: active ? 'var(--accent, #8E6FA7)' : 'var(--bg-secondary, #fff)',
-              color: active ? '#fff' : 'var(--text-secondary, #64748b)',
+              background: active
+                ? 'linear-gradient(135deg, var(--accent-grad-start), var(--accent-grad-end))'
+                : 'transparent',
+              color: active ? '#fff' : 'var(--text-secondary)',
+              transition: 'background 140ms, border-color 140ms, color 140ms',
             }}
           >
             {label}

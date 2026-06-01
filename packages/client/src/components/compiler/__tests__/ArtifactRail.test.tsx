@@ -35,7 +35,7 @@ afterEach(() => cleanup());
 describe('ArtifactRail', () => {
   it('shows empty state when there are no artifacts', () => {
     render(<ArtifactRail />);
-    expect(screen.getByText('No artifacts yet')).toBeTruthy();
+    expect(screen.getByText(/尚無產出/)).toBeTruthy();
   });
 
   it('renders artifactId labels for each artifact', () => {
@@ -61,7 +61,10 @@ describe('ArtifactRail', () => {
     const m = makeMirror('mirror-1', 'https://example.com');
     useCompilerStore.setState({ artifacts: [a, m], activeArtifactId: a.id });
     render(<ArtifactRail />);
-    expect(screen.getByText('mirror-1').textContent).toContain('🔒');
-    expect(screen.getByText('home').textContent).not.toContain('🔒');
+    // mirror-1 button text should contain 🔒 (sibling span); art 'home' should not
+    const mirrorBtn = screen.getByText('mirror-1').closest('button');
+    const astBtn = screen.getByText('home').closest('button');
+    expect(mirrorBtn?.textContent).toContain('🔒');
+    expect(astBtn?.textContent).not.toContain('🔒');
   });
 });

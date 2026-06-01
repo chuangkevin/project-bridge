@@ -14,12 +14,12 @@ const proposal: ThemeProposalDto = {
 };
 
 describe('ThemeMergeDialog', () => {
-  it('renders all four section rows', () => {
+  it('renders all four section rows (looked up by their section-choice select aria-label)', () => {
     render(<ThemeMergeDialog current={null} proposal={proposal} onApply={() => {}} onCancel={() => {}} />);
-    expect(screen.getByText(/Palette/i)).toBeTruthy();
-    expect(screen.getByText(/Typography/i)).toBeTruthy();
-    expect(screen.getByText(/Radius/i)).toBeTruthy();
-    expect(screen.getByText(/Shadow/i)).toBeTruthy();
+    expect(screen.getByLabelText('palette choice')).toBeTruthy();
+    expect(screen.getByLabelText('typography choice')).toBeTruthy();
+    expect(screen.getByLabelText('radius choice')).toBeTruthy();
+    expect(screen.getByLabelText('shadow choice')).toBeTruthy();
   });
 
   it('renders the proposal source URL in the header', () => {
@@ -31,14 +31,14 @@ describe('ThemeMergeDialog', () => {
     const onApply = vi.fn();
     render(<ThemeMergeDialog current={null} proposal={proposal} onApply={onApply} onCancel={() => {}} />);
     fireEvent.change(screen.getByLabelText('palette choice'), { target: { value: 'union' } });
-    fireEvent.click(screen.getByText('Apply'));
+    fireEvent.click(screen.getByLabelText('Apply'));
     expect(onApply).toHaveBeenCalledWith({ palette: 'union', typography: 'take-new', radius: 'take-new', shadow: 'take-new' });
   });
 
   it('Cancel calls onCancel', () => {
     const onCancel = vi.fn();
     render(<ThemeMergeDialog current={null} proposal={proposal} onApply={() => {}} onCancel={onCancel} />);
-    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByLabelText('Cancel'));
     expect(onCancel).toHaveBeenCalled();
   });
 });

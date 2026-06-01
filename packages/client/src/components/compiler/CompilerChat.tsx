@@ -6,6 +6,12 @@ const URL_RE = /https?:\/\/[^\s<>"']+/;
 const MIRROR_HINTS = [/照著抄/, /完整複製/, /仿這個/, /1\s*:\s*1/, /pixel[-\s]*perfect/i, /mirror/i];
 const AST_HINTS = [/參考/, /像這個風格/, /套這個感/, /inspired\s*by/i];
 
+const EXAMPLE_PROMPTS: { label: string; prompt: string }[] = [
+  { label: '登入頁', prompt: '幫我做一個包含 Email、密碼、登入按鈕的登入頁面' },
+  { label: '價格表', prompt: '一個 SaaS 三方案價格表，附常見問題' },
+  { label: '儀表板', prompt: '管理後台儀表板：上方統計卡片、左側功能選單、中間圖表' },
+];
+
 function suggestedFor(text: string): 'mirror' | 'ast' | undefined {
   if (MIRROR_HINTS.some(r => r.test(text))) return 'mirror';
   if (AST_HINTS.some(r => r.test(text))) return 'ast';
@@ -28,9 +34,8 @@ function readFileAsBase64(file: File): Promise<ChatAttachment> {
   });
 }
 
-/** Chat input that drives the compiler: compile a new artifact when none is active,
- *  otherwise apply an AST edit to the active one. Detects URLs + image attachments
- *  (drag-and-drop or paste) and shows a Mirror-vs-AST intent picker before submitting. */
+/** 對話輸入區：尚無作用中產出時啟動一次編譯；已有作用中產出時對它套用 AST 編輯。
+ *  自動偵測 URL 與圖片附件（drag-and-drop 或貼上），先讓使用者選 Mirror / AST 再送出。 */
 export default function CompilerChat() {
   const artifacts = useCompilerStore((s) => s.artifacts);
   const activeArtifactId = useCompilerStore((s) => s.activeArtifactId);
@@ -120,22 +125,22 @@ export default function CompilerChat() {
         const url = pending.source.payload;
         if (mode === 'mirror') {
           const r = await compileMirrorFromUrl(url);
-          if (!r.ok) { setError(`mirror failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
+          if (!r.ok) { setError(`Mirror 失敗：${r.reason ?? '未知原因'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
         } else {
           const r = await compileAstFromUrlAction(url);
-          if (!r.ok) { setError(`AST compile failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
+          if (!r.ok) { setError(`AST 編譯失敗：${r.reason ?? '未知原因'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
         }
       } else {
         const img = { mimeType: pending.source.mimeType, base64: pending.source.base64 };
         if (mode === 'mirror') {
           const r = await compileMirrorFromImageAction(img);
-          if (!r.ok) { setError(`mirror failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
+          if (!r.ok) { setError(`Mirror 失敗：${r.reason ?? '未知原因'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
         } else {
           const r = await compileAstFromImageAction(img);
-          if (!r.ok) { setError(`AST compile failed: ${r.reason ?? 'unknown'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
+          if (!r.ok) { setError(`AST 編譯失敗：${r.reason ?? '未知原因'}${r.detail ? ` — ${r.detail}` : ''}`); return; }
         }
       }
-      setSent((prev) => [...prev, text.trim() || '(image attachment)']);
+      setSent((prev) => [...prev, text.trim() || '（圖片附件）']);
       setText('');
       setAttachment(null);
       setPending(null);
@@ -144,23 +149,129 @@ export default function CompilerChat() {
     }
   };
 
+  const showEmptyState = sent.length === 0 && !pending && !attachment && !error;
+
   return (
     <div
       data-testid="chat-drop-zone"
       onDrop={onDrop}
       onDragOver={(e) => e.preventDefault()}
-      style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 8, gap: 8 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        padding: 12,
+        gap: 10,
+        width: '100%',
+      }}
     >
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          minHeight: 0,
+        }}
+      >
+        {showEmptyState && (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+              padding: '12px 4px',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
+              <div
+                aria-hidden
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, var(--accent-grad-start), var(--accent-grad-end))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 22,
+                  color: '#fff',
+                  boxShadow: 'var(--shadow-md)',
+                }}
+              >
+                ✨
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
+                來開始一個畫面
+              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                用一句話描述需求，
+                <br />
+                或貼上 / 拖入一張截圖、一個網址。
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}
+              >
+                範例
+              </div>
+              {EXAMPLE_PROMPTS.map((ex) => (
+                <button
+                  key={ex.label}
+                  type="button"
+                  onClick={() => setText(ex.prompt)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                    transition: 'border-color 140ms, background 140ms',
+                  }}
+                >
+                  <span style={{ color: 'var(--text-accent, var(--accent))', fontWeight: 600 }}>
+                    {ex.label}
+                  </span>
+                  <span style={{ marginLeft: 8 }}>{ex.prompt}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {sent.map((line, i) => (
           <div
             key={i}
             style={{
-              padding: '6px 10px',
-              borderRadius: 6,
+              padding: '10px 14px',
+              borderRadius: 10,
               fontSize: 13,
-              background: 'var(--accent-light, rgba(142,111,167,0.08))',
-              color: 'var(--text-primary, #1e293b)',
+              lineHeight: 1.55,
+              background: 'var(--accent-glass)',
+              color: 'var(--text-primary)',
+              alignSelf: 'flex-end',
+              maxWidth: '92%',
+              border: '1px solid var(--border-accent)',
             }}
           >
             {line}
@@ -178,10 +289,40 @@ export default function CompilerChat() {
       )}
 
       {attachment && !pending && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary, #64748b)' }}>
-          <img src={`data:${attachment.mimeType};base64,${attachment.base64}`} alt="attached" style={{ maxWidth: 80, maxHeight: 40, borderRadius: 4 }} />
-          <span>Attached. Click Send to choose Mirror / AST.</span>
-          <button type="button" onClick={() => setAttachment(null)}>Remove</button>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 10px',
+            borderRadius: 8,
+            border: '1px solid var(--border-accent)',
+            background: 'var(--bg-card)',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <img
+            src={`data:${attachment.mimeType};base64,${attachment.base64}`}
+            alt="附件預覽"
+            style={{ width: 56, height: 40, objectFit: 'cover', borderRadius: 6 }}
+          />
+          <span style={{ flex: 1 }}>圖片已附加，送出後將選擇 Mirror / AST。</span>
+          <button
+            type="button"
+            onClick={() => setAttachment(null)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--border-primary)',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontSize: 12,
+            }}
+          >
+            移除
+          </button>
         </div>
       )}
 
@@ -189,19 +330,30 @@ export default function CompilerChat() {
         <div
           role="alert"
           style={{
-            padding: '6px 10px',
-            borderRadius: 6,
+            padding: '8px 12px',
+            borderRadius: 8,
             fontSize: 13,
-            background: 'rgba(220,38,38,0.1)',
-            color: '#dc2626',
+            background: 'rgba(220,38,38,0.12)',
+            color: '#fca5a5',
+            border: '1px solid rgba(220,38,38,0.4)',
           }}
         >
           {error}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          padding: 8,
+          borderRadius: 12,
+          border: '1px solid var(--border-primary)',
+          background: 'var(--bg-card)',
+        }}
+      >
         <textarea
+          data-testid="chat-input"
           aria-label="compiler chat input"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -212,35 +364,47 @@ export default function CompilerChat() {
               void send();
             }
           }}
-          placeholder={hasActive ? 'Describe an edit…' : 'Describe a UI, paste/drop a screenshot, or include a URL…'}
-          rows={2}
+          placeholder={
+            hasActive
+              ? '描述你想對這個畫面做的調整…'
+              : '描述需求、貼上 / 拖入截圖，或附上網址…'
+          }
+          rows={3}
           style={{
             flex: 1,
             resize: 'none',
-            padding: 8,
-            fontSize: 13,
-            borderRadius: 6,
-            border: '1px solid var(--border-primary, #e2e8f0)',
-            background: 'var(--bg-input, #fff)',
-            color: 'var(--text-primary, #1e293b)',
+            padding: 10,
+            fontSize: 14,
+            lineHeight: 1.55,
+            borderRadius: 8,
+            border: '1px solid transparent',
+            background: 'transparent',
+            color: 'var(--text-primary)',
+            outline: 'none',
           }}
         />
         <button
           type="button"
           onClick={() => void send()}
           disabled={isCompiling}
+          aria-label="Send"
           style={{
             alignSelf: 'flex-end',
-            padding: '8px 16px',
+            padding: '10px 18px',
             fontSize: 13,
-            borderRadius: 6,
+            fontWeight: 600,
+            borderRadius: 8,
             border: 'none',
             cursor: isCompiling ? 'default' : 'pointer',
-            background: isCompiling ? 'var(--text-muted, #94a3b8)' : 'var(--accent, #8E6FA7)',
+            background: isCompiling
+              ? 'var(--text-muted)'
+              : 'linear-gradient(135deg, var(--accent-grad-start), var(--accent-grad-end))',
             color: '#fff',
+            boxShadow: isCompiling ? 'none' : 'var(--shadow-sm)',
+            minWidth: 72,
           }}
         >
-          {isCompiling ? '…' : 'Send'}
+          {isCompiling ? '編譯中…' : '送出'}
         </button>
       </div>
     </div>
