@@ -4,6 +4,7 @@ import { openDb } from './db/connection.js';
 import { runMigrations, defaultMigrationsDir } from './db/migrator.js';
 import { authMiddleware } from './middleware/auth.js';
 import { buildAuthRouter } from './routes/auth.js';
+import { buildProjectsRouter } from './routes/projects.js';
 
 export interface AppDeps {
   dataDir: string;
@@ -19,6 +20,7 @@ export function createApp(deps: AppDeps): Express {
 
   app.use(authMiddleware(db));
   app.use('/api/auth', buildAuthRouter(db));
+  app.use('/api/projects', buildProjectsRouter(db));
 
   app.get('/api/health', (_req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };
