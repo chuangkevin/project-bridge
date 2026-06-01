@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSystemPrompt, type BuildPromptOpts } from '../chatOrchestrator';
+import { buildSystemPrompt, parseArtifactsFromResponse, type BuildPromptOpts } from '../chatOrchestrator';
 import type { MemorySnapshot } from '../memorySnapshot';
 
 function emptySnapshot(): MemorySnapshot {
@@ -105,5 +105,29 @@ describe('buildSystemPrompt', () => {
     expect(xxxBlock.length).toBeLessThanOrEqual(2000);
     expect(xxxBlock.length).toBeGreaterThan(0);
     expect(result).toContain('short text');
+  });
+});
+
+describe('parseArtifactsFromResponse', () => {
+  it('single artifact block → 1 result with correct kind/name/payload', () => {
+    const text = 'Some text\n<artifact kind="page-graph" name="ia">{"nodes":[],"edges":[]}</artifact>\nMore text';
+    const result = parseArtifactsFromResponse(text);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('page-graph');
+    expect(result[0].name).toBe('ia');
+    expect(result[0].payload).toBe('{"nodes":[],"edges":[]}');
+  });
+
+  it('multiple artifact blocks → multiple results', () => {
+    const text = [
+      '<artifact kind="page-graph" name="ia">{"nodes":[{"id":"home"}],"edges":[]}</artifact>',
+      'some content',
+      '<artifact kind="design-tokens" name="tokens">{"color":"red"}</artifact>',
+    ].join('\n');
+    const result = parseArtifactsFromResponse(text);
+    expect(result).toHaveLength(2);
+    expect(result[0].kind).toBe('page-graph');
+    expect(result[1].kind).toBe('design-tokens');
+    expect(result[1].name).toBe('tokens');
   });
 });

@@ -64,3 +64,26 @@ export function buildSystemPrompt(opts: BuildPromptOpts): string {
 
   return sections.join('\n\n');
 }
+
+export interface ExtractedArtifact {
+  kind: 'vue-sfc' | 'page-graph' | 'design-tokens';
+  name: string;
+  payload: string;
+}
+
+const ARTIFACT_RE = /<artifact\s+kind="(vue-sfc|page-graph|design-tokens)"(?:\s+name="([^"]+)")?>([\s\S]*?)<\/artifact>/gi;
+
+export function parseArtifactsFromResponse(fullText: string): ExtractedArtifact[] {
+  const out: ExtractedArtifact[] = [];
+  let m;
+  // Reset lastIndex since ARTIFACT_RE is module-level with /g flag
+  ARTIFACT_RE.lastIndex = 0;
+  while ((m = ARTIFACT_RE.exec(fullText)) !== null) {
+    out.push({
+      kind: m[1] as ExtractedArtifact['kind'],
+      name: (m[2] ?? 'untitled').trim(),
+      payload: m[3].trim(),
+    });
+  }
+  return out;
+}
