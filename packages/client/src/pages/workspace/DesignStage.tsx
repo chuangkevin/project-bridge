@@ -3,6 +3,7 @@ import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useArtifacts, fetchArtifactPayload } from '../../hooks/useArtifacts';
+import { useSocketSync } from '../../hooks/useSocketSync';
 import Transcript from './chat/Transcript';
 import Composer from './chat/Composer';
 import VueSfcPreview from './design/VueSfcPreview';
@@ -14,6 +15,8 @@ export default function DesignStage() {
   const { turns, refresh: refreshTurns } = useTurns(projectId);
   const { state, send, reset } = useChatStream();
   const { artifacts, latest, refresh: refreshArtifacts } = useArtifacts(projectId, 'vue-sfc');
+
+  useSocketSync(projectId, { onTurn: refreshTurns, onArtifact: refreshArtifacts });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sfcSource, setSfcSource] = useState<string | null>(null);

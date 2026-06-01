@@ -3,6 +3,7 @@ import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useArtifacts, fetchArtifactPayload } from '../../hooks/useArtifacts';
+import { useSocketSync } from '../../hooks/useSocketSync';
 import Transcript from './chat/Transcript';
 import Composer from './chat/Composer';
 import PageGraphViewer, { type PageGraphPayload } from './architect/PageGraphViewer';
@@ -12,6 +13,8 @@ export default function ArchitectStage() {
   const { turns, refresh: refreshTurns } = useTurns(projectId);
   const { state, send, reset } = useChatStream();
   const { latest, refresh: refreshArtifacts } = useArtifacts(projectId, 'page-graph');
+
+  useSocketSync(projectId, { onTurn: refreshTurns, onArtifact: refreshArtifacts });
 
   const [graph, setGraph] = useState<PageGraphPayload | null>(null);
 

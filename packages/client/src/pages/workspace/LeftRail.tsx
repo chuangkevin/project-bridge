@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { api } from '../../lib/api';
+import { useSocketSync } from '../../hooks/useSocketSync';
 
 interface Turn { id: string; mode: 'consult'|'architect'|'design'; userText: string; createdAt: string; }
 interface Fact { id: string; kind: string; text: string; }
@@ -12,12 +13,15 @@ export default function LeftRail() {
   const [facts, setFacts] = useState<Fact[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!projectId) return;
     api<{ turns: Turn[] }>(`/api/projects/${projectId}/turns`).then(r => setTurns(r.turns)).catch(() => {});
     api<{ facts: Fact[] }>(`/api/projects/${projectId}/facts`).then(r => setFacts(r.facts)).catch(() => {});
     api<{ skills: Skill[] }>(`/api/projects/${projectId}/skills`).then(r => setSkills(r.skills)).catch(() => {});
   }, [projectId]);
+
+  useEffect(() => { load(); }, [load]);
+  useSocketSync(projectId, { onTurn: load, onFact: load, onArtifact: load });
 
   return (
     <aside className="workspace__left" onClick={(e) => { if (mobileRailOpen && e.target === e.currentTarget) setMobileRailOpen(false); }}>

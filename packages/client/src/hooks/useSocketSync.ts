@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { getSocket } from '../lib/socket';
+import { getToken } from '../lib/api';
 
 interface Handlers {
   onTurn?: (payload: { id: string; mode: string }) => void;
@@ -8,7 +9,7 @@ interface Handlers {
 }
 
 export function useSocketSync(projectId: string | null, handlers: Handlers): void {
-  const token = localStorage.getItem('token');
+  const token = getToken();
 
   useEffect(() => {
     if (!projectId || !token) return;

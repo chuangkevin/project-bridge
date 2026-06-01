@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
+import { useSocketSync } from '../../hooks/useSocketSync';
 import Transcript from './chat/Transcript';
 import Composer from './chat/Composer';
 
@@ -9,6 +10,8 @@ export default function ConsultStage() {
   const { projectId } = useWorkspaceStore();
   const { turns, refresh } = useTurns(projectId);
   const { state, send, reset } = useChatStream();
+
+  useSocketSync(projectId, { onTurn: refresh });
   const [councilEnabled, setCouncilEnabled] = useState(false);
 
   const pending = useMemo(() => {
