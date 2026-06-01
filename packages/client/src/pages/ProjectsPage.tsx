@@ -1,10 +1,12 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useProjectsStore } from '../stores/useProjectsStore';
 import { useAuthStore } from '../stores/useAuthStore';
 
 export default function ProjectsPage() {
   const { projects, list, create } = useProjectsStore();
   const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
   const [name, setName] = useState('');
 
   useEffect(() => { void list(); }, [list]);
@@ -28,7 +30,11 @@ export default function ProjectsPage() {
       </form>
       <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {projects.map((p) => (
-          <li key={p.id} style={{ padding: 14, background: 'var(--bg-card)', borderRadius: 8 }}>
+          <li
+            key={p.id}
+            style={{ padding: 14, background: 'var(--bg-card)', borderRadius: 8, cursor: 'pointer' }}
+            onClick={() => navigate(`/projects/${p.id}`)}
+          >
             <strong>{p.name}</strong>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.id}</div>
           </li>

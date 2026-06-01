@@ -5,6 +5,7 @@ import { api } from './lib/api';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import ProjectsPage from './pages/ProjectsPage';
+import WorkspacePage from './pages/WorkspacePage';
 
 export default function App() {
   const { user, loading, hydrate } = useAuthStore();
@@ -25,6 +26,7 @@ export default function App() {
       <Route path="/setup" element={needsSetup ? <SetupPage /> : <Navigate to="/login" />} />
       <Route path="/login" element={user ? <Navigate to="/projects" /> : <LoginPage />} />
       <Route path="/projects" element={user ? <ProjectsPage /> : <Navigate to={needsSetup ? '/setup' : '/login'} />} />
+      <Route path="/projects/:id" element={user ? <WorkspacePage /> : <Navigate to="/login" />} />
       <Route path="*" element={<Navigate to={user ? '/projects' : (needsSetup ? '/setup' : '/login')} />} />
     </Routes>
   );
