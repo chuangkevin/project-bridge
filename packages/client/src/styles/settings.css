@@ -1,0 +1,136 @@
+.settings {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-root);
+  color: var(--text-primary);
+}
+.settings__header {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--glass-bg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.settings__tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.settings__tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.settings__tab[aria-pressed="true"] {
+  color: var(--text-accent);
+  border-bottom-color: var(--accent);
+}
+.settings__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.setting-row {
+  margin-bottom: var(--space-5);
+}
+.setting-row label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.setting-row__field {
+  display: flex;
+  gap: var(--space-2);
+}
+.setting-row input, .setting-row textarea {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  font-family: inherit;
+}
+.setting-row input:focus, .setting-row textarea:focus { outline: none; border-color: var(--accent); }
+.setting-row__help {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+.setting-row__btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 12px;
+  cursor: pointer;
+}
+.setting-row__btn--danger {
+  background: transparent;
+  color: #fca5a5;
+  border: 1px solid #7f1d1d;
+}
+.setting-row__masked {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.skill-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+}
+.skill-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+.skill-card__name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.skill-card__desc {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.skill-upload {
+  background: var(--glass-bg);
+  border: 1px dashed var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.skill-upload textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: var(--space-3);
+  font-family: monospace;
+  font-size: 12px;
+  min-height: 200px;
+}
