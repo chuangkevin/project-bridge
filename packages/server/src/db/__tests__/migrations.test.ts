@@ -9,7 +9,7 @@ let dataDir: string;
 beforeEach(() => { dataDir = mkdtempSync(join(tmpdir(), 'fullmig-')); });
 afterEach(() => { rmSync(dataDir, { recursive: true, force: true }); });
 
-describe('all 6 migrations', () => {
+describe('all 7 migrations', () => {
   it('applies cleanly and creates expected tables', () => {
     const db = openDb(dataDir);
     runMigrations(db, defaultMigrationsDir());
@@ -18,6 +18,7 @@ describe('all 6 migrations', () => {
     expect(tables).toEqual([
       'api_key_cooldowns', 'api_key_leases', 'api_key_usage',
       'artifacts', 'extracted_facts',
+      'openai_oauth_state',
       'project_settings', 'project_skills', 'projects',
       'schema_migrations',
       'sessions', 'settings',
