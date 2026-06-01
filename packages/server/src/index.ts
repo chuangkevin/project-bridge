@@ -19,6 +19,7 @@ import { buildPluginsRouter } from './routes/plugins.js';
 import { buildIngestRouter } from './routes/ingest.js';
 import { buildChatRouter } from './routes/chat.js';
 import { buildArtifactsRouter } from './routes/artifacts.js';
+import { buildSettingsAdminRouter } from './routes/settingsAdmin.js';
 import { loadPlugins } from './services/pluginLoader.js';
 import { initMcpRegistry } from './services/mcpRegistry.js';
 
@@ -63,6 +64,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/ingest', buildIngestRouter(db, deps.dataDir));
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));
   app.use('/api/projects/:id/artifacts', buildArtifactsRouter(db, deps.dataDir));
+  app.use('/api/settings', buildSettingsAdminRouter(db));
 
   app.get('/api/health', (_req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };
