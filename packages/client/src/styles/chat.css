@@ -229,3 +229,25 @@
   color: var(--text-muted);
   margin-top: 2px;
 }
+
+@media (max-width: 768px) {
+  .chat__transcript {
+    padding: var(--space-3) var(--space-3);
+  }
+  .bubble { max-width: 100%; }
+  .composer {
+    padding: var(--space-2) var(--space-3);
+    /* Sticky bottom so the keyboard doesn't push it off-screen on iOS */
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-card);
+    z-index: 5;
+  }
+  .composer__textarea {
+    font-size: 16px;  /* prevents iOS auto-zoom on focus */
+  }
+  .slash-popup {
+    left: var(--space-3);
+    right: var(--space-3);
+  }
+}

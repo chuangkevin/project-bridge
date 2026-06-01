@@ -35,3 +35,18 @@
   border-radius: 4px;
   z-index: 10;
 }
+
+@media (max-width: 768px) {
+  .architect__graph {
+    flex-basis: 55%;
+    min-height: 240px;
+  }
+  .architect__chat {
+    flex-basis: 45%;
+    min-height: 180px;
+  }
+  .architect__graph-label {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+}

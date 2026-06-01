@@ -134,3 +134,16 @@
   font-size: 12px;
   min-height: 200px;
 }
+
+@media (max-width: 768px) {
+  .settings__header { padding: var(--space-3) var(--space-4); }
+  .settings__tabs {
+    padding: 0 var(--space-3);
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .settings__tab { flex-shrink: 0; }
+  .settings__body { padding: var(--space-4) var(--space-3); }
+  .setting-row__field { flex-direction: column; align-items: stretch; }
+  .setting-row__field button { width: 100%; }
+}
