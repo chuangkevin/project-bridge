@@ -38,6 +38,11 @@ export function buildSkillsRouter(deps: SkillRoutesDeps): Router {
   });
 
   // global CRUD — must be declared BEFORE /:name so Express matches /global before /:name
+  r.get('/global', (_req: Request, res: Response) => {
+    const skills = listSkills({});
+    res.json({ skills: skills.filter(s => s.layer === 'global').map(s => ({ name: s.name, description: s.description, layer: s.layer, metadata: s.metadata })) });
+  });
+
   r.post('/global', (req: Request, res: Response) => {
     const { name, description, body, metadata } = req.body ?? {};
     if (typeof name !== 'string' || !name.trim()) { fail(res, 400, 'VALIDATION_FAILED', '需要 name'); return; }
