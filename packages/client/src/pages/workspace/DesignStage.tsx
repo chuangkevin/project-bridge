@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
@@ -10,6 +10,15 @@ import Composer from './chat/Composer';
 import VueSfcPreview from './design/VueSfcPreview';
 import SfcSourceViewer from './design/SfcSourceViewer';
 import ArtifactPicker from './design/ArtifactPicker';
+
+interface QualityScore {
+  overall: number;
+  design: number;
+  responsive: number;
+  consistency: number;
+  accessibility: number;
+  summary: string;
+}
 
 interface CrawlResult {
   success: boolean;
@@ -34,12 +43,15 @@ export default function DesignStage() {
 
   useSocketSync(projectId, { onTurn: refreshTurns, onArtifact: refreshArtifacts });
 
+  const latestIdRef = useRef<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sfcSource, setSfcSource] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [generatingVariants, setGeneratingVariants] = useState(false);
   const [savingComponent, setSavingComponent] = useState(false);
+  const [qualityScore, setQualityScore] = useState<QualityScore | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // 參考網站 crawl panel
   const [showCrawl, setShowCrawl] = useState(false);
@@ -64,6 +76,11 @@ export default function DesignStage() {
     }
   };
 
+  // Keep latestIdRef in sync so handleSend can read it after refreshArtifacts
+  useEffect(() => {
+    latestIdRef.current = latest?.id ?? null;
+  }, [latest?.id]);
+
   // Auto-select latest on update
   useEffect(() => {
     if (!selectedId && latest) setSelectedId(latest.id);
@@ -80,6 +97,30 @@ export default function DesignStage() {
       })
       .catch(() => setSfcSource(null));
   }, [projectId, selectedId]);
+
+  const handleExport = async () => {
+    if (!projectId || !selectedId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ framework: 'zip' }),
+      });
+      if (!res.ok) throw new Error(`匯出失敗：${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'design-export.tar.gz';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`匯出失敗：${(e as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleRegenerate = async () => {
     if (!projectId || !selectedId) return;
@@ -146,6 +187,20 @@ export default function DesignStage() {
       await Promise.all([refreshTurns(), refreshArtifacts()]);
       pendingRef.current = '';
       reset();
+      // Fire quality score request in background for the latest artifact
+      // We read latest from the hook via a ref updated after refreshArtifacts()
+      setTimeout(() => {
+        const latestId = latestIdRef.current;
+        if (!latestId) return;
+        fetch(`/api/projects/${projectId}/quality-score`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ artifactId: latestId }),
+        })
+          .then(r => r.json())
+          .then((data: { score?: QualityScore }) => { if (data.score) setQualityScore(data.score); })
+          .catch(() => {});
+      }, 200);
     }
     // On error: keep state.phase === 'error' so the user sees the error message.
   };
@@ -210,6 +265,36 @@ export default function DesignStage() {
           >
             {savingComponent ? '儲存中…' : '💾 儲存為元件'}
           </button>
+        )}
+        {selectedId && (
+          <button
+            className="design__btn"
+            onClick={handleExport}
+            disabled={exporting}
+            title="匯出所有頁面為 tar.gz"
+          >
+            {exporting ? '匯出中…' : '📦 匯出'}
+          </button>
+        )}
+        {qualityScore && (
+          <span
+            title={`設計:${qualityScore.design} 響應:${qualityScore.responsive} 一致性:${qualityScore.consistency} 無障礙:${qualityScore.accessibility}\n${qualityScore.summary}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              background: qualityScore.overall >= 80 ? 'var(--color-success, #22c55e)' : qualityScore.overall >= 60 ? 'var(--accent-primary)' : 'var(--color-warning, #f59e0b)',
+              color: '#fff',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'help',
+              userSelect: 'none',
+            }}
+          >
+            🎯 {qualityScore.overall}
+          </span>
         )}
       </div>
 

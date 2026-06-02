@@ -27,6 +27,7 @@ import { buildOpencodeAdminRouter } from './routes/opencodeAdmin.js';
 import { buildUsersRouter } from './routes/users.js';
 import { buildCrawlRouter } from './routes/crawl.js';
 import { buildDesignRouter } from './routes/design.js';
+import { buildExportRouter } from './routes/exportRoute.js';
 import { buildAnnotationsRouter } from './routes/annotations.js';
 import { buildApiBindingsRouter } from './routes/apiBindings.js';
 import { buildComponentsRouter, buildComponentsSaveRouter } from './routes/components.js';
@@ -77,6 +78,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/ingest', buildIngestRouter(db, deps.dataDir));
   app.use('/api/projects/:id', buildCrawlRouter(db, deps.dataDir));
   app.use('/api/projects/:id', buildDesignRouter(db, deps.dataDir));
+  app.use('/api/projects/:id', buildExportRouter(db, deps.dataDir));
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));
   app.use('/api/projects/:id/artifacts', buildArtifactsRouter(db, deps.dataDir));
   app.use('/api/projects/:id/backup', buildBackupRouter(db, deps.dataDir));

@@ -6,6 +6,7 @@ import { getArtifact, readArtifactPayload, createArtifact } from '../services/ar
 import { appendTurn } from '../services/turnService.js';
 import { callProvider } from '../services/callProvider.js';
 import { parseArtifactsFromResponseWithFallback } from '../services/chatOrchestrator.js';
+import { scoreArtifact } from '../services/qualityScorer.js';
 
 export function buildDesignRouter(db: Database.Database, dataDir: string): Router {
   const r = Router({ mergeParams: true });
@@ -199,6 +200,43 @@ ${originalSource}`;
       console.error('[design] regenerate-page failure:', fullMessage);
       res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: fullMessage } });
     }
+  });
+
+  /**
+   * POST /api/projects/:id/quality-score
+   * Body: { artifactId: string }
+   * Returns AI quality score for the given vue-sfc artifact.
+   */
+  r.post('/quality-score', async (req: Request, res: Response) => {
+    const projectId = req.params.id as string;
+    const project = getProject(db, projectId);
+    if (!project) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: '專案不存在' } });
+      return;
+    }
+
+    const { artifactId } = req.body ?? {};
+    if (typeof artifactId !== 'string' || !artifactId) {
+      res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: '需要 artifactId' } });
+      return;
+    }
+
+    const artifact = getArtifact(db, artifactId);
+    if (!artifact || artifact.projectId !== projectId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: '產物不存在' } });
+      return;
+    }
+
+    let payload: string;
+    try {
+      payload = readArtifactPayload(dataDir, artifact);
+    } catch (err) {
+      res.status(500).json({ error: { code: 'PAYLOAD_READ_FAILED', message: (err as Error).message } });
+      return;
+    }
+
+    const score = await scoreArtifact(payload);
+    res.json({ score });
   });
 
   return r;
