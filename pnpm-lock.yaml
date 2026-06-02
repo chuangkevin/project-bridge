@@ -266,12 +266,21 @@ importers:
       pdf-parse:
         specifier: ^1.1.1
         version: 1.1.4
+      playwright:
+        specifier: ^1.58.2
+        version: 1.58.2
+      sharp:
+        specifier: 0.33.5
+        version: 0.33.5
       socket.io:
         specifier: ^4.7.5
         version: 4.8.3
       tar-stream:
         specifier: ^3.1.7
         version: 3.1.8
+      tesseract.js:
+        specifier: ^5.1.1
+        version: 5.1.1
       uuid:
         specifier: ^10.0.0
         version: 10.0.0

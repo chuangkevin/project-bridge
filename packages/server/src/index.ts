@@ -25,6 +25,7 @@ import { buildSettingsAdminRouter } from './routes/settingsAdmin.js';
 import { buildApiKeysRouter } from './routes/apiKeys.js';
 import { buildOpencodeAdminRouter } from './routes/opencodeAdmin.js';
 import { buildUsersRouter } from './routes/users.js';
+import { buildCrawlRouter } from './routes/crawl.js';
 import { loadPlugins } from './services/pluginLoader.js';
 import { initMcpRegistry } from './services/mcpRegistry.js';
 
@@ -70,6 +71,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/mcp', buildMcpRouter(db));
   app.use('/api/plugins', buildPluginsRouter(pluginsRoot));
   app.use('/api/projects/:id/ingest', buildIngestRouter(db, deps.dataDir));
+  app.use('/api/projects/:id', buildCrawlRouter(db, deps.dataDir));
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));
   app.use('/api/projects/:id/artifacts', buildArtifactsRouter(db, deps.dataDir));
   app.use('/api/projects/:id/backup', buildBackupRouter(db, deps.dataDir));

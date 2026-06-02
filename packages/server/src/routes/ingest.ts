@@ -3,6 +3,7 @@ import multer from 'multer';
 import type Database from 'better-sqlite3';
 import { getProject } from '../services/projectService.js';
 import { ingestFile, ingestUrl, listAttachments } from '../services/ingestionService.js';
+import { analyzeAndSaveVisualSpec } from '../services/uploadAnalysis.js';
 import { join } from 'node:path';
 
 const upload = multer({
@@ -29,13 +30,19 @@ export function buildIngestRouter(db: Database.Database, dataDir: string): Route
     // multer types may not be available on req directly — cast to avoid TS error
     const files = (req as unknown as { files?: Express.Multer.File[] }).files ?? [];
     for (const f of files) {
-      out.push(await ingestFile(db, {
+      const attachment = await ingestFile(db, {
         projectId,
         uploadsRoot,
         originalName: f.originalname,
         mimeType: f.mimetype,
         buffer: f.buffer,
-      }));
+      });
+      out.push(attachment);
+
+      // Fire-and-forget vision analysis for images (handles multimodal limitation gracefully)
+      if (attachment.kind === 'image') {
+        void analyzeAndSaveVisualSpec(db, attachment, dataDir);
+      }
     }
 
     // Process URL if provided
