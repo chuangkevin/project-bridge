@@ -21,6 +21,9 @@ import { buildChatRouter } from './routes/chat.js';
 import { buildArtifactsRouter } from './routes/artifacts.js';
 import { buildBackupRouter } from './routes/backup.js';
 import { buildSettingsAdminRouter } from './routes/settingsAdmin.js';
+import { buildApiKeysRouter } from './routes/apiKeys.js';
+import { buildOpencodeAdminRouter } from './routes/opencodeAdmin.js';
+import { buildUsersRouter } from './routes/users.js';
 import { loadPlugins } from './services/pluginLoader.js';
 import { initMcpRegistry } from './services/mcpRegistry.js';
 
@@ -66,7 +69,12 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));
   app.use('/api/projects/:id/artifacts', buildArtifactsRouter(db, deps.dataDir));
   app.use('/api/projects/:id/backup', buildBackupRouter(db, deps.dataDir));
+  // More-specific settings sub-routes must be mounted BEFORE the generic
+  // settingsAdmin router (which handles /api/settings/:key).
+  app.use('/api/settings/api-keys', buildApiKeysRouter(db));
+  app.use('/api/settings/opencode', buildOpencodeAdminRouter(db));
   app.use('/api/settings', buildSettingsAdminRouter(db));
+  app.use('/api/users', buildUsersRouter(db));
 
   const sendHealth = (_req: express.Request, res: express.Response): void => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };
