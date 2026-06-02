@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useState, useRef, useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { createSseParser } from '../lib/sseParser';
 import { getToken } from '../lib/api';
 
@@ -31,27 +31,43 @@ export interface SendParams {
   council?: boolean;
 }
 
+export interface SendResult {
+  ok: boolean;
+  phase: ChatPhase;
+  error: string | null;
+}
+
 export function useChatStream(): {
   state: ChatStreamState;
-  send: (p: SendParams) => Promise<void>;
+  send: (p: SendParams) => Promise<SendResult>;
   cancel: () => void;
   reset: () => void;
 } {
   const [state, setState] = useState<ChatStreamState>(INITIAL);
+  const stateRef = useRef<ChatStreamState>(INITIAL);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
   }, []);
 
-  const reset = useCallback(() => setState(INITIAL), []);
+  const reset = useCallback(() => {
+    setState(INITIAL);
+    stateRef.current = INITIAL;
+  }, []);
 
-  const send = useCallback(async (params: SendParams) => {
+  const send = useCallback(async (params: SendParams): Promise<SendResult> => {
     cancel();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    setState({ ...INITIAL, phase: 'loading_memory' });
+    const initial = { ...INITIAL, phase: 'loading_memory' as ChatPhase };
+    setState(initial);
+    stateRef.current = initial;
 
     try {
       const token = getToken();
@@ -66,8 +82,9 @@ export function useChatStream(): {
       });
       if (!res.ok || !res.body) {
         const msg = await res.text().catch(() => '');
-        setState((s) => ({ ...s, phase: 'error', error: msg || `HTTP ${res.status}` }));
-        return;
+        const errMsg = msg || `HTTP ${res.status}`;
+        setState((s) => ({ ...s, phase: 'error', error: errMsg }));
+        return { ok: false, phase: 'error', error: errMsg };
       }
 
       const reader = res.body.getReader();
@@ -83,9 +100,22 @@ export function useChatStream(): {
         const text = decoder.decode(value, { stream: true });
         for (const ev of parser.push(text)) handleEvent(ev, setState);
       }
+
+      // Stream finished — read terminal state from ref (state closure is stale)
+      const finalPhase = stateRef.current.phase;
+      const finalError = stateRef.current.error;
+      return {
+        ok: finalPhase === 'done',
+        phase: finalPhase,
+        error: finalError,
+      };
     } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
-      setState((s) => ({ ...s, phase: 'error', error: (e as Error).message }));
+      if ((e as Error).name === 'AbortError') {
+        return { ok: false, phase: stateRef.current.phase, error: 'aborted' };
+      }
+      const errMsg = (e as Error).message;
+      setState((s) => ({ ...s, phase: 'error', error: errMsg }));
+      return { ok: false, phase: 'error', error: errMsg };
     } finally {
       abortRef.current = null;
     }

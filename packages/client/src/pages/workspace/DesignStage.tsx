@@ -45,12 +45,13 @@ export default function DesignStage() {
   const handleSend = async (text: string, attachmentIds: string[]) => {
     if (!projectId) return;
     pendingRef.current = text;
-    await send({ projectId, mode: 'design', text, attachmentIds });
-    if (pendingRef.current) {
+    const result = await send({ projectId, mode: 'design', text, attachmentIds });
+    if (result.ok) {
       await Promise.all([refreshTurns(), refreshArtifacts()]);
       pendingRef.current = '';
       reset();
     }
+    // On error: keep state.phase === 'error' so the user sees the error message.
   };
 
   return (

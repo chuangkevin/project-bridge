@@ -32,12 +32,13 @@ export default function ArchitectStage() {
   const handleSend = async (text: string, attachmentIds: string[]) => {
     if (!projectId) return;
     pendingRef.current = text;
-    await send({ projectId, mode: 'architect', text, attachmentIds });
-    if (pendingRef.current) {
+    const result = await send({ projectId, mode: 'architect', text, attachmentIds });
+    if (result.ok) {
       await Promise.all([refreshTurns(), refreshArtifacts()]);
       pendingRef.current = '';
       reset();
     }
+    // On error: keep state.phase === 'error' so the user sees the error message.
   };
 
   return (

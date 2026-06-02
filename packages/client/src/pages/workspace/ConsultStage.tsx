@@ -27,12 +27,14 @@ export default function ConsultStage() {
   const handleSend = async (text: string, attachmentIds: string[]) => {
     if (!projectId) return;
     pendingUserTextRef.current = text;
-    await send({ projectId, mode: 'consult', text, attachmentIds, council: councilEnabled });
-    if (pendingUserTextRef.current) {
+    const result = await send({ projectId, mode: 'consult', text, attachmentIds, council: councilEnabled });
+    if (result.ok) {
       await refresh();
       pendingUserTextRef.current = '';
       reset();
     }
+    // On error: keep state.phase === 'error' so the user sees the error message;
+    // the next send() call resets state.
   };
 
   return (
