@@ -14,6 +14,7 @@ import { buildOpenaiOAuthRouter } from './routes/openaiOAuth.js';
 import { buildTurnsRouter } from './routes/turns.js';
 import { buildFactsRouter } from './routes/facts.js';
 import { buildSkillsRouter, buildProjectSkillsRouter } from './routes/skills.js';
+import { buildSkillsExportRouter } from './routes/skillsExport.js';
 import { buildMcpRouter } from './routes/mcp.js';
 import { buildPluginsRouter } from './routes/plugins.js';
 import { buildIngestRouter } from './routes/ingest.js';
@@ -61,6 +62,9 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/openai-oauth', buildOpenaiOAuthRouter(db));
   app.use('/api/projects/:id/turns', buildTurnsRouter(db));
   app.use('/api/projects/:id/facts', buildFactsRouter(db));
+  // skillsExport must be mounted BEFORE skills so /global/export and /global/batch
+  // are matched before the catch-all /:name in the legacy skills router.
+  app.use('/api/skills', buildSkillsExportRouter(skillDeps));
   app.use('/api/skills', buildSkillsRouter(skillDeps));
   app.use('/api/projects/:id/skills', buildProjectSkillsRouter(skillDeps));
   app.use('/api/mcp', buildMcpRouter());
