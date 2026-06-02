@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { apiAdmin as api } from '../lib/api';
 
 export interface ApiKeyInfo {
   suffix: string;

@@ -1,45 +1,89 @@
-import { create } from 'zustand';
-import { api, getToken, setToken } from '../lib/api';
-import { closeSocket } from '../lib/socket';
+/**
+ * Auth store (M1 anonymous mode).
+ *
+ * There is no per-user login. The store tracks two independent concepts:
+ *
+ *   1. `userIdentity` — a purely client-side display name, persisted in
+ *      localStorage. Lets the user put a name on the chat bubble; never
+ *      sent to the server.
+ *   2. `adminToken` — issued by POST /api/auth/verify after the operator
+ *      enters the shared admin password. Stored in sessionStorage so it
+ *      dies with the tab. Used as a Bearer header by `apiAdmin()` for
+ *      admin-only Settings mutations.
+ *
+ * No hydrate against the server: anonymous projects don't need a server
+ * round-trip on page load, and admin status is implied by token presence.
+ */
 
-interface User { id: string; name: string; email: string; role?: 'admin' | 'user'; isActive?: boolean; }
+import { create } from 'zustand';
+import { api, apiAdmin, getAdminToken, setAdminToken } from '../lib/api';
+
+const USER_NAME_KEY = 'designbridge.user_name';
 
 interface State {
-  user: User | null;
-  loading: boolean;
-  setup: (input: { name: string; email: string; password: string }) => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  hydrate: () => Promise<void>;
+  userIdentity: string;
+  adminToken: string | null;
+  adminStatus: 'unknown' | 'unset' | 'set';
+  setUserIdentity: (name: string) => void;
+  refreshAdminStatus: () => Promise<void>;
+  setupAdmin: (password: string) => Promise<void>;
+  verifyAdmin: (password: string) => Promise<void>;
+  changeAdmin: (oldPassword: string, newPassword: string) => Promise<void>;
+  clearAdmin: () => Promise<void>;
 }
 
-export const useAuthStore = create<State>((set) => ({
-  user: null,
-  loading: true,
-  setup: async (input) => {
-    const r = await api<{ token: string; user: User }>('/api/auth/setup', { method: 'POST', body: JSON.stringify(input) });
-    setToken(r.token);
-    set({ user: r.user, loading: false });
+export const useAuthStore = create<State>((set, get) => ({
+  userIdentity: localStorage.getItem(USER_NAME_KEY) ?? '',
+  adminToken: getAdminToken(),
+  adminStatus: 'unknown',
+
+  setUserIdentity: (name: string) => {
+    const trimmed = name.trim();
+    if (trimmed) localStorage.setItem(USER_NAME_KEY, trimmed);
+    else localStorage.removeItem(USER_NAME_KEY);
+    set({ userIdentity: trimmed });
   },
-  login: async (email, password) => {
-    const r = await api<{ token: string; user: User }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-    setToken(r.token);
-    set({ user: r.user, loading: false });
-  },
-  logout: async () => {
-    try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
-    setToken(null);
-    closeSocket();
-    set({ user: null, loading: false });
-  },
-  hydrate: async () => {
-    if (!getToken()) { set({ user: null, loading: false }); return; }
+
+  refreshAdminStatus: async () => {
     try {
-      const user = await api<User>('/api/auth/me');
-      set({ user, loading: false });
+      const r = await api<{ hasAdminPassword: boolean }>('/api/auth/status');
+      set({ adminStatus: r.hasAdminPassword ? 'set' : 'unset' });
     } catch {
-      setToken(null);
-      set({ user: null, loading: false });
+      set({ adminStatus: 'unknown' });
     }
+  },
+
+  setupAdmin: async (password: string) => {
+    const r = await api<{ ok: boolean; token: string }>('/api/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+    setAdminToken(r.token);
+    set({ adminToken: r.token, adminStatus: 'set' });
+  },
+
+  verifyAdmin: async (password: string) => {
+    const r = await api<{ ok: boolean; token: string }>('/api/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+    setAdminToken(r.token);
+    set({ adminToken: r.token, adminStatus: 'set' });
+  },
+
+  changeAdmin: async (oldPassword: string, newPassword: string) => {
+    await apiAdmin('/api/auth/change', {
+      method: 'POST',
+      body: JSON.stringify({ oldPassword, newPassword }),
+    });
+    // After a password change, force a re-verify so the next admin action picks
+    // up a fresh token. The old token stays valid until expiry server-side.
+    await get().verifyAdmin(newPassword);
+  },
+
+  clearAdmin: async () => {
+    try { await apiAdmin('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+    setAdminToken(null);
+    set({ adminToken: null });
   },
 }));

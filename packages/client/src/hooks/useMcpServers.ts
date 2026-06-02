@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { api, apiAdmin } from '../lib/api';
 
 export interface McpHttpServer {
   id: string;
@@ -58,22 +58,22 @@ export function useMcpServers() {
   useEffect(() => { void refresh(); }, [refresh]);
 
   const create = useCallback(async (input: McpUpsertInput) => {
-    await api('/api/mcp/servers', { method: 'POST', body: JSON.stringify(input) });
+    await apiAdmin('/api/mcp/servers', { method: 'POST', body: JSON.stringify(input) });
     await refresh();
   }, [refresh]);
 
   const update = useCallback(async (id: string, input: McpUpsertInput) => {
-    await api(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+    await apiAdmin(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
     await refresh();
   }, [refresh]);
 
   const remove = useCallback(async (id: string) => {
-    await api(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await apiAdmin(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE' });
     await refresh();
   }, [refresh]);
 
   const test = useCallback(async (id: string): Promise<McpTestResult> => {
-    return await api<McpTestResult>(`/api/mcp/servers/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify({}) });
+    return await apiAdmin<McpTestResult>(`/api/mcp/servers/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify({}) });
   }, []);
 
   const listTools = useCallback(async (id: string): Promise<McpToolInfo[]> => {

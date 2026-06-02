@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { getSocket } from '../lib/socket';
-import { getToken } from '../lib/api';
 
 interface Handlers {
   onTurn?: (payload: { id: string; mode: string }) => void;
@@ -8,13 +7,14 @@ interface Handlers {
   onArtifact?: (payload: { id: string; kind: string; name: string }) => void;
 }
 
+/**
+ * Socket.io sync hook (M1 anonymous mode). No auth — the socket server
+ * accepts every visitor and gates only on project existence.
+ */
 export function useSocketSync(projectId: string | null, handlers: Handlers): void {
-  const token = getToken();
-
   useEffect(() => {
-    if (!projectId || !token) return;
-    const s = getSocket(token);
-    if (!s) return;
+    if (!projectId) return;
+    const s = getSocket();
 
     const join = () => s.emit('project:join', projectId);
     if (s.connected) join();
@@ -34,5 +34,5 @@ export function useSocketSync(projectId: string | null, handlers: Handlers): voi
       s.off('fact:created', onFact);
       s.off('artifact:created', onArtifact);
     };
-  }, [projectId, token, handlers.onTurn, handlers.onFact, handlers.onArtifact]);
+  }, [projectId, handlers.onTurn, handlers.onFact, handlers.onArtifact]);
 }

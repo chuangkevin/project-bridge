@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError } from '../lib/api';
+import { apiAdmin as api, ApiError } from '../lib/api';
 
 export interface AdminUser {
   id: string;
@@ -25,7 +25,7 @@ export function useUsers() {
       const r = await api<{ users: AdminUser[] }>('/api/users');
       setState({ kind: 'ok', users: r.users });
     } catch (e) {
-      if (e instanceof ApiError && e.status === 403) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         setState({ kind: 'forbidden', message: '需要管理員權限' });
       } else {
         setState({ kind: 'error', message: (e as Error).message });
@@ -55,8 +55,8 @@ export function useUsers() {
     await refresh();
   }, [refresh]);
 
-  const transferAdmin = useCallback(async (targetUserId: string) => {
-    await api('/api/users/transfer-admin', { method: 'POST', body: JSON.stringify({ targetUserId }) });
+  const transferAdmin = useCallback(async (fromUserId: string, targetUserId: string) => {
+    await api('/api/users/transfer-admin', { method: 'POST', body: JSON.stringify({ fromUserId, targetUserId }) });
     await refresh();
   }, [refresh]);
 

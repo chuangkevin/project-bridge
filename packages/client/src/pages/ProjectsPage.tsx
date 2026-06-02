@@ -1,22 +1,16 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectsStore } from '../stores/useProjectsStore';
-import { useAuthStore } from '../stores/useAuthStore';
-import { getToken } from '../lib/api';
 
 export default function ProjectsPage() {
   const { projects, list, create } = useProjectsStore();
-  const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const [name, setName] = useState('');
 
   useEffect(() => { void list(); }, [list]);
 
   const downloadBackup = async (project: { id: string; name: string }) => {
-    const token = getToken();
-    const res = await fetch(`/api/projects/${project.id}/backup`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await fetch(`/api/projects/${project.id}/backup`);
     if (!res.ok) {
       alert('備份失敗：' + res.status);
       return;
@@ -55,7 +49,6 @@ export default function ProjectsPage() {
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
-          <button onClick={() => void logout()} style={ghostBtn}>登出</button>
         </div>
       </header>
       <form onSubmit={submit} style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -89,6 +82,5 @@ export default function ProjectsPage() {
 
 const input: CSSProperties = { flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'var(--bg-input)', color: 'var(--text-primary)' };
 const btn: CSSProperties = { padding: '10px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, var(--accent-grad-start), var(--accent-grad-end))', color: '#fff', cursor: 'pointer', fontWeight: 600 };
-const ghostBtn: CSSProperties = { padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' };
 const iconBtn: CSSProperties = { padding: 8, borderRadius: 8, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
 const backupBtn: CSSProperties = { padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0 };

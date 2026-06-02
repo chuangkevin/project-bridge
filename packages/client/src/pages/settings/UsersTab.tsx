@@ -1,11 +1,23 @@
 import { useState } from 'react';
 import { useUsers, type AdminUser } from '../../hooks/useUsers';
-import { useAuthStore } from '../../stores/useAuthStore';
 
+/**
+ * Users management tab (M1 anonymous mode).
+ *
+ * M1 has no per-user login — this tab is preserved for operators who still
+ * want to manage the legacy users table (kept around for a future re-enable
+ * of login). All operations require the admin token; the tab itself is
+ * already gated by SettingsPage.
+ *
+ * UX adjustments for M1:
+ *   - No "(你)" self marker (no current user concept).
+ *   - Transfer admin asks the operator to pick BOTH a source admin and a
+ *     target user (server-side requires both ids).
+ *   - Disabling/deleting an admin still blocked server-side by `transfer first`.
+ */
 export default function UsersTab() {
   const { state, create, disable, enable, remove, transferAdmin } = useUsers();
-  const me = useAuthStore(s => s.user);
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user' as 'admin' | 'user' });
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -19,7 +31,7 @@ export default function UsersTab() {
         <header className="settings-section__head">
           <h2 className="settings-section__title">使用者管理</h2>
         </header>
-        <p className="settings-muted">{state.message}。目前登入：{me?.name ?? '未知'}</p>
+        <p className="settings-muted">{state.message}</p>
       </section>
     );
   }
@@ -28,6 +40,7 @@ export default function UsersTab() {
   }
 
   const users = state.users;
+  const admins = users.filter(u => u.role === 'admin');
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.email.trim() || !form.password) {
@@ -42,7 +55,7 @@ export default function UsersTab() {
     setFormError(null);
     try {
       await create({ name: form.name.trim(), email: form.email.trim(), password: form.password });
-      setForm({ name: '', email: '', password: '' });
+      setForm({ name: '', email: '', password: '', role: 'user' });
     } catch (e) {
       setFormError((e as Error).message);
     } finally {
@@ -50,10 +63,20 @@ export default function UsersTab() {
     }
   };
 
-  const handleTransfer = async (u: AdminUser) => {
-    if (!confirm(`確定將管理員權限轉移給「${u.name}」？轉移後你將失去管理權限。`)) return;
+  const handleTransfer = async (target: AdminUser) => {
+    if (admins.length === 0) { setActionError('沒有現有管理員可轉移'); return; }
+    let fromUserId = admins[0].id;
+    if (admins.length > 1) {
+      const opts = admins.map((a, i) => `${i + 1}. ${a.name} <${a.email}>`).join('\n');
+      const pick = prompt(`要從哪位管理員轉移？輸入編號：\n${opts}`, '1');
+      if (!pick) return;
+      const idx = Number(pick) - 1;
+      if (Number.isNaN(idx) || idx < 0 || idx >= admins.length) { setActionError('無效編號'); return; }
+      fromUserId = admins[idx].id;
+    }
+    if (!confirm(`確定把管理員權限從「${admins.find(a => a.id === fromUserId)?.name}」轉移給「${target.name}」？`)) return;
     setActionError(null);
-    try { await transferAdmin(u.id); }
+    try { await transferAdmin(fromUserId, target.id); }
     catch (e) { setActionError((e as Error).message); }
   };
 
@@ -81,6 +104,10 @@ export default function UsersTab() {
           <h2 className="settings-section__title">使用者管理</h2>
           <span className="settings-section__badge">{users.length} 位</span>
         </header>
+
+        <p className="settings-muted" style={{ fontSize: 12 }}>
+          M1 anonymous 模式：網站不需要登入。此列表保留供未來啟用 per-user 登入時使用，目前 read-only 操作不會影響 C 端體驗。
+        </p>
 
         <div className="settings-form" style={{ marginBottom: 'var(--space-4)' }}>
           <h3 style={{ fontSize: 13, margin: 0, marginBottom: 'var(--space-2)', color: 'var(--text-secondary)' }}>新增使用者</h3>
@@ -111,43 +138,38 @@ export default function UsersTab() {
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => {
-                  const isSelf = u.id === me?.id;
-                  return (
-                    <tr key={u.id}>
-                      <td style={{ fontWeight: 600 }}>{u.name}{isSelf && <span className="settings-muted" style={{ fontSize: 11, marginLeft: 4 }}>(你)</span>}</td>
-                      <td className="settings-muted">{u.email}</td>
-                      <td>
-                        <span className={u.role === 'admin' ? 'settings-status settings-status--admin' : 'settings-status'}>
-                          {u.role === 'admin' ? '管理員' : '使用者'}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={u.is_active ? 'settings-status settings-status--active' : 'settings-status settings-status--disabled'}>
-                          {u.is_active ? '啟用' : '停用'}
-                        </span>
-                      </td>
-                      <td className="settings-muted" style={{ fontSize: 12 }}>
-                        {new Date(u.created_at).toLocaleDateString('zh-TW')}
-                      </td>
-                      <td className="settings-table__actions">
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          {u.role !== 'admin' && u.is_active === 1 && (
-                            <button className="settings-btn" onClick={() => handleTransfer(u)}>轉移管理員</button>
-                          )}
-                          {!isSelf && (
-                            <button className="settings-btn" onClick={() => handleToggle(u)}>
-                              {u.is_active ? '停用' : '啟用'}
-                            </button>
-                          )}
-                          {!isSelf && u.role !== 'admin' && (
-                            <button className="settings-btn settings-btn--danger" onClick={() => handleDelete(u)}>刪除</button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td style={{ fontWeight: 600 }}>{u.name}</td>
+                    <td className="settings-muted">{u.email}</td>
+                    <td>
+                      <span className={u.role === 'admin' ? 'settings-status settings-status--admin' : 'settings-status'}>
+                        {u.role === 'admin' ? '管理員' : '使用者'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={u.is_active ? 'settings-status settings-status--active' : 'settings-status settings-status--disabled'}>
+                        {u.is_active ? '啟用' : '停用'}
+                      </span>
+                    </td>
+                    <td className="settings-muted" style={{ fontSize: 12 }}>
+                      {new Date(u.created_at).toLocaleDateString('zh-TW')}
+                    </td>
+                    <td className="settings-table__actions">
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        {u.role !== 'admin' && u.is_active === 1 && admins.length > 0 && (
+                          <button className="settings-btn" onClick={() => handleTransfer(u)}>授予管理員</button>
+                        )}
+                        <button className="settings-btn" onClick={() => handleToggle(u)}>
+                          {u.is_active ? '停用' : '啟用'}
+                        </button>
+                        {u.role !== 'admin' && (
+                          <button className="settings-btn settings-btn--danger" onClick={() => handleDelete(u)}>刪除</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

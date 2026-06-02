@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApiKeys } from '../../hooks/useApiKeys';
 import { useOpencodeServers, type OpencodeTestResult, type OpencodeModel } from '../../hooks/useOpencodeServers';
-import { api } from '../../lib/api';
+import { apiAdmin as api } from '../../lib/api';
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;

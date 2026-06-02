@@ -1,19 +1,23 @@
 import { io, type Socket } from 'socket.io-client';
 
-let socket: Socket | null = null;
-let currentToken: string | null = null;
+/**
+ * Socket.io client (M1 anonymous mode).
+ *
+ * No auth token — the server accepts anonymous connections. The token
+ * parameter is preserved for back-compat with old callers (e.g. workspace
+ * store hydration) but is now ignored.
+ */
 
-export function getSocket(token: string | null): Socket | null {
-  if (!token) return null;
-  if (socket && currentToken === token && socket.connected) return socket;
+let socket: Socket | null = null;
+
+export function getSocket(_token?: string | null): Socket {
+  if (socket && socket.connected) return socket;
   if (socket) socket.close();
-  currentToken = token;
-  socket = io({ auth: { token }, transports: ['websocket'], reconnection: true });
+  socket = io({ transports: ['websocket'], reconnection: true });
   return socket;
 }
 
 export function closeSocket(): void {
   if (socket) socket.close();
   socket = null;
-  currentToken = null;
 }

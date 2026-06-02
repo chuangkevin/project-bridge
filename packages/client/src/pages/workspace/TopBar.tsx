@@ -1,6 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useWorkspaceStore, type Mode } from '../../stores/useWorkspaceStore';
-import { useAuthStore } from '../../stores/useAuthStore';
 
 const MODE_LABELS: Record<Mode, string> = {
   consult: '顧問',
@@ -10,8 +9,6 @@ const MODE_LABELS: Record<Mode, string> = {
 
 export default function TopBar({ projectName }: { projectName: string }) {
   const { mode, setMode, setMobileRailOpen } = useWorkspaceStore();
-  const { logout } = useAuthStore();
-  const nav = useNavigate();
 
   return (
     <header className="workspace__top">
@@ -47,14 +44,6 @@ export default function TopBar({ projectName }: { projectName: string }) {
       </select>
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-3)' }}>
         <Link to="/settings" style={{ color: 'var(--text-muted)', fontSize: 13 }}>設定</Link>
-        <button
-          onClick={async () => { await logout(); nav('/login'); }}
-          style={{
-            background: 'transparent', border: '1px solid var(--border-primary)',
-            color: 'var(--text-secondary)', padding: '4px 10px',
-            borderRadius: 'var(--radius-sm)', fontSize: 12, cursor: 'pointer',
-          }}
-        >登出</button>
       </div>
     </header>
   );
