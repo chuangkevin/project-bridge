@@ -37,6 +37,8 @@ export default function DesignStage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sfcSource, setSfcSource] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [generatingVariants, setGeneratingVariants] = useState(false);
 
   // 參考網站 crawl panel
   const [showCrawl, setShowCrawl] = useState(false);
@@ -77,6 +79,42 @@ export default function DesignStage() {
       })
       .catch(() => setSfcSource(null));
   }, [projectId, selectedId]);
+
+  const handleRegenerate = async () => {
+    if (!projectId || !selectedId) return;
+    const instruction = window.prompt('輸入修改指令（留空則保持原概念重生成）', '') ?? '';
+    setRegenerating(true);
+    try {
+      await api<{ artifact: { id: string; name: string } }>(
+        `/api/projects/${projectId}/regenerate-page`,
+        { method: 'POST', body: JSON.stringify({ artifactId: selectedId, instruction }) }
+      );
+      await refreshArtifacts();
+    } catch (e) {
+      alert(`重新生成失敗：${(e as Error).message}`);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const handleVariants = async () => {
+    if (!projectId || !selectedId) return;
+    setGeneratingVariants(true);
+    try {
+      const result = await api<{ variants: Array<{ id: string; name: string }> }>(
+        `/api/projects/${projectId}/generate-variants`,
+        { method: 'POST', body: JSON.stringify({ artifactId: selectedId }) }
+      );
+      await refreshArtifacts();
+      if (result.variants.length > 0) {
+        setSelectedId(result.variants[0].id);
+      }
+    } catch (e) {
+      alert(`產生變體失敗：${(e as Error).message}`);
+    } finally {
+      setGeneratingVariants(false);
+    }
+  };
 
   const filteredTurns = turns.filter((t) => t.mode === 'design');
   const pending = state.phase === 'idle' ? null : { userText: pendingRef.current, state };
@@ -124,6 +162,26 @@ export default function DesignStage() {
             cursor: 'pointer',
           }}
         >{showSource ? '隱藏原始碼' : '顯示原始碼'}</button>
+        {selectedId && (
+          <button
+            className="design__btn"
+            onClick={handleRegenerate}
+            disabled={regenerating || state.phase !== 'idle'}
+            title="重新生成此頁面"
+          >
+            {regenerating ? '生成中…' : '🔄 重新生成'}
+          </button>
+        )}
+        {selectedId && (
+          <button
+            className="design__btn"
+            onClick={handleVariants}
+            disabled={generatingVariants || state.phase !== 'idle'}
+            title="產生 2 個視覺變體"
+          >
+            {generatingVariants ? '生成中…' : '✨ 產生變體'}
+          </button>
+        )}
       </div>
 
       {showCrawl && (
