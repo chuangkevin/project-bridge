@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
 import { getProject } from '../services/projectService.js';
 import { addFact, listFacts, getFact, supersedeFact, type FactKind } from '../services/factService.js';
 import { getTurn } from '../services/turnService.js';
@@ -11,19 +10,18 @@ function fail(res: Response, status: number, code: string, message: string): voi
   res.status(status).json({ error: { code, message } });
 }
 
-function ensureProject(db: Database.Database, projectId: string, userId: string, res: Response): boolean {
+function ensureProject(db: Database.Database, projectId: string, res: Response): boolean {
   const p = getProject(db, projectId);
-  if (!p || p.ownerId !== userId) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return false; }
+  if (!p) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return false; }
   return true;
 }
 
 export function buildFactsRouter(db: Database.Database): Router {
   const r = Router({ mergeParams: true });
-  r.use(requireAuth);
 
   r.get('/', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
-    if (!ensureProject(db, projectId, req.user!.id, res)) return;
+    if (!ensureProject(db, projectId, res)) return;
     const kindRaw = req.query.kind;
     const kind = typeof kindRaw === 'string' && (VALID_KINDS as string[]).includes(kindRaw)
       ? (kindRaw as FactKind) : undefined;
@@ -32,7 +30,7 @@ export function buildFactsRouter(db: Database.Database): Router {
 
   r.post('/', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
-    if (!ensureProject(db, projectId, req.user!.id, res)) return;
+    if (!ensureProject(db, projectId, res)) return;
     const { turnId, kind, text } = req.body ?? {};
     if (typeof turnId !== 'string' || !turnId) { fail(res, 400, 'VALIDATION_FAILED', '需要 turnId'); return; }
     if (typeof kind !== 'string' || !(VALID_KINDS as string[]).includes(kind)) {
@@ -47,7 +45,7 @@ export function buildFactsRouter(db: Database.Database): Router {
 
   r.patch('/:factId', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
-    if (!ensureProject(db, projectId, req.user!.id, res)) return;
+    if (!ensureProject(db, projectId, res)) return;
     const factId = req.params.factId as string;
     const old = getFact(db, factId);
     if (!old || old.projectId !== projectId) { fail(res, 404, 'NOT_FOUND', 'fact 不存在'); return; }
@@ -60,7 +58,7 @@ export function buildFactsRouter(db: Database.Database): Router {
 
   r.delete('/:factId', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
-    if (!ensureProject(db, projectId, req.user!.id, res)) return;
+    if (!ensureProject(db, projectId, res)) return;
     const factId = req.params.factId as string;
     const f = getFact(db, factId);
     if (!f || f.projectId !== projectId) { fail(res, 404, 'NOT_FOUND', 'fact 不存在'); return; }

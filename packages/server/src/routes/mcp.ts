@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { listMcpServers } from '../services/mcpRegistry.js';
 import {
   listMcpHttpServers,
@@ -14,9 +14,14 @@ function fail(res: Response, status: number, code: string, message: string): voi
   res.status(status).json({ error: { code, message } });
 }
 
+/**
+ * MCP router (M1 anonymous mode):
+ *   - GET endpoints (list servers, list tools, test) are OPEN — needed by the
+ *     workspace UI which any visitor can use.
+ *   - Mutating endpoints (POST / PUT / DELETE on /servers) require admin token.
+ */
 export function buildMcpRouter(db?: Database.Database): Router {
   const r = Router();
-  r.use(requireAuth);
 
   // GET /api/mcp — connected stdio MCPs from plugins (existing behaviour)
   r.get('/', (_req: Request, res: Response) => {
@@ -26,13 +31,13 @@ export function buildMcpRouter(db?: Database.Database): Router {
   // The HTTP MCP CRUD only exists when we have a db handle. createApp always
   // passes one in; the older zero-arg call path is kept for back-compat in tests.
   if (db) {
-    // GET /api/mcp/servers — list user-configured HTTP MCPs
+    // GET /api/mcp/servers — list user-configured HTTP MCPs (open in M1)
     r.get('/servers', (_req: Request, res: Response) => {
       res.json({ servers: listMcpHttpServers(db) });
     });
 
-    // POST /api/mcp/servers — create
-    r.post('/servers', (req: Request, res: Response) => {
+    // POST /api/mcp/servers — create (admin)
+    r.post('/servers', requireAdmin, (req: Request, res: Response) => {
       const { name, endpoint, enabled, useRecommendedTools, allowedTools, timeoutMs } = (req.body ?? {}) as Record<string, unknown>;
       if (typeof name !== 'string' || !name.trim()) { fail(res, 400, 'VALIDATION_FAILED', '需要 name'); return; }
       if (typeof endpoint !== 'string' || !endpoint.trim()) { fail(res, 400, 'VALIDATION_FAILED', '需要 endpoint'); return; }
@@ -48,8 +53,8 @@ export function buildMcpRouter(db?: Database.Database): Router {
       res.status(201).json(record);
     });
 
-    // PUT /api/mcp/servers/:id — update
-    r.put('/servers/:id', (req: Request, res: Response) => {
+    // PUT /api/mcp/servers/:id — update (admin)
+    r.put('/servers/:id', requireAdmin, (req: Request, res: Response) => {
       const id = String(req.params.id);
       const existing = getMcpHttpServer(db, id);
       if (!existing) { fail(res, 404, 'NOT_FOUND', 'MCP server 不存在'); return; }
@@ -69,16 +74,16 @@ export function buildMcpRouter(db?: Database.Database): Router {
       res.json(record);
     });
 
-    // DELETE /api/mcp/servers/:id
-    r.delete('/servers/:id', (req: Request, res: Response) => {
+    // DELETE /api/mcp/servers/:id (admin)
+    r.delete('/servers/:id', requireAdmin, (req: Request, res: Response) => {
       const id = String(req.params.id);
       const ok = deleteMcpHttpServer(db, id);
       if (!ok) { fail(res, 404, 'NOT_FOUND', 'MCP server 不存在'); return; }
       res.json({ ok: true });
     });
 
-    // POST /api/mcp/servers/:id/test — JSON-RPC initialize handshake
-    r.post('/servers/:id/test', async (req: Request, res: Response) => {
+    // POST /api/mcp/servers/:id/test — JSON-RPC initialize handshake (admin)
+    r.post('/servers/:id/test', requireAdmin, async (req: Request, res: Response) => {
       const id = String(req.params.id);
       const server = getMcpHttpServer(db, id);
       if (!server) { fail(res, 404, 'NOT_FOUND', 'MCP server 不存在'); return; }
@@ -86,7 +91,7 @@ export function buildMcpRouter(db?: Database.Database): Router {
       res.json(result);
     });
 
-    // GET /api/mcp/servers/:id/tools
+    // GET /api/mcp/servers/:id/tools — open (tool list shown in workspace)
     r.get('/servers/:id/tools', async (req: Request, res: Response) => {
       const id = String(req.params.id);
       const server = getMcpHttpServer(db, id);

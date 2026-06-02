@@ -3,7 +3,6 @@ import type Database from 'better-sqlite3';
 import { readdirSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
-import { requireAuth } from '../middleware/auth.js';
 import { initSkillRegistry } from '../services/skillRegistry.js';
 
 export interface SkillsExportDeps {
@@ -27,7 +26,6 @@ function composeMarkdown(name: string, description: string, body: string, metada
 
 export function buildSkillsExportRouter(deps: SkillsExportDeps): Router {
   const r = Router();
-  r.use(requireAuth);
 
   // GET /api/skills/global/export — return all global skills as JSON for download
   r.get('/global/export', (_req: Request, res: Response) => {

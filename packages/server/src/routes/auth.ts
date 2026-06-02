@@ -1,52 +1,103 @@
+/**
+ * Admin password / admin-session routes (M1 anonymous mode).
+ *
+ * Endpoints:
+ *   GET    /api/auth/status  — { hasAdminPassword: boolean }
+ *   POST   /api/auth/setup   — first-time set admin password { password }
+ *   POST   /api/auth/verify  — verify admin password { password } → { token }
+ *   POST   /api/auth/change  — change admin password { oldPassword, newPassword }
+ *   GET    /api/auth/me      — always returns { user: null } in M1
+ *
+ * There is no per-user login. The whole site is anonymous; only admin-gated
+ * Settings operations consume the token from verify (sent as Bearer).
+ */
+
 import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
-import { createUser, login as loginService, logout as logoutService } from '../services/authService.js';
-import { requireAuth } from '../middleware/auth.js';
+import {
+  hasAdminPassword,
+  setupAdminPassword,
+  changeAdminPassword,
+  verifyAdminPassword,
+  revokeAdminToken,
+} from '../services/adminAuth.js';
+
+function fail(res: Response, status: number, code: string, message: string): void {
+  res.status(status).json({ error: { code, message } });
+}
 
 export function buildAuthRouter(db: Database.Database): Router {
   const r = Router();
 
+  r.get('/status', (_req: Request, res: Response) => {
+    res.json({ hasAdminPassword: hasAdminPassword(db) });
+  });
+
   r.post('/setup', async (req: Request, res: Response) => {
-    const { name, email, password } = req.body ?? {};
-    if (!name || !email || !password || password.length < 8) {
-      res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: '需要 name / email / password (>= 8)' } });
+    const { password } = (req.body ?? {}) as { password?: string };
+    if (typeof password !== 'string' || password.length < 8) {
+      fail(res, 400, 'VALIDATION_FAILED', '需要 password (>= 8 字)');
       return;
     }
-    const existing = db.prepare('SELECT 1 FROM users LIMIT 1').get();
-    if (existing) {
-      res.status(409).json({ error: { code: 'SETUP_ALREADY_DONE', message: '系統已初始化過' } });
+    if (hasAdminPassword(db)) {
+      fail(res, 409, 'SETUP_ALREADY_DONE', '已設定過管理員密碼');
       return;
     }
-    const user = await createUser(db, { name, email, password });
-    const result = await loginService(db, email, password);
-    if (!result.ok) {
-      res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'setup login failed' } });
-      return;
+    try {
+      await setupAdminPassword(db, password);
+      const token = await verifyAdminPassword(db, password);
+      res.json({ ok: true, token });
+    } catch (e) {
+      fail(res, 400, 'VALIDATION_FAILED', (e as Error).message);
     }
-    res.json({ token: result.token, user });
   });
 
-  r.post('/login', async (req: Request, res: Response) => {
-    const { email, password } = req.body ?? {};
-    if (!email || !password) {
-      res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: '需要 email + password' } });
+  r.post('/verify', async (req: Request, res: Response) => {
+    const { password } = (req.body ?? {}) as { password?: string };
+    if (typeof password !== 'string' || password.length === 0) {
+      fail(res, 400, 'VALIDATION_FAILED', '需要 password');
       return;
     }
-    const result = await loginService(db, email, password);
-    if (!result.ok) {
-      res.status(401).json({ error: { code: 'AUTH_REQUIRED', message: '帳號或密碼錯誤' } });
+    if (!hasAdminPassword(db)) {
+      fail(res, 409, 'SETUP_REQUIRED', '尚未設定管理員密碼');
       return;
     }
-    res.json({ token: result.token, user: result.user });
+    const token = await verifyAdminPassword(db, password);
+    if (!token) {
+      fail(res, 401, 'BAD_PASSWORD', '密碼錯誤');
+      return;
+    }
+    res.json({ ok: true, token });
   });
 
-  r.post('/logout', requireAuth, (req: Request, res: Response) => {
-    if (req.sessionToken) logoutService(db, req.sessionToken);
+  r.post('/change', async (req: Request, res: Response) => {
+    const { oldPassword, newPassword } = (req.body ?? {}) as { oldPassword?: string; newPassword?: string };
+    if (typeof oldPassword !== 'string' || typeof newPassword !== 'string') {
+      fail(res, 400, 'VALIDATION_FAILED', '需要 oldPassword + newPassword');
+      return;
+    }
+    try {
+      await changeAdminPassword(db, oldPassword, newPassword);
+      res.json({ ok: true });
+    } catch (e) {
+      const msg = (e as Error).message;
+      const status = msg === '舊密碼錯誤' ? 401 : 400;
+      fail(res, status, status === 401 ? 'BAD_PASSWORD' : 'VALIDATION_FAILED', msg);
+    }
+  });
+
+  /** Back-compat shim — M1 has no per-user login; always returns null. */
+  r.get('/me', (_req: Request, res: Response) => {
+    res.json({ user: null });
+  });
+
+  /**
+   * POST /api/auth/logout — admin logout. Revokes the supplied admin token if
+   * it was issued by us; safe to call anonymously (no-op).
+   */
+  r.post('/logout', (req: Request, res: Response) => {
+    if (req.sessionToken) revokeAdminToken(req.sessionToken);
     res.json({ ok: true });
-  });
-
-  r.get('/me', requireAuth, (req: Request, res: Response) => {
-    res.json(req.user);
   });
 
   return r;

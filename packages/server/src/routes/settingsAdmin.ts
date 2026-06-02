@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { readSetting, writeSetting, deleteSetting } from '../services/settings.js';
 import { invalidateProvider } from '../services/provider.js';
 
@@ -32,7 +32,7 @@ export function maskValue(key: string, value: string | null): string | null {
 
 export function buildSettingsAdminRouter(db: Database.Database): Router {
   const r = Router();
-  r.use(requireAuth);
+  r.use(requireAdmin);
 
   r.get('/:key', (req: Request, res: Response) => {
     const key = req.params.key as string;

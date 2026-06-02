@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { readSetting, writeSetting } from '../services/settings.js';
 import { invalidateProvider } from '../services/provider.js';
 
@@ -37,7 +37,7 @@ function buildAuthHeader(db: Database.Database): Record<string, string> {
 
 export function buildOpencodeAdminRouter(db: Database.Database): Router {
   const r = Router();
-  r.use(requireAuth);
+  r.use(requireAdmin);
 
   // GET /api/settings/opencode — current servers + selected models
   r.get('/', (_req: Request, res: Response) => {

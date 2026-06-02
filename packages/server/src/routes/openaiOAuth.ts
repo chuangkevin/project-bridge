@@ -20,7 +20,7 @@ import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
 import { readSetting, writeSetting, deleteSetting } from '../services/settings.js';
 import { invalidateProvider } from '../services/provider.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 // ─── PKCE helpers ─────────────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ export function buildOpenaiOAuthRouter(db: Database.Database): Router {
    * Generates PKCE verifier + challenge + state, stores state, returns authorize URL.
    * Requires authentication.
    */
-  router.post('/start', requireAuth, (req: Request, res: Response) => {
+  router.post('/start', requireAdmin, (req: Request, res: Response) => {
     const clientId = getClientId(db);
     if (!clientId) {
       res.status(500).json({ error: 'OPENAI_OAUTH_CLIENT_ID not configured' });
@@ -282,7 +282,7 @@ export function buildOpenaiOAuthRouter(db: Database.Database): Router {
    * GET /status
    * Returns current OAuth connection state.
    */
-  router.get('/status', requireAuth, (_req: Request, res: Response) => {
+  router.get('/status', requireAdmin, (_req: Request, res: Response) => {
     const accessToken = readSetting(db, 'openai_oauth_access_token');
     const expiresAt = readSetting(db, 'openai_oauth_expires_at');
     const clientIdConfigured = !!getClientId(db);
@@ -299,7 +299,7 @@ export function buildOpenaiOAuthRouter(db: Database.Database): Router {
    * DELETE /
    * Disconnect — clear all stored OAuth tokens.
    */
-  router.delete('/', requireAuth, (_req: Request, res: Response) => {
+  router.delete('/', requireAdmin, (_req: Request, res: Response) => {
     deleteSetting(db, 'openai_oauth_access_token');
     deleteSetting(db, 'openai_oauth_refresh_token');
     deleteSetting(db, 'openai_oauth_expires_at');

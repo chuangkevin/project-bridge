@@ -5,7 +5,8 @@ import { v4 as uuid } from 'uuid';
 export interface Project {
   id: string;
   name: string;
-  ownerId: string;
+  /** Nullable: M1 anonymous projects have no owner. */
+  ownerId: string | null;
   shareToken: string;
   createdAt: string;
   updatedAt: string;
@@ -13,7 +14,12 @@ export interface Project {
 
 function shareToken(): string { return randomBytes(16).toString('hex'); }
 
-export function createProject(db: Database.Database, ownerId: string, name: string): Project {
+/**
+ * Create a project. M1 is anonymous-first: ownerId is optional. When omitted
+ * (or null) we store NULL so the project belongs to no one — i.e. visible to
+ * every visitor, which is the M1 contract.
+ */
+export function createProject(db: Database.Database, ownerId: string | null, name: string): Project {
   const id = uuid();
   const token = shareToken();
   db.prepare('INSERT INTO projects (id, name, owner_id, share_token) VALUES (?, ?, ?, ?)')
@@ -21,16 +27,20 @@ export function createProject(db: Database.Database, ownerId: string, name: stri
   return getProject(db, id)!;
 }
 
-export function listProjects(db: Database.Database, ownerId: string): Project[] {
-  const rows = db.prepare('SELECT * FROM projects WHERE owner_id = ? ORDER BY updated_at DESC').all(ownerId) as Array<{
-    id: string; name: string; owner_id: string; share_token: string; created_at: string; updated_at: string;
+/**
+ * List all projects. M1 anonymous mode → no owner filter. If a future revision
+ * brings back per-user logins, this signature can grow an optional filter.
+ */
+export function listProjects(db: Database.Database): Project[] {
+  const rows = db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all() as Array<{
+    id: string; name: string; owner_id: string | null; share_token: string; created_at: string; updated_at: string;
   }>;
   return rows.map(toCamel);
 }
 
 export function getProject(db: Database.Database, id: string): Project | null {
   const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as
-    | { id: string; name: string; owner_id: string; share_token: string; created_at: string; updated_at: string }
+    | { id: string; name: string; owner_id: string | null; share_token: string; created_at: string; updated_at: string }
     | undefined;
   return row ? toCamel(row) : null;
 }
@@ -52,6 +62,6 @@ export function rotateShareToken(db: Database.Database, id: string): Project | n
   return getProject(db, id);
 }
 
-function toCamel(r: { id: string; name: string; owner_id: string; share_token: string; created_at: string; updated_at: string }): Project {
+function toCamel(r: { id: string; name: string; owner_id: string | null; share_token: string; created_at: string; updated_at: string }): Project {
   return { id: r.id, name: r.name, ownerId: r.owner_id, shareToken: r.share_token, createdAt: r.created_at, updatedAt: r.updated_at };
 }

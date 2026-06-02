@@ -6,30 +6,23 @@ import { join } from 'node:path';
 import { extract } from 'tar-stream';
 import { createGunzip } from 'node:zlib';
 import { createApp } from '../../index';
-import { createUser, login as loginService } from '../../services/authService';
 
 let dataDir: string;
 let app: ReturnType<typeof createApp>;
-let token: string;
 let projectId: string;
 
 beforeEach(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'bkr-'));
   app = createApp({ dataDir });
-  const r = await request(app).post('/api/auth/setup').send({ name: 'A', email: 'a@x.com', password: 'pw12345678' });
-  token = r.body.token;
-  const p = await request(app).post('/api/projects').set('Authorization', `Bearer ${token}`).send({ name: 'TestProject' });
+  const p = await request(app).post('/api/projects').send({ name: 'TestProject' });
   projectId = p.body.id;
 });
 afterEach(() => { app.locals.db?.close(); rmSync(dataDir, { recursive: true, force: true }); });
 
-const auth = () => ({ Authorization: `Bearer ${token}` });
-
-describe('GET /api/projects/:id/backup', () => {
-  it('200 as owner — streams gzip with correct headers', async () => {
+describe('GET /api/projects/:id/backup (M1 anonymous)', () => {
+  it('200 — streams gzip with correct headers', async () => {
     const r = await request(app)
       .get(`/api/projects/${projectId}/backup`)
-      .set(auth())
       .buffer(true)
       .parse((res, callback) => {
         const chunks: Buffer[] = [];
@@ -46,7 +39,6 @@ describe('GET /api/projects/:id/backup', () => {
   it('response is a valid tar.gz containing manifest.json', async () => {
     const r = await request(app)
       .get(`/api/projects/${projectId}/backup`)
-      .set(auth())
       .buffer(true)
       .parse((res, callback) => {
         const chunks: Buffer[] = [];
@@ -75,25 +67,8 @@ describe('GET /api/projects/:id/backup', () => {
     expect(names).toContain('manifest.json');
   });
 
-  it('401 without auth', async () => {
-    const r = await request(app).get(`/api/projects/${projectId}/backup`);
-    expect(r.status).toBe(401);
-  });
-
-  it('404 cross-user project', async () => {
-    await createUser(app.locals.db, { name: 'B', email: 'b@x.com', password: 'pw12345678' });
-    const login2 = await loginService(app.locals.db, 'b@x.com', 'pw12345678');
-    const token2 = login2.ok ? login2.token : '';
-    const r = await request(app)
-      .get(`/api/projects/${projectId}/backup`)
-      .set({ Authorization: `Bearer ${token2}` });
-    expect(r.status).toBe(404);
-  });
-
   it('404 unknown project', async () => {
-    const r = await request(app)
-      .get('/api/projects/does-not-exist/backup')
-      .set(auth());
+    const r = await request(app).get('/api/projects/does-not-exist/backup');
     expect(r.status).toBe(404);
   });
 });

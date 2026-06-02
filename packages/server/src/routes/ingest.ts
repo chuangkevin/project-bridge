@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
 import { getProject } from '../services/projectService.js';
 import { ingestFile, ingestUrl, listAttachments } from '../services/ingestionService.js';
 import { join } from 'node:path';
@@ -13,13 +12,12 @@ const upload = multer({
 
 export function buildIngestRouter(db: Database.Database, dataDir: string): Router {
   const r = Router({ mergeParams: true });
-  r.use(requireAuth);
 
   /** POST /api/projects/:id/ingest — upload files and/or a URL */
   r.post('/', upload.array('files', 5), async (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const project = getProject(db, projectId);
-    if (!project || project.ownerId !== req.user!.id) {
+    if (!project) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: '專案不存在' } });
       return;
     }
@@ -58,7 +56,7 @@ export function buildIngestRouter(db: Database.Database, dataDir: string): Route
   r.get('/', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const project = getProject(db, projectId);
-    if (!project || project.ownerId !== req.user!.id) {
+    if (!project) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: '專案不存在' } });
       return;
     }

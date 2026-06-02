@@ -2,7 +2,6 @@ import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
 import { writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { requireAuth } from '../middleware/auth.js';
 import { getProject } from '../services/projectService.js';
 import { initSkillRegistry, listSkills, readSkill, addProjectSkill } from '../services/skillRegistry.js';
 
@@ -25,13 +24,12 @@ export interface SkillRoutesDeps {
 
 export function buildSkillsRouter(deps: SkillRoutesDeps): Router {
   const r = Router();
-  r.use(requireAuth);
 
   r.get('/', (req: Request, res: Response) => {
     const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
     if (projectId) {
       const p = getProject(deps.db, projectId);
-      if (!p || p.ownerId !== req.user!.id) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
+      if (!p) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
     }
     const skills = listSkills({ projectId });
     res.json({ skills: skills.map(s => ({ name: s.name, description: s.description, layer: s.layer, metadata: s.metadata })) });
@@ -83,12 +81,11 @@ export function buildSkillsRouter(deps: SkillRoutesDeps): Router {
 
 export function buildProjectSkillsRouter(deps: SkillRoutesDeps): Router {
   const r = Router({ mergeParams: true });
-  r.use(requireAuth);
 
   r.post('/', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const p = getProject(deps.db, projectId);
-    if (!p || p.ownerId !== req.user!.id) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
+    if (!p) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
     const { name, description, body, metadata } = req.body ?? {};
     if (typeof name !== 'string' || !name.trim()) { fail(res, 400, 'VALIDATION_FAILED', '需要 name'); return; }
     if (typeof description !== 'string' || !description.trim()) { fail(res, 400, 'VALIDATION_FAILED', '需要 description'); return; }
@@ -100,7 +97,7 @@ export function buildProjectSkillsRouter(deps: SkillRoutesDeps): Router {
   r.put('/:name', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const p = getProject(deps.db, projectId);
-    if (!p || p.ownerId !== req.user!.id) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
+    if (!p) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
     const { description, body, metadata } = req.body ?? {};
     const name = req.params.name as string;
     if (typeof description !== 'string' || !description.trim()) { fail(res, 400, 'VALIDATION_FAILED', '需要 description'); return; }
@@ -112,7 +109,7 @@ export function buildProjectSkillsRouter(deps: SkillRoutesDeps): Router {
   r.delete('/:name', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const p = getProject(deps.db, projectId);
-    if (!p || p.ownerId !== req.user!.id) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
+    if (!p) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
     deps.db.prepare('DELETE FROM project_skills WHERE project_id = ? AND name = ?').run(projectId, req.params.name as string);
     res.json({ ok: true });
   });

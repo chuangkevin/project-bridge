@@ -2,6 +2,14 @@ import { Server as SocketIOServer, type Socket } from 'socket.io';
 import type { Server as HttpServer } from 'node:http';
 import type Database from 'better-sqlite3';
 
+/**
+ * Socket.io server (M1 anonymous mode).
+ *
+ * Anyone can connect and join any project room. There is no per-user owner
+ * gate — the workspace is anonymous-first. Project rooms are still scoped by
+ * id so server-side `emitToProject` only reaches subscribed sockets.
+ */
+
 let io: SocketIOServer | null = null;
 
 export function initSocketServer(httpServer: HttpServer, db: Database.Database): SocketIOServer {
@@ -10,26 +18,13 @@ export function initSocketServer(httpServer: HttpServer, db: Database.Database):
     path: '/socket.io',
   });
 
-  io.use((socket: Socket, next: (err?: Error) => void) => {
-    const token = (socket.handshake.auth?.token as string | undefined)
-      ?? (socket.handshake.headers?.authorization as string | undefined)?.replace(/^Bearer /, '');
-    if (!token) return next(new Error('AUTH_REQUIRED'));
-
-    const row = db.prepare(`
-      SELECT s.user_id, s.expires_at FROM sessions s WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')
-    `).get(token) as { user_id: string; expires_at: string } | undefined;
-    if (!row) return next(new Error('SESSION_INVALID'));
-
-    (socket.data as { userId?: string }).userId = row.user_id;
-    next();
-  });
+  // No auth middleware in M1 — connections are open.
 
   io.on('connection', (socket: Socket) => {
     socket.on('project:join', (projectId: string) => {
       if (typeof projectId !== 'string' || !projectId) return;
-      const userId = (socket.data as { userId?: string }).userId;
-      const project = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId) as { owner_id: string } | undefined;
-      if (!project || project.owner_id !== userId) {
+      const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId) as { id: string } | undefined;
+      if (!project) {
         socket.emit('project:error', { code: 'NOT_FOUND' });
         return;
       }

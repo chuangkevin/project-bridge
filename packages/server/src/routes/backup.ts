@@ -1,17 +1,15 @@
 import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
 import { getProject } from '../services/projectService.js';
 import { buildProjectBackup } from '../services/backupService.js';
 
 export function buildBackupRouter(db: Database.Database, dataDir: string): Router {
   const r = Router({ mergeParams: true });
-  r.use(requireAuth);
 
   r.get('/', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const project = getProject(db, projectId);
-    if (!project || project.ownerId !== req.user!.id) {
+    if (!project) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: '專案不存在' } });
       return;
     }

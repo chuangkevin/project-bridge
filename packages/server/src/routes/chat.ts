@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
 import { getProject } from '../services/projectService.js';
 import { buildMemorySnapshot } from '../services/memorySnapshot.js';
 import { listSkills, readSkill, getSystemPromptSkillList } from '../services/skillRegistry.js';
@@ -24,12 +23,11 @@ function sse(res: Response, event: string, data: unknown): void {
 
 export function buildChatRouter(db: Database.Database, dataDir: string): Router {
   const r = Router({ mergeParams: true });
-  r.use(requireAuth);
 
   r.post('/', async (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const project = getProject(db, projectId);
-    if (!project || project.ownerId !== req.user!.id) {
+    if (!project) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: '專案不存在' } });
       return;
     }

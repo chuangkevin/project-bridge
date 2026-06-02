@@ -1,25 +1,26 @@
+/**
+ * Legacy requireAdmin middleware — DEPRECATED in M1 anonymous mode.
+ *
+ * M1 admin gating happens via the admin-token-based `requireAdmin` exported
+ * from `middleware/auth.ts`. This file is preserved only because external
+ * code may still import its old shape; nothing in the current server
+ * references it.
+ *
+ * If you're writing a new admin-only route: import `requireAdmin` from
+ * `../middleware/auth.js` and mount it directly (no db handle needed).
+ */
+
 import type { Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
+import { requireAdmin as requireAdminFromAuth } from './auth.js';
 
 /**
- * Gate a route to admin users only. Must be mounted AFTER requireAuth so req.user is populated.
- *
- * Returns a middleware factory so the db handle can be injected (the route's
- * Router doesn't have access to req.app.locals.db at construction time).
+ * @deprecated Use `requireAdmin` from `./auth.js` directly. The db handle is
+ * no longer required because admin gating runs against an in-memory token
+ * store, not the users table.
  */
-export function requireAdmin(db: Database.Database) {
+export function requireAdmin(_db: Database.Database) {
   return function (req: Request, res: Response, next: NextFunction): void {
-    if (!req.user) {
-      res.status(401).json({ error: { code: 'AUTH_REQUIRED', message: '尚未登入' } });
-      return;
-    }
-    const row = db.prepare('SELECT role, is_active FROM users WHERE id = ?').get(req.user.id) as
-      | { role: string; is_active: number }
-      | undefined;
-    if (!row || row.role !== 'admin' || row.is_active === 0) {
-      res.status(403).json({ error: { code: 'FORBIDDEN', message: '需要管理員權限' } });
-      return;
-    }
-    next();
+    requireAdminFromAuth(req, res, next);
   };
 }

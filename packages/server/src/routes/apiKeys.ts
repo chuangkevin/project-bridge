@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type Database from 'better-sqlite3';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { readSetting, writeSetting } from '../services/settings.js';
 import { getApiKeyStats } from '../services/apiKeyStats.js';
 import { invalidateProvider } from '../services/provider.js';
@@ -22,7 +22,7 @@ function readStoredKeys(db: Database.Database): string[] {
 
 export function buildApiKeysRouter(db: Database.Database): Router {
   const r = Router();
-  r.use(requireAuth);
+  r.use(requireAdmin);
 
   // GET /api/settings/api-keys
   r.get('/', (_req: Request, res: Response) => {

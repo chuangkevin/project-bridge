@@ -4,6 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../../index';
+import { setupAdmin, asAdmin } from './_helpers';
+import { _resetAdminTokens } from '../../services/adminAuth';
 
 let dataDir: string;
 let app: ReturnType<typeof createApp>;
@@ -14,18 +16,19 @@ const VALID_KEY_B = 'AIzaSyB' + 'b'.repeat(33);
 const VALID_KEY_C = 'AIzaSyC' + 'c'.repeat(33);
 
 beforeEach(async () => {
+  _resetAdminTokens();
   dataDir = mkdtempSync(join(tmpdir(), 'ak-'));
   app = createApp({ dataDir });
-  const r = await request(app).post('/api/auth/setup').send({ name: 'A', email: 'a@x.com', password: 'pw12345678' });
-  token = r.body.token as string;
+  token = await setupAdmin(app);
 });
 
 afterEach(() => {
   (app.locals as Record<string, unknown> & { db?: { close(): void } }).db?.close();
   rmSync(dataDir, { recursive: true, force: true });
+  _resetAdminTokens();
 });
 
-const auth = () => ({ Authorization: `Bearer ${token}` });
+const auth = () => asAdmin(token);
 
 describe('GET /api/settings/api-keys', () => {
   it('returns empty list when no keys are configured', async () => {
