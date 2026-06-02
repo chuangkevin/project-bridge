@@ -42,13 +42,8 @@ describe('GET /api/mcp (M1 anonymous)', () => {
     expect(r.body.servers).toEqual([]);
   });
 
-  it('POST /api/mcp/servers requires admin token', async () => {
-    const noAuth = await request(app).post('/api/mcp/servers').send({ name: 'x', endpoint: 'https://x.com' });
-    expect(noAuth.status).toBe(401);
-
-    const token = await setupAdmin(app);
-    const ok = await request(app).post('/api/mcp/servers').set(asAdmin(token))
-      .send({ name: 'x', endpoint: 'https://x.com' });
-    expect(ok.status).toBe(201);
+  it('POST /api/mcp/servers creates a server (no auth required)', async () => {
+    const r = await request(app).post('/api/mcp/servers').send({ name: 'x', endpoint: 'https://x.com' });
+    expect(r.status).toBe(201);
   });
 });

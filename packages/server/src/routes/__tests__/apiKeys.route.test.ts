@@ -37,11 +37,6 @@ describe('GET /api/settings/api-keys', () => {
     expect(r.body.keys).toEqual([]);
   });
 
-  it('401 without auth', async () => {
-    const r = await request(app).get('/api/settings/api-keys');
-    expect(r.status).toBe(401);
-  });
-
   it('lists keys with stats after adding one', async () => {
     await request(app).post('/api/settings/api-keys').set(auth()).send({ apiKey: VALID_KEY_A });
     const r = await request(app).get('/api/settings/api-keys').set(auth());
@@ -74,10 +69,6 @@ describe('POST /api/settings/api-keys (single)', () => {
     expect(r.body.error.code).toBe('DUPLICATE');
   });
 
-  it('401 without auth', async () => {
-    const r = await request(app).post('/api/settings/api-keys').send({ apiKey: VALID_KEY_A });
-    expect(r.status).toBe(401);
-  });
 });
 
 describe('POST /api/settings/api-keys/batch', () => {

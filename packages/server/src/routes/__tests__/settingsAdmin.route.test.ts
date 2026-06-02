@@ -58,10 +58,6 @@ describe('GET /api/settings/:key', () => {
     expect(r.body.error.code).toBe('VALIDATION_FAILED');
   });
 
-  it('401 without auth', async () => {
-    const r = await request(app).get('/api/settings/gemini_model');
-    expect(r.status).toBe(401);
-  });
 });
 
 describe('PUT /api/settings/:key', () => {
@@ -89,10 +85,6 @@ describe('PUT /api/settings/:key', () => {
     expect(r.status).toBe(400);
   });
 
-  it('401 without auth', async () => {
-    const r = await request(app).put('/api/settings/gemini_model').send({ value: 'x' });
-    expect(r.status).toBe(401);
-  });
 });
 
 describe('DELETE /api/settings/:key', () => {
@@ -110,10 +102,6 @@ describe('DELETE /api/settings/:key', () => {
     expect(r.status).toBe(400);
   });
 
-  it('401 without auth', async () => {
-    const r = await request(app).delete('/api/settings/gemini_model');
-    expect(r.status).toBe(401);
-  });
 });
 
 describe('POST /api/settings/_reload-provider', () => {

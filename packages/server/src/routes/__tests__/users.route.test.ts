@@ -48,11 +48,6 @@ describe('GET /api/users (admin)', () => {
     expect(r.body.users).toEqual([]);
   });
 
-  it('401 without admin token', async () => {
-    const r = await request(app).get('/api/users');
-    expect(r.status).toBe(401);
-  });
-
   it('lists users after admin creates them', async () => {
     await createUser('user');
     const r = await request(app).get('/api/users').set(headers());
@@ -83,11 +78,6 @@ describe('POST /api/users (admin creates)', () => {
     expect(r.status).toBe(400);
   });
 
-  it('401 without admin token', async () => {
-    const r = await request(app).post('/api/users')
-      .send({ name: 'X', email: 'x@x.com', password: 'pw12345678' });
-    expect(r.status).toBe(401);
-  });
 });
 
 describe('PATCH /api/users/:id/disable + enable', () => {

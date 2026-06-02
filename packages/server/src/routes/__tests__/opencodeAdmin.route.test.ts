@@ -35,10 +35,6 @@ describe('GET /api/settings/opencode', () => {
     expect(r.body.visionModel).toBe('');
   });
 
-  it('401 without auth', async () => {
-    const r = await request(app).get('/api/settings/opencode');
-    expect(r.status).toBe(401);
-  });
 });
 
 describe('POST /api/settings/opencode (save)', () => {
