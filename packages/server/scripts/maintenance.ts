@@ -38,7 +38,7 @@ function dirSize(dir: string): number {
 
 async function main() {
   const dataDir = process.argv[2] ?? process.env.DATA_DIR ?? './data';
-  const dbPath = join(dataDir, 'app.db');
+  const dbPath = join(dataDir, 'designbridge.db');
   if (!existsSync(dbPath)) {
     console.error(`DB not found at ${dbPath}`);
     process.exit(1);

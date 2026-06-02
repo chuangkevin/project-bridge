@@ -9,7 +9,7 @@ beforeEach(() => { dataDir = mkdtempSync(join(tmpdir(), 'db-')); });
 afterEach(() => { rmSync(dataDir, { recursive: true, force: true }); });
 
 describe('openDb', () => {
-  it('opens a sqlite database at <dataDir>/bridge.db with WAL mode', () => {
+  it('opens a sqlite database at <dataDir>/designbridge.db with WAL mode', () => {
     const db = openDb(dataDir);
     const mode = db.pragma('journal_mode', { simple: true }) as string;
     expect(mode).toBe('wal');
