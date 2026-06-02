@@ -199,6 +199,13 @@ function trimUrl(value: string): string {
 }
 
 function normalizeOpenCodeServer(raw: unknown, index: number): OpenCodeServerConfig | null {
+  // Accept plain string URL (used by the new opencodeAdmin save format pre-fix
+  // and tolerated forever so existing prod data isn't lost on upgrade).
+  if (typeof raw === "string") {
+    const baseUrl = trimUrl(raw);
+    if (!baseUrl) return null;
+    return { id: `opencode-${index + 1}`, label: `OpenCode ${index + 1}`, baseUrl, enabled: true };
+  }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const item = raw as Record<string, unknown>;
   const baseUrl = trimUrl(String(item.baseUrl ?? item.url ?? ""));

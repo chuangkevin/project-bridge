@@ -16,7 +16,23 @@ function getServers(db: Database.Database): string[] {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+      if (Array.isArray(parsed)) {
+        // Accept both the new {baseUrl} object shape (what provider.ts also
+        // expects) and the old plain-string shape. Always return URL strings
+        // for our own /test and /models handlers.
+        const urls = parsed
+          .map((item: unknown) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') {
+              const o = item as { baseUrl?: unknown; url?: unknown };
+              if (typeof o.baseUrl === 'string') return o.baseUrl;
+              if (typeof o.url === 'string') return o.url;
+            }
+            return '';
+          })
+          .filter(Boolean);
+        if (urls.length > 0) return urls;
+      }
     } catch { /* fall through */ }
     return stored.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
   }
@@ -61,7 +77,22 @@ export function buildOpencodeAdminRouter(db: Database.Database): Router {
         fail(res, 400, 'VALIDATION_FAILED', 'servers 必須是字串陣列');
         return;
       }
-      const cleaned = servers.map(String).map(s => s.trim()).filter(Boolean);
+      // provider.ts's parseOpenCodeServers expects an array of
+      // OpenCodeServerConfig objects with {id, label, baseUrl, enabled}.
+      // We accept a plain array of URL strings from the client UI and shape
+      // them into the expected format here. Saving as strings used to break
+      // ai-core silently — it fell back to http://localhost:4096 and the chat
+      // call hit ECONNREFUSED inside the pod.
+      const cleaned = servers
+        .map(String)
+        .map(s => s.trim().replace(/\/+$/, ''))
+        .filter(Boolean)
+        .map((baseUrl, index) => ({
+          id: `opencode-${index + 1}`,
+          label: `OpenCode ${index + 1}`,
+          baseUrl,
+          enabled: true,
+        }));
       writeSetting(db, 'opencode_servers', JSON.stringify(cleaned));
     }
     if (textModel !== undefined) {
