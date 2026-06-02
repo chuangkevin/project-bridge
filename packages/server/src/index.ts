@@ -67,7 +67,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/skills', buildSkillsExportRouter(skillDeps));
   app.use('/api/skills', buildSkillsRouter(skillDeps));
   app.use('/api/projects/:id/skills', buildProjectSkillsRouter(skillDeps));
-  app.use('/api/mcp', buildMcpRouter());
+  app.use('/api/mcp', buildMcpRouter(db));
   app.use('/api/plugins', buildPluginsRouter(pluginsRoot));
   app.use('/api/projects/:id/ingest', buildIngestRouter(db, deps.dataDir));
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));

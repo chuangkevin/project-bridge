@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api, getToken, setToken } from '../lib/api';
 import { closeSocket } from '../lib/socket';
 
-interface User { id: string; name: string; email: string; }
+interface User { id: string; name: string; email: string; role?: 'admin' | 'user'; isActive?: boolean; }
 
 interface State {
   user: User | null;
