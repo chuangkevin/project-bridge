@@ -19,6 +19,7 @@ describe('all migrations', () => {
       'annotations',
       'api_bindings',
       'api_key_cooldowns', 'api_key_leases', 'api_key_usage',
+      'architecture_versions',
       'artifacts', 'attachments',
       'components',
       'extracted_facts',

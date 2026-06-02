@@ -30,6 +30,7 @@ import { buildDesignRouter } from './routes/design.js';
 import { buildExportRouter } from './routes/exportRoute.js';
 import { buildAnnotationsRouter } from './routes/annotations.js';
 import { buildApiBindingsRouter } from './routes/apiBindings.js';
+import { buildArchitectureRouter } from './routes/architectureRoute.js';
 import { buildComponentsRouter, buildComponentsSaveRouter } from './routes/components.js';
 import { loadPlugins } from './services/pluginLoader.js';
 import { initMcpRegistry } from './services/mcpRegistry.js';
@@ -82,6 +83,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));
   app.use('/api/projects/:id/artifacts', buildArtifactsRouter(db, deps.dataDir));
   app.use('/api/projects/:id/backup', buildBackupRouter(db, deps.dataDir));
+  app.use('/api/projects/:id/architecture', buildArchitectureRouter(db));
   app.use('/api/projects/:id/annotations', buildAnnotationsRouter(db));
   app.use('/api/projects/:id/api-bindings', buildApiBindingsRouter(db));
   app.use('/api/components', buildComponentsRouter(db));

@@ -34,6 +34,32 @@ export function initSocketServer(httpServer: HttpServer, db: Database.Database):
     socket.on('project:leave', (projectId: string) => {
       if (typeof projectId === 'string') void socket.leave(`project:${projectId}`);
     });
+
+    // ── Cursor presence ────────────────────────────────────────────────────
+    socket.on('cursor:move', (data: { projectId: string; x: number; y: number; userId?: string; color?: string }) => {
+      if (!data || typeof data.projectId !== 'string') return;
+      socket.to(`project:${data.projectId}`).emit('cursor:move', {
+        socketId: socket.id,
+        x: data.x,
+        y: data.y,
+        userId: data.userId,
+        color: data.color ?? '#7c5cbf',
+      });
+    });
+
+    socket.on('cursor:leave', (projectId: string) => {
+      if (typeof projectId !== 'string') return;
+      socket.to(`project:${projectId}`).emit('cursor:leave', { socketId: socket.id });
+    });
+
+    socket.on('disconnect', () => {
+      // Notify all project rooms this socket was in that the cursor is gone
+      for (const room of socket.rooms) {
+        if (room.startsWith('project:')) {
+          socket.to(room).emit('cursor:leave', { socketId: socket.id });
+        }
+      }
+    });
   });
 
   return io;
