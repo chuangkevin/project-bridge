@@ -39,24 +39,15 @@ export function authMiddleware(db: Database.Database) {
 }
 
 /**
- * requireAdmin — gate admin-only Settings operations.
+ * requireAdmin — NO-OP in M1 anonymous mode.
  *
- * Requires a valid admin token (issued by POST /api/auth/verify). Anonymous
- * users get 401. Legacy per-user sessions DO NOT grant admin: only the shared
- * admin token does. This is intentional — M1's admin-password setup is a
- * separate posture from any leftover user accounts.
+ * Per user instruction: zero auth in this product. Settings is wide open like
+ * everything else. The admin-password machinery (services/adminAuth.ts) is
+ * kept for future use but NOT enforced by any route. If the operator later
+ * decides to gate Settings behind a password, swap this middleware back to
+ * checking req.isAdmin.
  */
-export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!req.isAdmin) {
-    res.status(401).json({
-      error: {
-        code: 'ADMIN_REQUIRED',
-        message: '需要管理員密碼',
-        requestId: req.header('X-Request-Id') ?? '',
-      },
-    });
-    return;
-  }
+export function requireAdmin(_req: Request, _res: Response, next: NextFunction): void {
   next();
 }
 
