@@ -68,10 +68,20 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/backup', buildBackupRouter(db, deps.dataDir));
   app.use('/api/settings', buildSettingsAdminRouter(db));
 
-  app.get('/api/health', (_req, res) => {
+  const sendHealth = (_req: express.Request, res: express.Response): void => {
     const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number };
     res.json({ ok: true, db: 'ok', userCount: userCount.n });
-  });
+  };
+  app.get('/api/health', sendHealth);
+  app.get('/health', sendHealth);
+
+  if (process.env.NODE_ENV === 'production') {
+    const clientDist = join(here, '..', '..', 'client', 'dist');
+    app.use(express.static(clientDist));
+    app.get(/^(?!\/api\/|\/socket\.io\/|\/health$).*/, (_req, res) => {
+      res.sendFile(join(clientDist, 'index.html'));
+    });
+  }
 
   return app;
 }

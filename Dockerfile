@@ -4,7 +4,7 @@ FROM node:22-bookworm AS builder
 
 WORKDIR /app
 
-# Native build tools for better-sqlite3 + git for dependencies
+# Native build tools for better-sqlite3 + bcrypt + git for ai-core tarball dependency
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Internal Git Mirror support for company environment
+# Internal Git Mirror support for company environment (Gitea CI)
 ARG INTERNAL_GIT_MIRROR=""
 RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     git config --global url."${INTERNAL_GIT_MIRROR}".insteadOf "https://github.com/H1114/"; \
@@ -23,10 +23,14 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Copy dependency files
+# Copy workspace manifests so pnpm can resolve all workspace packages.
+# Both new M1 packages/* and legacy/packages/* are workspace members per pnpm-workspace.yaml.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
+COPY legacy/packages/server/package.json legacy/packages/server/
+COPY legacy/packages/client/package.json legacy/packages/client/
+COPY legacy/packages/e2e/package.json legacy/packages/e2e/
 
 # Gitea CI cannot reach codeload.github.com; rewrite ai-core tarball URL when mirror is provided.
 RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
@@ -34,70 +38,72 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
     fi
 
-# Install all dependencies for TypeScript compilation
+# Install all dependencies (M1 + legacy workspace members)
 RUN pnpm install --frozen-lockfile
 
-# Copy source
+# Copy M1 source only (legacy is preserved in the repo but NOT built for production)
 COPY packages/server/ packages/server/
 COPY packages/client/ packages/client/
 
-# Build server (TypeScript → dist/)
-RUN pnpm --filter server build
-
-# Build client (Vite → dist/)
-RUN pnpm --filter client build
+# Build M1 server (TypeScript → dist/) and client (Vite → dist/)
+RUN pnpm --filter @designbridge/server build
+RUN pnpm --filter @designbridge/client build
 
 # ── Stage 2: Production ────────────────────────────────────
-# Playwright base image — Ubuntu Noble (glibc), includes Chromium
-FROM mcr.microsoft.com/playwright:v1.58.2-noble
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
 ARG INTERNAL_GIT_MIRROR=""
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Build sharp against distro libvips to avoid linux-x64-v2 prebuilt binary requirement.
+# Native build tools required to rebuild better-sqlite3 + bcrypt against glibc on first install.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     python3 \
-    pkg-config \
-    libvips-dev \
+    make \
+    g++ \
+    git \
+    ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Bake Tesseract OCR language models (best-effort)
-RUN mkdir -p /app/tessdata && \
-    (curl -sL --connect-timeout 10 -o /app/tessdata/eng.traineddata "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata" || true) && \
-    (curl -sL --connect-timeout 10 -o /app/tessdata/chi_tra.traineddata "https://cdn.jsdelivr.net/npm/@tesseract.js-data/chi_tra/4.0.0_best_int/chi_tra.traineddata" || true) && \
-    echo "Tesseract models download attempted"
-ENV TESSDATA_PREFIX=/app/tessdata
-
-# Copy server build output
+# Copy compiled output from builder
 COPY --from=builder /app/packages/server/dist packages/server/dist
 COPY --from=builder /app/packages/server/package.json packages/server/
-COPY --from=builder /app/packages/server/src/db/migrations packages/server/dist/db/migrations
-COPY --from=builder /app/packages/server/src/prompts packages/server/dist/prompts
-COPY --from=builder /app/packages/server/src/assets packages/server/dist/assets
-COPY --from=builder /app/packages/server/data packages/server/data
 
-# Copy client build output
+# Migrations resolved at runtime via defaultMigrationsDir() → join(dist/db, 'migrations').
+COPY --from=builder /app/packages/server/src/db/migrations packages/server/dist/db/migrations
+
+# Built-in skills resolved at runtime via join(dist/.., 'skills', 'builtin').
+COPY --from=builder /app/packages/server/skills packages/server/skills
+
+# Maintenance CLI (VACUUM / WAL checkpoint)
+COPY --from=builder /app/packages/server/scripts packages/server/scripts
+
+# Client static bundle served by the server in production (SPA fallback).
 COPY --from=builder /app/packages/client/dist packages/client/dist
 
-# Fresh install production deps on glibc — no musl/glibc mismatch
+# Workspace manifests for production install. Legacy is included so pnpm can resolve
+# workspace dependencies, but no legacy source is shipped — those packages have no runtime deps.
 COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/.npmrc ./
-COPY --from=builder /app/packages/server/package.json packages/server/
 COPY --from=builder /app/packages/client/package.json packages/client/
+COPY --from=builder /app/legacy/packages/server/package.json legacy/packages/server/
+COPY --from=builder /app/legacy/packages/client/package.json legacy/packages/client/
+COPY --from=builder /app/legacy/packages/e2e/package.json legacy/packages/e2e/
 
-# Keep production install consistent with build stage URL rewrite in company network.
+# Keep production install consistent with build stage URL rewrite for company network.
 RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     MIRROR="${INTERNAL_GIT_MIRROR%/}/"; \
     sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
     fi
 
+# Force native module rebuild from source on the production glibc base.
 RUN npm_config_build_from_source=true pnpm install --frozen-lockfile --prod --reporter=append-only
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3001
+ENV DATA_DIR=/app/packages/server/data
 
 EXPOSE 3001
 
