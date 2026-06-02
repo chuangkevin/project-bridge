@@ -203,7 +203,20 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
 
       sse(res, 'done', { turnId: turn.id });
     } catch (err) {
-      sse(res, 'error', { code: 'INTERNAL_ERROR', message: (err as Error).message });
+      // Node's fetch wraps low-level errors as TypeError('fetch failed') with
+      // the actual reason in err.cause. Surface the full chain so the UI shows
+      // ECONNREFUSED / ENOTFOUND / 404 etc instead of generic "fetch failed".
+      const parts: string[] = [];
+      let cur: unknown = err;
+      while (cur instanceof Error) {
+        parts.push(cur.message);
+        const code = (cur as Error & { code?: string }).code;
+        if (code) parts.push(`(${code})`);
+        cur = (cur as Error & { cause?: unknown }).cause;
+      }
+      const fullMessage = parts.join(' › ') || String(err);
+      console.error('[chat] provider failure:', fullMessage, err);
+      sse(res, 'error', { code: 'INTERNAL_ERROR', message: fullMessage });
     } finally {
       stopSseKeepalive(keepalive);
       res.end();
