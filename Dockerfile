@@ -38,6 +38,11 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
     sed -i -E "s#https://codeload.github.com/kevinsisi/ai-core/tar.gz/([a-f0-9]+)#${MIRROR}ai-core/archive/\\1.tar.gz#g" pnpm-lock.yaml; \
     fi
 
+# Skip Playwright browser download in builder — we only need the Node API,
+# not the Chromium binary, during the TypeScript compile step. The browser
+# is installed separately in the production stage below.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 # Install all dependencies (M1 + legacy workspace members)
 RUN pnpm install --frozen-lockfile
 
@@ -57,7 +62,8 @@ WORKDIR /app
 ARG INTERNAL_GIT_MIRROR=""
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Native build tools required to rebuild better-sqlite3 + bcrypt against glibc on first install.
+# Native build tools + Chromium system deps for Playwright crawler.
+# Chromium is installed here (not in builder) to keep the compile stage lean.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
@@ -65,7 +71,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     curl \
+    chromium \
+    chromium-driver \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
+
+# Tell Playwright to use the system Chromium (already installed above).
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Copy compiled output from builder
 COPY --from=builder /app/packages/server/dist packages/server/dist
