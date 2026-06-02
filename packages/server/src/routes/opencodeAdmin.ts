@@ -83,6 +83,8 @@ export function buildOpencodeAdminRouter(db: Database.Database): Router {
   });
 
   // POST /api/settings/opencode/test — per-server connectivity probe
+  // Uses OpenCode's /provider endpoint (same as legacy v1.5.1). /v1/models
+  // doesn't exist on opencode-server; it returns HTML 404 which broke the test.
   r.post('/test', async (_req: Request, res: Response) => {
     const servers = getServers(db);
     if (servers.length === 0) {
@@ -94,26 +96,35 @@ export function buildOpencodeAdminRouter(db: Database.Database): Router {
       const label = `server-${i + 1}`;
       const t0 = Date.now();
       try {
-        const resp = await fetch(`${url.replace(/\/+$/, '')}/v1/models`, {
+        const resp = await fetch(`${url.replace(/\/+$/, '')}/provider`, {
           method: 'GET',
-          headers: { ...authHeader },
+          headers: { ...authHeader, Accept: 'application/json' },
           signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
         });
         const ok = resp.ok;
+        if (!ok) {
+          return {
+            label, url, ok: false, status: resp.status,
+            elapsedMs: Date.now() - t0,
+            error: `HTTP ${resp.status}`,
+          };
+        }
+        // Verify it actually returned JSON (not nginx HTML error page)
+        const ct = resp.headers.get('content-type') ?? '';
+        if (!ct.toLowerCase().includes('json')) {
+          return {
+            label, url, ok: false, status: resp.status,
+            elapsedMs: Date.now() - t0,
+            error: 'OpenCode 回應不是 JSON（檢查 URL 是否正確）',
+          };
+        }
         return {
-          label,
-          url,
-          ok,
-          status: resp.status,
-          elapsedMs: Date.now() - t0,
-          error: ok ? null : `HTTP ${resp.status}`,
+          label, url, ok: true, status: resp.status,
+          elapsedMs: Date.now() - t0, error: null,
         };
       } catch (err) {
         return {
-          label,
-          url,
-          ok: false,
-          status: 0,
+          label, url, ok: false, status: 0,
           elapsedMs: Date.now() - t0,
           error: (err as Error).message,
         };
@@ -123,30 +134,54 @@ export function buildOpencodeAdminRouter(db: Database.Database): Router {
     res.json({ ok: allOk, results });
   });
 
-  // GET /api/settings/opencode/models — proxy /v1/models from first server
+  // GET /api/settings/opencode/models — fetch model list from first reachable server.
+  // OpenCode exposes models via /provider (NOT /v1/models). Response shape:
+  //   { all: [ { id: 'google', models: { 'gemini-2.5-flash': { name: '...' } } } ] }
+  // We flatten to [{id: '<provider>/<model>', name, provider}] for the UI.
   r.get('/models', async (_req: Request, res: Response) => {
     const servers = getServers(db);
     if (servers.length === 0) {
-      res.json({ models: [] });
+      res.json({ models: [], warning: '尚未設定任何 OpenCode server' });
       return;
     }
     const authHeader = buildAuthHeader(db);
-    try {
-      const resp = await fetch(`${servers[0].replace(/\/+$/, '')}/v1/models`, {
-        method: 'GET',
-        headers: { ...authHeader },
-        signal: AbortSignal.timeout(MODELS_TIMEOUT_MS),
-      });
-      if (!resp.ok) {
-        fail(res, 502, 'UPSTREAM_FAILED', `OpenCode HTTP ${resp.status}`);
+    let lastError: string | null = null;
+    for (const url of servers) {
+      try {
+        const resp = await fetch(`${url.replace(/\/+$/, '')}/provider`, {
+          method: 'GET',
+          headers: { ...authHeader, Accept: 'application/json' },
+          signal: AbortSignal.timeout(MODELS_TIMEOUT_MS),
+        });
+        if (!resp.ok) {
+          lastError = `HTTP ${resp.status} (${url})`;
+          continue;
+        }
+        const ct = resp.headers.get('content-type') ?? '';
+        if (!ct.toLowerCase().includes('json')) {
+          lastError = `OpenCode 回應不是 JSON (${url})`;
+          continue;
+        }
+        const data = await resp.json() as { all?: Array<{ id: string; models?: Record<string, { name?: string }> }> };
+        const providers = Array.isArray(data?.all) ? data.all : [];
+        const models: Array<{ id: string; name: string; provider: string }> = [];
+        for (const p of providers) {
+          const modelsMap = p.models ?? {};
+          for (const [modelId, m] of Object.entries(modelsMap)) {
+            models.push({
+              id: `${p.id}/${modelId}`,
+              name: m?.name ?? modelId,
+              provider: p.id,
+            });
+          }
+        }
+        res.json({ models, sourceServer: url });
         return;
+      } catch (err) {
+        lastError = (err as Error).message;
       }
-      const data = (await resp.json()) as { data?: Array<{ id: string }> };
-      const models = (data.data ?? []).map(m => ({ id: m.id, name: m.id, provider: 'opencode' as const }));
-      res.json({ models });
-    } catch (err) {
-      fail(res, 502, 'UPSTREAM_FAILED', (err as Error).message);
     }
+    fail(res, 502, 'UPSTREAM_FAILED', lastError ?? '無法連接到任何 OpenCode server');
   });
 
   return r;
