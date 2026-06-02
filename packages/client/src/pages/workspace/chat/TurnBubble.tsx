@@ -1,5 +1,7 @@
 import type { Turn } from '../../../hooks/useTurns';
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const PERSONA_LABEL: Record<string, string> = {
   pm: '📋 PM',
@@ -44,7 +46,9 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
             )}
           </>
         )}
-        <div>{turn.aiResponse.text}</div>
+        <div className="bubble__markdown">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.aiResponse.text}</ReactMarkdown>
+        </div>
         {turn.skillsUsed && turn.skillsUsed.length > 0 && (
           <div className="bubble__skills">
             使用技能：{turn.skillsUsed.map((s) => <span key={s}>{s}</span>)}

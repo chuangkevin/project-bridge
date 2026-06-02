@@ -41,7 +41,12 @@ export default function ConsultStage() {
     <div className="chat">
       <div style={{ padding: 'var(--space-2) var(--space-5)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-          <input type="checkbox" checked={councilEnabled} onChange={(e) => setCouncilEnabled(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={councilEnabled}
+            onChange={(e) => setCouncilEnabled(e.target.checked)}
+            style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+          />
           合議模式（PM / Designer / Engineer / Moderator 四方討論）
         </label>
       </div>

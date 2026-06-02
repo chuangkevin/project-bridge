@@ -87,3 +87,24 @@ export function parseArtifactsFromResponse(fullText: string): ExtractedArtifact[
   }
   return out;
 }
+
+/** Fallback: if no `<artifact>` tags found, extract ```vue or ```html code blocks
+ *  and auto-wrap them as vue-sfc artifacts so design mode preview never stays empty. */
+export function parseArtifactsFromResponseWithFallback(fullText: string): ExtractedArtifact[] {
+  const found = parseArtifactsFromResponse(fullText);
+  if (found.length > 0) return found;
+
+  // Fallback: extract ```vue or ```html code blocks as vue-sfc artifacts
+  const codeBlockRe = /```(?:vue|html)\n([\s\S]*?)```/gi;
+  const fallbacks: ExtractedArtifact[] = [];
+  let m;
+  let i = 1;
+  while ((m = codeBlockRe.exec(fullText)) !== null) {
+    fallbacks.push({
+      kind: 'vue-sfc',
+      name: `page-${i++}`,
+      payload: m[1].trim(),
+    });
+  }
+  return fallbacks;
+}

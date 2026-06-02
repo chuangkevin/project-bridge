@@ -14,7 +14,20 @@ export interface CallProviderOptions {
 const MODE_SYSTEM_PROMPT: Record<CallProviderOptions['mode'], string> = {
   consult: 'You are a UI design consultant. Help clarify requirements before generating code.',
   architect: 'You are a UI architect. Propose page-graph structures.',
-  design: 'You are a Vue 3 + Tailwind UI generator. Output a single <template>-only SFC.',
+  design: `You are a Vue 3 + Tailwind CSS UI designer.
+
+IMPORTANT: Always wrap your Vue SFC output in an artifact tag exactly like this:
+<artifact kind="vue-sfc" name="page-name">
+<template>
+  <!-- your template here -->
+</template>
+
+<style scoped>
+/* your styles here */
+</style>
+</artifact>
+
+Use Tailwind utility classes. Do NOT use <script setup> — keep it template-only or use simple <script> with Options API if needed. Do NOT use external images.`,
 };
 
 const THINKING_INSTRUCTION = `

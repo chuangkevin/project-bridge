@@ -197,6 +197,41 @@
 }
 .council-thinking { background: transparent; padding: 0; border: none; max-height: none; }
 
+.bubble__markdown { line-height: 1.6; }
+.bubble__markdown h1, .bubble__markdown h2, .bubble__markdown h3 {
+  color: var(--text-primary); margin: 12px 0 6px; font-weight: 600;
+}
+.bubble__markdown h1 { font-size: 18px; }
+.bubble__markdown h2 { font-size: 15px; }
+.bubble__markdown h3 { font-size: 13px; }
+.bubble__markdown p { margin: 6px 0; }
+.bubble__markdown ul, .bubble__markdown ol { padding-left: 20px; margin: 6px 0; }
+.bubble__markdown li { margin: 3px 0; }
+.bubble__markdown code {
+  background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px;
+  font-family: "Cascadia Code", Consolas, monospace; font-size: 12px;
+  color: var(--text-accent);
+}
+.bubble__markdown pre {
+  background: #0a0f1c; border-radius: var(--radius-md); padding: 12px;
+  overflow-x: auto; margin: 8px 0; position: relative;
+}
+.bubble__markdown pre code {
+  background: none; padding: 0; color: #e2e8f0; font-size: 12px;
+}
+.bubble__markdown table {
+  border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px;
+}
+.bubble__markdown th, .bubble__markdown td {
+  border: 1px solid var(--border-primary); padding: 6px 10px;
+}
+.bubble__markdown th { background: var(--bg-elevated); font-weight: 600; }
+.bubble__markdown a { color: var(--text-accent); text-decoration: underline; }
+.bubble__markdown blockquote {
+  border-left: 3px solid var(--accent); padding-left: 12px;
+  color: var(--text-muted); margin: 8px 0;
+}
+
 .slash-popup {
   position: absolute;
   bottom: calc(100% - 4px);

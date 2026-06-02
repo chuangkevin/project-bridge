@@ -11,7 +11,7 @@ import { appendTurn, type TurnMode } from '../services/turnService.js';
 import { addFact } from '../services/factService.js';
 import { parseFactsFromResponse } from '../services/factExtractor.js';
 import { getAttachment, type Attachment } from '../services/ingestionService.js';
-import { buildSystemPrompt, parseArtifactsFromResponse } from '../services/chatOrchestrator.js';
+import { buildSystemPrompt, parseArtifactsFromResponseWithFallback } from '../services/chatOrchestrator.js';
 import { createArtifact } from '../services/artifactService.js';
 import { runCouncil } from '../services/councilOrchestrator.js';
 
@@ -101,9 +101,9 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         }
 
         const { transcripts, finalAnswer } = stepResult!.value;
-        const answerText = finalAnswer;
+        const answerText = stripThinking(finalAnswer);
         const thinkingText = ['pm', 'designer', 'engineer']
-          .map(p => `### ${p.toUpperCase()}\n${transcripts[p]}`)
+          .map(p => `### ${p.toUpperCase()}\n${stripThinking(transcripts[p] ?? '')}`)
           .join('\n\n');
 
         const turn = appendTurn(db, {
@@ -187,8 +187,8 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       });
       for (const f of facts) addFact(db, { projectId, turnId: turn.id, kind: f.kind, text: f.text });
 
-      // Persist artifacts found in the response
-      const artifactBlocks = parseArtifactsFromResponse(fullText);
+      // Persist artifacts found in the response (fallback extracts ```vue/```html blocks)
+      const artifactBlocks = parseArtifactsFromResponseWithFallback(fullText);
       const artifactsRoot = join(dataDir, 'projects', projectId, 'artifacts');
       for (const block of artifactBlocks) {
         const ext = block.kind === 'vue-sfc' ? 'vue' : 'json';
@@ -224,6 +224,10 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
   });
 
   return r;
+}
+
+function stripThinking(text: string): string {
+  return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
 }
 
 function extractTagText(s: string, tag: string): string {

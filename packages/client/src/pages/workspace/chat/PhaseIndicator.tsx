@@ -1,4 +1,6 @@
 import type { ChatStreamState } from '../../../hooks/useChatStream';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const PHASE_LABEL: Record<string, string> = {
   loading_memory: '讀取專案記憶…',
@@ -56,7 +58,11 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
         {state.thinkingText && (
           <div className="bubble__thinking">{state.thinkingText}</div>
         )}
-        {state.answerText && <div>{state.answerText}</div>}
+        {state.answerText && (
+          <div className="bubble__markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.answerText}</ReactMarkdown>
+          </div>
+        )}
         {state.phase === 'error' && (
           <div style={{ color: '#fca5a5', fontSize: 13, marginTop: 8 }}>錯誤：{state.error}</div>
         )}
