@@ -39,6 +39,7 @@ export default function DesignStage() {
   const [showSource, setShowSource] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [generatingVariants, setGeneratingVariants] = useState(false);
+  const [savingComponent, setSavingComponent] = useState(false);
 
   // 參考網站 crawl panel
   const [showCrawl, setShowCrawl] = useState(false);
@@ -116,6 +117,24 @@ export default function DesignStage() {
     }
   };
 
+  const handleSaveAsComponent = async () => {
+    if (!projectId || !selectedId) return;
+    const name = (window.prompt('元件名稱', '') ?? '').trim();
+    if (!name) return;
+    setSavingComponent(true);
+    try {
+      await api<{ id: string }>(
+        `/api/projects/${projectId}/components/save-from-artifact`,
+        { method: 'POST', body: JSON.stringify({ artifactId: selectedId, name }) }
+      );
+      alert(`已儲存元件「${name}」`);
+    } catch (e) {
+      alert(`儲存失敗：${(e as Error).message}`);
+    } finally {
+      setSavingComponent(false);
+    }
+  };
+
   const filteredTurns = turns.filter((t) => t.mode === 'design');
   const pending = state.phase === 'idle' ? null : { userText: pendingRef.current, state };
 
@@ -180,6 +199,16 @@ export default function DesignStage() {
             title="產生 2 個視覺變體"
           >
             {generatingVariants ? '生成中…' : '✨ 產生變體'}
+          </button>
+        )}
+        {selectedId && (
+          <button
+            className="design__btn"
+            onClick={handleSaveAsComponent}
+            disabled={savingComponent || state.phase !== 'idle'}
+            title="將目前頁面儲存為可重用元件"
+          >
+            {savingComponent ? '儲存中…' : '💾 儲存為元件'}
           </button>
         )}
       </div>

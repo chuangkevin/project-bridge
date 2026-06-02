@@ -27,6 +27,9 @@ import { buildOpencodeAdminRouter } from './routes/opencodeAdmin.js';
 import { buildUsersRouter } from './routes/users.js';
 import { buildCrawlRouter } from './routes/crawl.js';
 import { buildDesignRouter } from './routes/design.js';
+import { buildAnnotationsRouter } from './routes/annotations.js';
+import { buildApiBindingsRouter } from './routes/apiBindings.js';
+import { buildComponentsRouter, buildComponentsSaveRouter } from './routes/components.js';
 import { loadPlugins } from './services/pluginLoader.js';
 import { initMcpRegistry } from './services/mcpRegistry.js';
 
@@ -77,6 +80,10 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));
   app.use('/api/projects/:id/artifacts', buildArtifactsRouter(db, deps.dataDir));
   app.use('/api/projects/:id/backup', buildBackupRouter(db, deps.dataDir));
+  app.use('/api/projects/:id/annotations', buildAnnotationsRouter(db));
+  app.use('/api/projects/:id/api-bindings', buildApiBindingsRouter(db));
+  app.use('/api/components', buildComponentsRouter(db));
+  app.use('/api/projects/:id', buildComponentsSaveRouter(db, deps.dataDir));
   // More-specific settings sub-routes must be mounted BEFORE the generic
   // settingsAdmin router (which handles /api/settings/:key).
   app.use('/api/settings/api-keys', buildApiKeysRouter(db));
