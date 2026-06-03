@@ -17,26 +17,30 @@ jobs:
       - name: Set Image Tag
         run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Build Docker Image
+      - name: Wait for GitHub image to be available on Docker Hub
+        # GitHub Actions builds and pushes to Docker Hub in parallel with this
+        # Gitea workflow. Poll until the image tag appears (max 10 minutes).
         run: |
-          echo "Building image with tag: $IMAGE_TAG and latest"
-          docker build --network=host \
-            --build-arg INTERNAL_GIT_MIRROR="https://gitea.housefun.com.tw/H1114/" \
-            -t srvhpgit1:32050/project-bridge:$IMAGE_TAG \
-            -t srvhpgit1:32050/project-bridge:latest \
-            .
-          echo "BUILD_OK=1" >> $GITHUB_ENV
+          IMAGE="kevin950805/project-bridge:$IMAGE_TAG"
+          echo "Waiting for $IMAGE to be available on Docker Hub..."
+          for i in $(seq 1 30); do
+            if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+              echo "Image available after ${i}0s"
+              exit 0
+            fi
+            echo "  attempt $i/30 — not ready yet, waiting 20s..."
+            sleep 20
+          done
+          echo "WARNING: Image not found after 10 min; will try to pull anyway."
 
-      - name: Diagnose Docker registry access
-        if: always()
+      - name: Pull from Docker Hub and re-tag for internal registry
+        # Re-use the image already built by GitHub Actions instead of
+        # rebuilding from source. This is faster and avoids Gitea runner
+        # environment issues (disk, network, playwright download, etc.)
         run: |
-          echo "=== Docker info ==="
-          docker info 2>&1 | grep -i "registry\|insecure\|config" || true
-          echo "=== Registry ping ==="
-          curl -v --max-time 5 http://srvhpgit1:32050/v2/ 2>&1 | head -30 || echo "registry unreachable"
-          echo "=== Docker config ==="
-          cat ~/.docker/config.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(list(d.get('auths',{}).keys()))" 2>/dev/null || echo "no docker config"
-          echo "BUILD_OK=$BUILD_OK"
+          docker pull kevin950805/project-bridge:$IMAGE_TAG
+          docker tag kevin950805/project-bridge:$IMAGE_TAG srvhpgit1:32050/project-bridge:$IMAGE_TAG
+          docker tag kevin950805/project-bridge:$IMAGE_TAG srvhpgit1:32050/project-bridge:latest
 
       - name: Push to Internal Registry
         run: |
@@ -53,6 +57,7 @@ jobs:
         run: |
           docker rmi -f srvhpgit1:32050/project-bridge:$IMAGE_TAG || true
           docker rmi -f srvhpgit1:32050/project-bridge:latest || true
+          docker rmi -f kevin950805/project-bridge:$IMAGE_TAG || true
 
   deploy:
     runs-on: ubuntu-latest
@@ -73,13 +78,8 @@ jobs:
           cd argo-app
           git config user.email "gitea-actions@gitea.local"
           git config user.name "Gitea Bot"
-          # ArgoCD treats this app as Directory source (no kustomize render), so
-          # editing kustomization.yaml alone never changes the rendered manifest.
-          # Update deployment.yaml directly — both the image tag and the deploy
-          # annotation — to guarantee a template diff and trigger a rollout.
           sed -i "s|image: srvhpgit1:32050/project-bridge:.*|image: srvhpgit1:32050/project-bridge:$IMAGE_TAG|" project-bridge/deployment.yaml
           sed -i "s|deploy.gitea/sha: \".*\"|deploy.gitea/sha: \"$IMAGE_TAG\"|" project-bridge/deployment.yaml
-          # Keep kustomization in sync for visibility / future kustomize mode.
           sed -i "s|newTag: .*|newTag: $IMAGE_TAG|" project-bridge/kustomization.yaml
           git add project-bridge/deployment.yaml project-bridge/kustomization.yaml
           git commit -m "Update project-bridge image tag to $IMAGE_TAG" || echo "No changes"
@@ -92,7 +92,6 @@ jobs:
             ARGOCD_IP=$(dig +short srvhpgit1 @10.43.0.10 || echo "")
           fi
           if [ -z "$ARGOCD_IP" ]; then
-            echo "WARNING: Cannot resolve srvhpgit1, trying nslookup..."
             ARGOCD_IP=$(nslookup srvhpgit1 10.43.0.10 2>/dev/null | grep -A1 'Name:' | grep 'Address:' | awk '{print $2}' || echo "")
           fi
           echo "Resolved srvhpgit1 to: $ARGOCD_IP"
