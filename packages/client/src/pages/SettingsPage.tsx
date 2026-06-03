@@ -5,11 +5,12 @@ import McpTab from './settings/McpTab';
 import SkillsTab from './settings/SkillsTab';
 import UsersTab from './settings/UsersTab';
 import AboutTab from './settings/AboutTab';
+import PresetsTab from './settings/PresetsTab';
 
-type Tab = 'providers' | 'mcp' | 'skills' | 'users' | 'about';
+type Tab = 'providers' | 'mcp' | 'skills' | 'users' | 'about' | 'presets';
 
 const TAB_STORAGE_KEY = 'designbridge.settings.tab';
-const VALID_TABS: Tab[] = ['providers', 'mcp', 'skills', 'users', 'about'];
+const VALID_TABS: Tab[] = ['providers', 'mcp', 'skills', 'users', 'about', 'presets'];
 
 function readInitialTab(): Tab {
   const fromHash = window.location.hash.replace('#', '') as Tab;
@@ -49,6 +50,7 @@ export default function SettingsPage() {
         <button className="settings__tab" aria-pressed={tab === 'skills'} onClick={() => setTab('skills')}>技能庫</button>
         <button className="settings__tab" aria-pressed={tab === 'users'} onClick={() => setTab('users')}>使用者</button>
         <button className="settings__tab" aria-pressed={tab === 'about'} onClick={() => setTab('about')}>關於</button>
+        <button className="settings__tab" aria-pressed={tab === 'presets'} onClick={() => setTab('presets')}>設計預設</button>
       </nav>
       <div className="settings__body">
         {tab === 'providers' && <ProvidersTab />}
@@ -56,6 +58,7 @@ export default function SettingsPage() {
         {tab === 'skills' && <SkillsTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'about' && <AboutTab />}
+        {tab === 'presets' && <PresetsTab />}
       </div>
     </div>
   );

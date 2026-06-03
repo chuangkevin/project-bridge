@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import ProjectsPage from './pages/ProjectsPage';
 import WorkspacePage from './pages/WorkspacePage';
 import SettingsPage from './pages/SettingsPage';
+import GlobalDesignPage from './pages/GlobalDesignPage';
+import SharePage from './pages/SharePage';
 import { useViewportHeight } from './hooks/useViewportHeight';
 
 /**
@@ -19,6 +21,8 @@ export default function App() {
       <Route path="/projects" element={<ProjectsPage />} />
       <Route path="/projects/:id" element={<WorkspacePage />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/global-design" element={<GlobalDesignPage />} />
+      <Route path="/share/:token" element={<SharePage />} />
       <Route path="*" element={<Navigate to="/projects" replace />} />
     </Routes>
   );

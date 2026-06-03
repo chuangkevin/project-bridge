@@ -12,6 +12,7 @@ import SfcSourceViewer from './design/SfcSourceViewer';
 import ArtifactPicker from './design/ArtifactPicker';
 import AnnotationsPanel from './design/AnnotationsPanel';
 import ApiBindingsPanel from './design/ApiBindingsPanel';
+import VersionHistoryModal from './design/VersionHistoryModal';
 
 interface QualityScore {
   overall: number;
@@ -55,6 +56,7 @@ export default function DesignStage() {
   const [savingComponent, setSavingComponent] = useState(false);
   const [qualityScore, setQualityScore] = useState<QualityScore | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   // 參考網站 crawl panel
   const [showCrawl, setShowCrawl] = useState(false);
@@ -297,6 +299,15 @@ export default function DesignStage() {
             {exporting ? '匯出中…' : '📦 匯出'}
           </button>
         )}
+        {selectedId && (
+          <button
+            className="design__btn"
+            onClick={() => setShowVersionHistory(true)}
+            title="查看版本歷史"
+          >
+            ⏱ 版本
+          </button>
+        )}
         {qualityScore && (
           <span
             title={`設計:${qualityScore.design} 響應:${qualityScore.responsive} 一致性:${qualityScore.consistency} 無障礙:${qualityScore.accessibility}\n${qualityScore.summary}`}
@@ -445,6 +456,15 @@ export default function DesignStage() {
           onSend={handleSend}
         />
       </div>
+
+      {showVersionHistory && projectId && selectedId && (
+        <VersionHistoryModal
+          projectId={projectId}
+          artifactId={selectedId}
+          onClose={() => setShowVersionHistory(false)}
+          onSelect={(id) => { setSelectedId(id); setShowVersionHistory(false); }}
+        />
+      )}
     </div>
   );
 }

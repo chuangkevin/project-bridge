@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useWorkspaceStore, type Mode } from '../../stores/useWorkspaceStore';
+import { api } from '../../lib/api';
 
 const MODE_LABELS: Record<Mode, string> = {
   consult: '顧問',
@@ -8,7 +10,28 @@ const MODE_LABELS: Record<Mode, string> = {
 };
 
 export default function TopBar({ projectName }: { projectName: string }) {
-  const { mode, setMode, setMobileRailOpen } = useWorkspaceStore();
+  const { mode, setMode, setMobileRailOpen, projectId } = useWorkspaceStore();
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = async () => {
+    if (!projectId) return;
+    setSharing(true);
+    setShareMsg(null);
+    try {
+      const r = await api<{ shareToken: string; shareUrl: string }>(
+        `/api/projects/${projectId}/share-token`,
+        { method: 'POST' }
+      );
+      await navigator.clipboard.writeText(r.shareUrl);
+      setShareMsg('已複製連結');
+    } catch {
+      setShareMsg('複製失敗');
+    } finally {
+      setSharing(false);
+      setTimeout(() => setShareMsg(null), 2500);
+    }
+  };
 
   return (
     <header className="workspace__top">
@@ -43,6 +66,44 @@ export default function TopBar({ projectName }: { projectName: string }) {
         ))}
       </select>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+          <button
+            onClick={handleShare}
+            disabled={sharing || !projectId}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border-primary)',
+              color: 'var(--text-secondary)',
+              fontSize: 12,
+              padding: '3px 10px',
+              borderRadius: 6,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            title="產生分享連結並複製到剪貼板"
+          >
+            {sharing ? '…' : '分享 🔗'}
+          </button>
+          {shareMsg && (
+            <span style={{
+              position: 'absolute',
+              top: '110%',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 6,
+              padding: '3px 10px',
+              fontSize: 11,
+              color: 'var(--text-secondary)',
+              whiteSpace: 'nowrap',
+              zIndex: 100,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            }}>
+              {shareMsg}
+            </span>
+          )}
+        </div>
         <span style={{ color: 'var(--text-muted)', fontSize: 10, opacity: 0.6, letterSpacing: '0.03em' }}>v2.0</span>
         <Link to="/settings" style={{ color: 'var(--text-muted)', fontSize: 13 }}>設定</Link>
       </div>

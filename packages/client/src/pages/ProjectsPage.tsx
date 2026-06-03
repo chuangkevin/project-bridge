@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useProjectsStore } from '../stores/useProjectsStore';
 
 export default function ProjectsPage() {
@@ -38,6 +38,13 @@ export default function ProjectsPage() {
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 style={{ margin: 0 }}>專案</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Link
+            to="/global-design"
+            style={{ ...iconBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, padding: '6px 12px' }}
+            title="全域設計設定"
+          >
+            🌐 全域設計
+          </Link>
           <button
             onClick={() => navigate('/settings')}
             style={iconBtn}

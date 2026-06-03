@@ -32,6 +32,9 @@ import { buildAnnotationsRouter } from './routes/annotations.js';
 import { buildApiBindingsRouter } from './routes/apiBindings.js';
 import { buildArchitectureRouter } from './routes/architectureRoute.js';
 import { buildComponentsRouter, buildComponentsSaveRouter } from './routes/components.js';
+import { buildGlobalDesignRouter } from './routes/globalDesign.js';
+import { buildShareRouter, buildShareTokenRouter } from './routes/share.js';
+import { buildDesignPresetsRouter } from './routes/designPresets.js';
 import { loadPlugins } from './services/pluginLoader.js';
 import { initMcpRegistry } from './services/mcpRegistry.js';
 
@@ -88,6 +91,10 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/api-bindings', buildApiBindingsRouter(db));
   app.use('/api/components', buildComponentsRouter(db));
   app.use('/api/projects/:id', buildComponentsSaveRouter(db, deps.dataDir));
+  app.use('/api/global-design', buildGlobalDesignRouter(db));
+  app.use('/api/share', buildShareRouter(db));
+  app.use('/api/projects/:id/share-token', buildShareTokenRouter(db));
+  app.use('/api/design-presets', buildDesignPresetsRouter(db));
   // More-specific settings sub-routes must be mounted BEFORE the generic
   // settingsAdmin router (which handles /api/settings/:key).
   app.use('/api/settings/api-keys', buildApiKeysRouter(db));
