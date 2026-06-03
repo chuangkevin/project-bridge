@@ -14,15 +14,17 @@ export default function ConsultStage() {
   const { state, send, reset } = useChatStream();
 
   useSocketSync(projectId, { onTurn: refresh });
+  // Council mode defaults to ON. Only persists OFF if user explicitly turns it off.
   const [councilEnabled, setCouncilEnabled] = useState(() => {
-    if (!projectId) return false;
-    return localStorage.getItem(COUNCIL_KEY(projectId)) === 'true';
+    if (!projectId) return true;
+    const saved = localStorage.getItem(COUNCIL_KEY(projectId));
+    return saved === null ? true : saved === 'true';
   });
 
   useEffect(() => {
     if (!projectId) return;
     const saved = localStorage.getItem(COUNCIL_KEY(projectId));
-    setCouncilEnabled(saved === 'true');
+    setCouncilEnabled(saved === null ? true : saved === 'true');
   }, [projectId]);
 
   const handleCouncilChange = (val: boolean) => {
