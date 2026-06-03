@@ -17,30 +17,14 @@ jobs:
       - name: Set Image Tag
         run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Wait for GitHub image to be available on Docker Hub
-        # GitHub Actions builds and pushes to Docker Hub in parallel with this
-        # Gitea workflow. Poll until the image tag appears (max 10 minutes).
+      - name: Build Docker Image
         run: |
-          IMAGE="kevin950805/project-bridge:$IMAGE_TAG"
-          echo "Waiting for $IMAGE to be available on Docker Hub..."
-          for i in $(seq 1 30); do
-            if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-              echo "Image available after ${i}0s"
-              exit 0
-            fi
-            echo "  attempt $i/30 — not ready yet, waiting 20s..."
-            sleep 20
-          done
-          echo "WARNING: Image not found after 10 min; will try to pull anyway."
-
-      - name: Pull from Docker Hub and re-tag for internal registry
-        # Re-use the image already built by GitHub Actions instead of
-        # rebuilding from source. This is faster and avoids Gitea runner
-        # environment issues (disk, network, playwright download, etc.)
-        run: |
-          docker pull kevin950805/project-bridge:$IMAGE_TAG
-          docker tag kevin950805/project-bridge:$IMAGE_TAG srvhpgit1:32050/project-bridge:$IMAGE_TAG
-          docker tag kevin950805/project-bridge:$IMAGE_TAG srvhpgit1:32050/project-bridge:latest
+          echo "Building image with tag: $IMAGE_TAG and latest"
+          docker build --network=host \
+            --build-arg INTERNAL_GIT_MIRROR="https://gitea.housefun.com.tw/H1114/" \
+            -t srvhpgit1:32050/project-bridge:$IMAGE_TAG \
+            -t srvhpgit1:32050/project-bridge:latest \
+            .
 
       - name: Push to Internal Registry
         run: |
@@ -57,7 +41,6 @@ jobs:
         run: |
           docker rmi -f srvhpgit1:32050/project-bridge:$IMAGE_TAG || true
           docker rmi -f srvhpgit1:32050/project-bridge:latest || true
-          docker rmi -f kevin950805/project-bridge:$IMAGE_TAG || true
 
   deploy:
     runs-on: ubuntu-latest
