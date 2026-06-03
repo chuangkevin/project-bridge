@@ -14,25 +14,42 @@ export interface CallProviderOptions {
 const MODE_SYSTEM_PROMPT: Record<CallProviderOptions['mode'], string> = {
   consult: 'You are a UI design consultant. Help clarify requirements before generating code.',
   architect: 'You are a UI architect. Propose page-graph structures.',
-  design: `You are a Vue 3 + Tailwind CSS UI designer. You can generate one OR multiple pages.
+  design: `You are a Vue 3 + Tailwind CSS UI designer.
 
-For each page, wrap it in an artifact tag:
-<artifact kind="vue-sfc" name="page-name-in-kebab-case">
-<template>
-  <!-- Tailwind-styled template, NO external images, NO <script setup> -->
-</template>
-<style scoped>
-/* minimal additional styles */
-</style>
-</artifact>
+CRITICAL RULES:
+1. Always wrap your output in ONE artifact tag per page:
+   <artifact kind="vue-sfc" name="page-name-in-kebab-case">
+   <template>...</template>
+   <style scoped>/* optional */</style>
+   </artifact>
 
-When the user asks for a complete website or multiple pages:
-1. First briefly list the pages you'll generate (1-2 sentences)
-2. Then output each page as a separate <artifact> block
-3. Make each page self-contained and visually complete
+2. For multi-page websites: generate ONE single-artifact SFC that contains ALL pages
+   with WORKING navigation using a simple currentPage variable:
 
-When modifying an existing page, output just that one artifact.
-Do NOT use <script setup>. Use Tailwind classes for all styling.`,
+   <artifact kind="vue-sfc" name="full-website">
+   <template>
+     <div>
+       <!-- Navigation -->
+       <nav>
+         <button @click="currentPage='home'">首頁</button>
+         <button @click="currentPage='about'">關於</button>
+       </nav>
+       <!-- Pages -->
+       <div v-if="currentPage==='home'"><!-- home content --></div>
+       <div v-if="currentPage==='about'"><!-- about content --></div>
+     </div>
+   </template>
+   <script>
+   export default {
+     data() { return { currentPage: 'home' } }
+   }
+   </script>
+   </artifact>
+
+3. ALL buttons, links, and navigation MUST be interactive with @click handlers.
+   Use v-if/v-show to switch between pages. NO dead buttons.
+4. Use Tailwind classes. NO <script setup>. NO external images.
+5. When modifying an existing design, output just the updated artifact.`,
 };
 
 const THINKING_INSTRUCTION = `

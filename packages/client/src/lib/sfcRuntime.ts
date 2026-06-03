@@ -76,11 +76,18 @@ export function buildSfcIframeSrc(sfc: string): string {
 </script>
 <script>
 (function() {
-  // Intercept ALL anchor clicks to prevent iframe links from navigating
-  // the parent window. The preview is display-only — links should not work.
+  // Only block anchors that would navigate the PARENT window away from the app.
+  // - Allow: #hash, javascript:, same-document
+  // - Block: absolute URLs (/path, http://, https://) that would reload parent
   document.addEventListener('click', function(e) {
     var anchor = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-    if (anchor) { e.preventDefault(); e.stopPropagation(); return; }
+    if (!anchor) return;
+    var href = anchor.getAttribute('href') || '';
+    // Allow in-page anchors and void links
+    if (!href || href === '#' || href.startsWith('#') || href.startsWith('javascript:')) return;
+    // Block anything that would cause a full navigation
+    e.preventDefault();
+    e.stopPropagation();
   }, true);
 
   // Bridge mode for annotation / quick-regen interaction
