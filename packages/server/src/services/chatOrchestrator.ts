@@ -88,23 +88,36 @@ export function parseArtifactsFromResponse(fullText: string): ExtractedArtifact[
   return out;
 }
 
-/** Fallback: if no `<artifact>` tags found, extract ```vue or ```html code blocks
- *  and auto-wrap them as vue-sfc artifacts so design mode preview never stays empty. */
+/** Fallback: if no `<artifact>` tags found, extract code blocks as vue-sfc artifacts
+ *  so design mode preview never stays empty even when the AI ignores the <artifact> instruction.
+ *
+ *  Handles all common AI output patterns:
+ *  - ```vue\n...\n```
+ *  - ```html\n...\n```
+ *  - ```\n...\n```  (no language specifier, if content has <template>)
+ *  - Windows \r\n line endings
+ *  - Uppercase language tags (```Vue, ```HTML)
+ */
 export function parseArtifactsFromResponseWithFallback(fullText: string): ExtractedArtifact[] {
   const found = parseArtifactsFromResponse(fullText);
   if (found.length > 0) return found;
 
-  // Fallback: extract ```vue or ```html code blocks as vue-sfc artifacts
-  const codeBlockRe = /```(?:vue|html)\n([\s\S]*?)```/gi;
+  // Match any code block: ``` + optional language + optional spaces + newline
+  // Use \r?\n to handle both Unix and Windows line endings
+  const codeBlockRe = /```(?:[a-zA-Z0-9]*)\r?\n([\s\S]*?)```/gi;
   const fallbacks: ExtractedArtifact[] = [];
   let m;
   let i = 1;
   while ((m = codeBlockRe.exec(fullText)) !== null) {
-    fallbacks.push({
-      kind: 'vue-sfc',
-      name: `page-${i++}`,
-      payload: m[1].trim(),
-    });
+    const content = m[1].trim();
+    // Only treat as a Vue SFC if it contains <template> or looks like HTML
+    if (content.includes('<template>') || content.includes('<html') || content.includes('<div')) {
+      fallbacks.push({
+        kind: 'vue-sfc',
+        name: `page-${i++}`,
+        payload: content,
+      });
+    }
   }
   return fallbacks;
 }

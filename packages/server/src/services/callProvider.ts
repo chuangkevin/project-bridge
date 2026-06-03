@@ -56,7 +56,11 @@ export async function* callProvider(opts: CallProviderOptions): AsyncIterable<st
   const provider = getProvider();
   const baseSystem = MODE_SYSTEM_PROMPT[opts.mode];
   const userSystem = opts.systemInstruction ?? '';
-  const systemInstruction = [baseSystem, userSystem, THINKING_INSTRUCTION].filter(Boolean).join('\n\n');
+  // Design mode: skip the thinking instruction — the AI should focus on generating
+  // the artifact directly. Thinking in design mode causes the UI to show "推理中..."
+  // for a long time before the artifact appears, which looks broken.
+  const thinkingInstr = opts.mode === 'design' ? '' : THINKING_INSTRUCTION;
+  const systemInstruction = [baseSystem, userSystem, thinkingInstr].filter(Boolean).join('\n\n');
 
   const params: GenerateParams = {
     model: resolveModel(opts.model),
