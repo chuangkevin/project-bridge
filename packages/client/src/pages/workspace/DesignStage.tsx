@@ -58,11 +58,26 @@ export default function DesignStage() {
   const [exporting, setExporting] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
+  // Bridge interaction state
+  const [bridgeMode, setBridgeMode] = useState<'browse' | 'annotate' | 'regen'>('browse');
+  const [bridgeClick, setBridgeClick] = useState<{selector:string;tag:string;text:string;x:number;y:number}|null>(null);
+  const [regenInstruction, setRegenInstruction] = useState('');
+  const [regenning, setRegenning] = useState(false);
+
   // 參考網站 crawl panel
   const [showCrawl, setShowCrawl] = useState(false);
   const [crawlUrl, setCrawlUrl] = useState('');
   const [crawling, setCrawling] = useState(false);
   const [crawlResult, setCrawlResult] = useState<CrawlResult | null>(null);
+
+  // Bridge click listener
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'bridge-click') setBridgeClick(e.data);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   const handleCrawl = async () => {
     if (!crawlUrl || !projectId) return;
@@ -308,6 +323,18 @@ export default function DesignStage() {
             ⏱ 版本
           </button>
         )}
+        {selectedId && (
+          <>
+            <button className="design__btn" onClick={() => setBridgeMode(m => m === 'annotate' ? 'browse' : 'annotate')}
+              style={{ background: bridgeMode === 'annotate' ? 'var(--accent-glass)' : undefined }}>
+              🖊 標註
+            </button>
+            <button className="design__btn" onClick={() => setBridgeMode(m => m === 'regen' ? 'browse' : 'regen')}
+              style={{ background: bridgeMode === 'regen' ? 'var(--accent-glass)' : undefined }}>
+              ⚡ 重生成
+            </button>
+          </>
+        )}
         {qualityScore && (
           <span
             title={`設計:${qualityScore.design} 響應:${qualityScore.responsive} 一致性:${qualityScore.consistency} 無障礙:${qualityScore.accessibility}\n${qualityScore.summary}`}
@@ -421,7 +448,7 @@ export default function DesignStage() {
       <div className="design__split">
         <div className="design__preview">
           {sfcSource
-            ? <VueSfcPreview sfc={sfcSource} key={selectedId} />
+            ? <VueSfcPreview sfc={sfcSource} key={selectedId} bridgeMode={bridgeMode} />
             : (
               <div className="design__empty">
                 {artifacts.length === 0
@@ -465,8 +492,97 @@ export default function DesignStage() {
           onSelect={(id) => { setSelectedId(id); setShowVersionHistory(false); }}
         />
       )}
+
+      {bridgeClick && (
+        <>
+          {/* Dismiss overlay */}
+          <div style={{position:'fixed',inset:0,zIndex:999}} onClick={()=>{setBridgeClick(null);setBridgeMode('browse');}} />
+          <div style={{
+            position:'fixed', left:bridgeClick.x, top:bridgeClick.y,
+            transform:'translateX(-50%)', zIndex:1000, minWidth:240,
+            background:'var(--bg-card)', border:'1px solid var(--border-accent)',
+            borderRadius:8, padding:12, boxShadow:'var(--glass-shadow)',
+          }}>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:8}}>
+              選取：{bridgeClick.tag}{bridgeClick.text ? ` · ${bridgeClick.text}` : ` · ${bridgeClick.selector}`}
+            </div>
+            {bridgeMode === 'annotate' ? (
+              <AnnotateQuickForm
+                projectId={projectId!} bridgeId={bridgeClick.selector}
+                onDone={() => { setBridgeClick(null); setBridgeMode('browse'); }}
+              />
+            ) : (
+              <RegenQuickForm
+                instruction={regenInstruction} onChange={setRegenInstruction}
+                loading={regenning}
+                onSubmit={async () => {
+                  if (!projectId || !selectedId) return;
+                  setRegenning(true);
+                  try {
+                    const r = await fetch(`/api/projects/${projectId}/quick-regen`, {
+                      method:'POST', headers:{'Content-Type':'application/json'},
+                      body: JSON.stringify({ artifactId: selectedId, bridgeSelector: bridgeClick.selector, instruction: regenInstruction }),
+                    });
+                    const data = await r.json();
+                    if (data.ok) { await refreshArtifacts(); setSelectedId(data.artifactId); }
+                  } finally {
+                    setRegenning(false); setBridgeClick(null); setRegenInstruction(''); setBridgeMode('browse');
+                  }
+                }}
+                onCancel={() => { setBridgeClick(null); setBridgeMode('browse'); }}
+              />
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 const pendingRef = { current: '' };
+
+function AnnotateQuickForm({ projectId, bridgeId, onDone }: { projectId:string; bridgeId:string; onDone:()=>void }) {
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const handleSave = async () => {
+    if (!content.trim()) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/projects/${projectId}/annotations`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ bridgeId, content, label: bridgeId }),
+      });
+      onDone();
+    } finally { setSaving(false); }
+  };
+  return (
+    <div>
+      <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="標註內容…" rows={3}
+        style={{width:'100%',background:'var(--bg-input)',border:'1px solid var(--border-primary)',color:'var(--text-primary)',padding:6,borderRadius:4,fontSize:12,resize:'vertical'}} />
+      <div style={{display:'flex',gap:6,marginTop:6,justifyContent:'flex-end'}}>
+        <button className="design__btn" onClick={onDone}>取消</button>
+        <button className="design__btn" onClick={handleSave} disabled={saving||!content.trim()}
+          style={{background:'var(--accent)',color:'white',border:'none'}}>
+          {saving?'儲存中…':'新增標註'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RegenQuickForm({ instruction, onChange, loading, onSubmit, onCancel }:
+  { instruction:string; onChange:(v:string)=>void; loading:boolean; onSubmit:()=>void; onCancel:()=>void }) {
+  return (
+    <div>
+      <textarea value={instruction} onChange={e=>onChange(e.target.value)} placeholder="描述要怎麼修改這個元素…" rows={3}
+        style={{width:'100%',background:'var(--bg-input)',border:'1px solid var(--border-primary)',color:'var(--text-primary)',padding:6,borderRadius:4,fontSize:12,resize:'vertical'}} />
+      <div style={{display:'flex',gap:6,marginTop:6,justifyContent:'flex-end'}}>
+        <button className="design__btn" onClick={onCancel}>取消</button>
+        <button className="design__btn" onClick={onSubmit} disabled={loading||!instruction.trim()}
+          style={{background:'var(--accent)',color:'white',border:'none'}}>
+          {loading?'生成中…':'⚡ 重新生成'}
+        </button>
+      </div>
+    </div>
+  );
+}

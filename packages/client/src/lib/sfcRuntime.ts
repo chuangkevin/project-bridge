@@ -74,6 +74,26 @@ export function buildSfcIframeSrc(sfc: string): string {
   }
 })();
 </script>
+<script>
+(function() {
+  let _bm = 'browse';
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'set-bridge-mode') {
+      _bm = e.data.mode;
+      document.body.style.cursor = _bm !== 'browse' ? 'crosshair' : '';
+    }
+  });
+  document.addEventListener('click', function(e) {
+    if (_bm === 'browse') return;
+    e.preventDefault(); e.stopPropagation();
+    var el = e.target, tag = el.tagName.toLowerCase();
+    var id = el.id, cls = Array.from(el.classList||[]).slice(0,3).join('.');
+    var selector = id ? '#'+id : cls ? '.'+cls : tag;
+    var text = (el.textContent||'').trim().slice(0,40);
+    window.parent.postMessage({type:'bridge-click',mode:_bm,selector:selector,tag:tag,text:text,x:e.clientX,y:e.clientY},'*');
+  }, true);
+})();
+</script>
 </body>
 </html>`;
 }

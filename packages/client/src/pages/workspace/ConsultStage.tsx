@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
@@ -6,13 +6,29 @@ import { useSocketSync } from '../../hooks/useSocketSync';
 import Transcript from './chat/Transcript';
 import Composer from './chat/Composer';
 
+const COUNCIL_KEY = (pid: string) => `designbridge.council_enabled.${pid}`;
+
 export default function ConsultStage() {
   const { projectId } = useWorkspaceStore();
   const { turns, refresh } = useTurns(projectId);
   const { state, send, reset } = useChatStream();
 
   useSocketSync(projectId, { onTurn: refresh });
-  const [councilEnabled, setCouncilEnabled] = useState(false);
+  const [councilEnabled, setCouncilEnabled] = useState(() => {
+    if (!projectId) return false;
+    return localStorage.getItem(COUNCIL_KEY(projectId)) === 'true';
+  });
+
+  useEffect(() => {
+    if (!projectId) return;
+    const saved = localStorage.getItem(COUNCIL_KEY(projectId));
+    setCouncilEnabled(saved === 'true');
+  }, [projectId]);
+
+  const handleCouncilChange = (val: boolean) => {
+    setCouncilEnabled(val);
+    if (projectId) localStorage.setItem(COUNCIL_KEY(projectId), String(val));
+  };
 
   const pending = useMemo(() => {
     if (state.phase === 'idle') return null;
@@ -44,7 +60,7 @@ export default function ConsultStage() {
         <button
           role="switch"
           aria-checked={councilEnabled}
-          onClick={() => setCouncilEnabled(v => !v)}
+          onClick={() => handleCouncilChange(!councilEnabled)}
           style={{
             position: 'relative',
             display: 'inline-flex',
@@ -71,7 +87,7 @@ export default function ConsultStage() {
             boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
           }} />
         </button>
-        <span style={{ fontSize: 12, color: councilEnabled ? 'var(--text-accent)' : 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }} onClick={() => setCouncilEnabled(v => !v)}>
+        <span style={{ fontSize: 12, color: councilEnabled ? 'var(--text-accent)' : 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleCouncilChange(!councilEnabled)}>
           合議模式（PM / Designer / Engineer / Moderator 四方討論）
         </span>
       </div>

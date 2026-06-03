@@ -35,6 +35,7 @@ import { buildComponentsRouter, buildComponentsSaveRouter } from './routes/compo
 import { buildGlobalDesignRouter } from './routes/globalDesign.js';
 import { buildShareRouter, buildShareTokenRouter } from './routes/share.js';
 import { buildDesignPresetsRouter } from './routes/designPresets.js';
+import { buildQuickRegenRouter } from './routes/quickRegen.js';
 import { loadPlugins } from './services/pluginLoader.js';
 import { initMcpRegistry } from './services/mcpRegistry.js';
 
@@ -82,6 +83,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/projects/:id/ingest', buildIngestRouter(db, deps.dataDir));
   app.use('/api/projects/:id', buildCrawlRouter(db, deps.dataDir));
   app.use('/api/projects/:id', buildDesignRouter(db, deps.dataDir));
+  app.use('/api/projects/:id', buildQuickRegenRouter(db, deps.dataDir));
   app.use('/api/projects/:id', buildExportRouter(db, deps.dataDir));
   app.use('/api/projects/:id/chat', buildChatRouter(db, deps.dataDir));
   app.use('/api/projects/:id/artifacts', buildArtifactsRouter(db, deps.dataDir));
