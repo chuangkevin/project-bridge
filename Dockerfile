@@ -62,8 +62,11 @@ WORKDIR /app
 ARG INTERNAL_GIT_MIRROR=""
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Native build tools + Chromium system deps for Playwright crawler.
-# Chromium is installed here (not in builder) to keep the compile stage lean.
+# Native build tools required to rebuild better-sqlite3 + bcrypt against glibc.
+# We do NOT install Chromium via apt here — Playwright will download its own
+# Chromium bundle during `pnpm install --prod` below (postinstall script).
+# This is more reliable than apt-get on slim images and works offline on
+# Gitea CI runners where the Debian repos may be unreachable.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
@@ -71,8 +74,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     curl \
-    chromium \
-    chromium-driver \
     libnss3 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
@@ -86,10 +87,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
-
-# Tell Playwright to use the system Chromium (already installed above).
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Copy compiled output from builder
 COPY --from=builder /app/packages/server/dist packages/server/dist

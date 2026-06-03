@@ -5,7 +5,10 @@
  * aggregateStyles(results) — merges multiple CrawledStyles into a single AggregatedDesignSystem
  * getBrowser()             — singleton browser instance (headless Chromium)
  */
-import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+// playwright is imported lazily inside getBrowser() so a missing chromium
+// executable does NOT crash the server on startup. The crawler endpoints
+// return an error gracefully when the browser isn't available.
+import type { Browser, BrowserContextOptions, Page } from 'playwright';
 
 export interface CrawledStyles {
   url: string;
@@ -87,6 +90,9 @@ export function looksForbiddenHtml(html: string): boolean {
 
 export async function getBrowser(): Promise<Browser> {
   if (!browserInstance || !browserInstance.isConnected()) {
+    // Dynamic import keeps playwright off the top-level import chain so a
+    // missing chromium binary does not prevent the server from booting.
+    const { chromium } = await import('playwright');
     browserInstance = await chromium.launch({
       headless: true,
       args: [
