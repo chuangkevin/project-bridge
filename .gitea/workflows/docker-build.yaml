@@ -25,6 +25,18 @@ jobs:
             -t srvhpgit1:32050/project-bridge:$IMAGE_TAG \
             -t srvhpgit1:32050/project-bridge:latest \
             .
+          echo "BUILD_OK=1" >> $GITHUB_ENV
+
+      - name: Diagnose Docker registry access
+        if: always()
+        run: |
+          echo "=== Docker info ==="
+          docker info 2>&1 | grep -i "registry\|insecure\|config" || true
+          echo "=== Registry ping ==="
+          curl -v --max-time 5 http://srvhpgit1:32050/v2/ 2>&1 | head -30 || echo "registry unreachable"
+          echo "=== Docker config ==="
+          cat ~/.docker/config.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(list(d.get('auths',{}).keys()))" 2>/dev/null || echo "no docker config"
+          echo "BUILD_OK=$BUILD_OK"
 
       - name: Push to Internal Registry
         run: |
