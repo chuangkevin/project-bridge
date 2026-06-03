@@ -4,49 +4,127 @@
   height: 100%;
   min-height: 0;
 }
+
+/* ── Graph pane ─────────────────────────────────────────── */
 .architect__graph {
   flex: 1 1 60%;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-root);
   min-height: 0;
-  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header bar: label + action buttons */
+.architect__graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  min-height: 36px;
+}
+.architect__graph-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+.architect__graph-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* xyflow render area — flex:1 so it fills remaining height */
+.architect__graph > .react-flow,
+.architect__graph > [style] {
+  flex: 1;
+  min-height: 0;
 }
 .architect__graph-empty {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  color: var(--text-muted);
+  padding: var(--space-6);
+}
+
+/* ── Version history panel ───────────────────────────────── */
+.architect__versions {
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  padding: 6px 12px;
+  max-height: 160px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.architect__versions--empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 12px;
+}
+.architect__version-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.architect__version-item:last-child { border-bottom: none; }
+.architect__version-desc {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.architect__version-date {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ── Shared button style ─────────────────────────────────── */
+.architect__btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.architect__btn:hover { background: var(--bg-input); }
+.architect__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.architect__btn--secondary {
+  background: transparent;
+  border-color: var(--border-subtle);
   color: var(--text-muted);
 }
+.architect__btn--xs {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+/* ── Chat pane ───────────────────────────────────────────── */
 .architect__chat {
   flex: 1 1 40%;
   display: flex;
   flex-direction: column;
   min-height: 240px;
 }
-.architect__graph-label {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--glass-bg);
-  padding: 2px 8px;
-  border-radius: 4px;
-  z-index: 10;
-}
 
+/* ── RWD ─────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .architect__graph {
-    flex-basis: 55%;
-    min-height: 240px;
-  }
-  .architect__chat {
-    flex-basis: 45%;
-    min-height: 180px;
-  }
-  .architect__graph-label {
-    font-size: 10px;
-    padding: 1px 6px;
-  }
+  .architect__graph { flex-basis: 55%; min-height: 200px; }
+  .architect__chat  { flex-basis: 45%; min-height: 180px; }
+  .architect__graph-label { font-size: 10px; }
 }

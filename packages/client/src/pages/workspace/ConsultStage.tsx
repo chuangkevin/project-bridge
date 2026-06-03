@@ -39,16 +39,41 @@ export default function ConsultStage() {
 
   return (
     <div className="chat">
-      <div style={{ padding: 'var(--space-2) var(--space-5)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={councilEnabled}
-            onChange={(e) => setCouncilEnabled(e.target.checked)}
-            style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
-          />
+      {/* Council toggle — custom pill switch so it's visible in dark mode */}
+      <div style={{ padding: '6px var(--space-5)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          role="switch"
+          aria-checked={councilEnabled}
+          onClick={() => setCouncilEnabled(v => !v)}
+          style={{
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            width: 36,
+            height: 20,
+            borderRadius: 10,
+            border: 'none',
+            cursor: 'pointer',
+            background: councilEnabled ? 'var(--accent)' : 'var(--bg-input)',
+            transition: 'background 0.2s',
+            flexShrink: 0,
+            padding: 0,
+          }}
+        >
+          <span style={{
+            position: 'absolute',
+            left: councilEnabled ? 18 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: '50%',
+            background: councilEnabled ? '#fff' : 'var(--text-muted)',
+            transition: 'left 0.2s',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          }} />
+        </button>
+        <span style={{ fontSize: 12, color: councilEnabled ? 'var(--text-accent)' : 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }} onClick={() => setCouncilEnabled(v => !v)}>
           合議模式（PM / Designer / Engineer / Moderator 四方討論）
-        </label>
+        </span>
       </div>
       <Transcript turns={turns} pending={pending} />
       <Composer

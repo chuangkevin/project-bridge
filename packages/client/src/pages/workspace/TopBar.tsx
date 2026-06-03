@@ -42,7 +42,8 @@ export default function TopBar({ projectName }: { projectName: string }) {
           <option key={m} value={m}>{MODE_LABELS[m]}</option>
         ))}
       </select>
-      <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-3)' }}>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <span style={{ color: 'var(--text-muted)', fontSize: 10, opacity: 0.6, letterSpacing: '0.03em' }}>v2.0</span>
         <Link to="/settings" style={{ color: 'var(--text-muted)', fontSize: 13 }}>設定</Link>
       </div>
     </header>
