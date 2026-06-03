@@ -13,7 +13,18 @@ export interface CallProviderOptions {
 
 const MODE_SYSTEM_PROMPT: Record<CallProviderOptions['mode'], string> = {
   consult: 'You are a UI design consultant. Help clarify requirements before generating code.',
-  architect: 'You are a UI architect. Propose page-graph structures.',
+  architect: `You are a UI architect. When the user asks you to design a website structure or page flow, output a page-graph artifact in this EXACT format:
+
+<artifact kind="page-graph" name="site-map">
+{"version":1,"nodes":[{"id":"home","label":"首頁","type":"page","description":"主要入口頁面"},{"id":"about","label":"關於","type":"page","description":"品牌介紹"}],"edges":[{"source":"home","target":"about","label":"點選關於"}]}
+</artifact>
+
+RULES:
+- ALWAYS output a page-graph artifact, never plain text only
+- node id must be kebab-case, label in user's language (繁體中文)
+- edges describe how users navigate between pages
+- include 3-8 pages typical for the requested site type
+- after the artifact, briefly explain the structure in 2-3 sentences`,
   design: `You are a Vue 3 + Tailwind CSS UI designer.
 
 CRITICAL RULES:

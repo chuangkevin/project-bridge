@@ -132,26 +132,25 @@ export default function ArchitectStage() {
 
   return (
     <div className="architect">
+      {/* Left: chat panel */}
+      <div className="architect__chat-panel">
+        <Transcript turns={filteredTurns} pending={pending} />
+        <Composer
+          projectId={projectId ?? ''}
+          disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
+          onSend={handleSend}
+        />
+      </div>
+
+      {/* Center: graph area fills remaining space */}
       <div className="architect__graph">
         <div className="architect__graph-header">
           <div className="architect__graph-label">頁面流程 — {latest?.name ?? (archData ? '已儲存' : '尚無')}</div>
           <div className="architect__graph-actions">
-            <button
-              className="architect__btn"
-              onClick={handleSaveVersion}
-              disabled={savingVersion || !archData}
-              title="儲存目前版本"
-            >
+            <button className="architect__btn" onClick={handleSaveVersion} disabled={savingVersion || !archData}>
               {savingVersion ? '儲存中…' : '儲存版本'}
             </button>
-            <button
-              className="architect__btn architect__btn--secondary"
-              onClick={async () => {
-                await fetchVersions();
-                setShowVersions(v => !v);
-              }}
-              title="版本紀錄"
-            >
+            <button className="architect__btn architect__btn--secondary" onClick={async () => { await fetchVersions(); setShowVersions(v => !v); }}>
               版本紀錄
             </button>
           </div>
@@ -163,12 +162,7 @@ export default function ArchitectStage() {
               <div key={v.id} className="architect__version-item">
                 <span className="architect__version-desc">{v.description}</span>
                 <span className="architect__version-date">{new Date(v.created_at).toLocaleString('zh-TW')}</span>
-                <button
-                  className="architect__btn architect__btn--xs"
-                  onClick={() => handleRestoreVersion(v.id)}
-                >
-                  還原
-                </button>
+                <button className="architect__btn architect__btn--xs" onClick={() => handleRestoreVersion(v.id)}>還原</button>
               </div>
             ))}
           </div>
@@ -183,14 +177,6 @@ export default function ArchitectStage() {
             ? <div className="architect__graph-empty">載入中…</div>
             : <ArchWizard onSend={handleSend} />
         }
-      </div>
-      <div className="architect__chat">
-        <Transcript turns={filteredTurns} pending={pending} />
-        <Composer
-          projectId={projectId ?? ''}
-          disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
-          onSend={handleSend}
-        />
       </div>
     </div>
   );
