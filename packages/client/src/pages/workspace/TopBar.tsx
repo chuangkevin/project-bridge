@@ -104,7 +104,10 @@ export default function TopBar({ projectName }: { projectName: string }) {
             </span>
           )}
         </div>
-        <span style={{ color: 'var(--text-muted)', fontSize: 10, opacity: 0.6, letterSpacing: '0.03em' }}>v2.0</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 10, opacity: 0.6, letterSpacing: '0.03em', fontFamily: 'monospace' }}
+          title="git commit hash — 回報問題時請附上這個">
+          {(typeof __GIT_COMMIT__ !== 'undefined' ? __GIT_COMMIT__ : 'dev')}
+        </span>
         <Link to="/settings" style={{ color: 'var(--text-muted)', fontSize: 13 }}>設定</Link>
       </div>
     </header>
