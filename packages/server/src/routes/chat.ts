@@ -79,8 +79,8 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
 
       sse(res, 'phase', { phase: 'thinking' });
 
-      // Council mode — only available in consult mode per Plan 12 boundary
-      const useCouncil = mode === 'consult' && councilFlag === true;
+      // Council mode — available in consult and design modes
+      const useCouncil = (mode === 'consult' || mode === 'design') && councilFlag === true;
 
       if (useCouncil) {
         sse(res, 'phase', { phase: 'council_start' });

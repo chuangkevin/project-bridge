@@ -58,6 +58,23 @@ export default function DesignStage() {
   const [exporting, setExporting] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
+  // Council toggle — same localStorage persistence as ConsultStage
+  const COUNCIL_KEY = (pid: string) => `designbridge.council_enabled.${pid}`;
+  const [councilEnabled, setCouncilEnabled] = useState(() => {
+    if (!projectId) return true;
+    const saved = localStorage.getItem(COUNCIL_KEY(projectId));
+    return saved === null ? true : saved === 'true';
+  });
+  useEffect(() => {
+    if (!projectId) return;
+    const saved = localStorage.getItem(COUNCIL_KEY(projectId));
+    setCouncilEnabled(saved === null ? true : saved === 'true');
+  }, [projectId]);
+  const handleCouncilChange = (val: boolean) => {
+    setCouncilEnabled(val);
+    if (projectId) localStorage.setItem(COUNCIL_KEY(projectId), String(val));
+  };
+
   // Bridge interaction state
   const [bridgeMode, setBridgeMode] = useState<'browse' | 'annotate' | 'regen'>('browse');
   const [bridgeClick, setBridgeClick] = useState<{selector:string;tag:string;text:string;x:number;y:number}|null>(null);
@@ -202,7 +219,7 @@ export default function DesignStage() {
   const handleSend = async (text: string, attachmentIds: string[]) => {
     if (!projectId) return;
     pendingRef.current = text;
-    const result = await send({ projectId, mode: 'design', text, attachmentIds });
+    const result = await send({ projectId, mode: 'design', text, attachmentIds, council: councilEnabled });
     if (result.ok) {
       await Promise.all([refreshTurns(), refreshArtifacts()]);
       pendingRef.current = '';
@@ -476,6 +493,16 @@ export default function DesignStage() {
       </div>
 
       <div className="design__chat">
+        {/* Council toggle — same pill switch as ConsultStage */}
+        <div style={{ padding: '6px var(--space-5)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button role="switch" aria-checked={councilEnabled} onClick={() => handleCouncilChange(!councilEnabled)}
+            style={{ position:'relative', display:'inline-flex', alignItems:'center', width:36, height:20, borderRadius:10, border:'none', cursor:'pointer', background: councilEnabled ? 'var(--accent)' : 'var(--bg-input)', transition:'background 0.2s', flexShrink:0, padding:0 }}>
+            <span style={{ position:'absolute', left: councilEnabled ? 18 : 2, width:16, height:16, borderRadius:'50%', background: councilEnabled ? '#fff' : 'var(--text-muted)', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+          </button>
+          <span style={{ fontSize:12, color: councilEnabled ? 'var(--text-accent)' : 'var(--text-muted)', cursor:'pointer', userSelect:'none' }} onClick={() => handleCouncilChange(!councilEnabled)}>
+            合議模式（PM / Designer / Engineer / Moderator 四方討論）
+          </span>
+        </div>
         <Transcript turns={filteredTurns} pending={pending} />
         <Composer
           projectId={projectId ?? ''}
