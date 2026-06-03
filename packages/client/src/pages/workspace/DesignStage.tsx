@@ -10,6 +10,8 @@ import Composer from './chat/Composer';
 import VueSfcPreview from './design/VueSfcPreview';
 import SfcSourceViewer from './design/SfcSourceViewer';
 import ArtifactPicker from './design/ArtifactPicker';
+import AnnotationsPanel from './design/AnnotationsPanel';
+import ApiBindingsPanel from './design/ApiBindingsPanel';
 
 interface QualityScore {
   overall: number;
@@ -47,6 +49,7 @@ export default function DesignStage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sfcSource, setSfcSource] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(true);
+  const [activeRightTab, setActiveRightTab] = useState<'source' | 'annotations' | 'api-bindings'>('source');
   const [regenerating, setRegenerating] = useState(false);
   const [generatingVariants, setGeneratingVariants] = useState(false);
   const [savingComponent, setSavingComponent] = useState(false);
@@ -224,18 +227,36 @@ export default function DesignStage() {
             cursor: 'pointer',
           }}
         >🔗 參考網站</button>
-        <button
-          onClick={() => setShowSource(!showSource)}
-          style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-primary)',
-            color: 'var(--text-secondary)',
-            padding: '4px 10px',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-            cursor: 'pointer',
-          }}
-        >{showSource ? '隱藏原始碼' : '顯示原始碼'}</button>
+        <div className="design__tabs">
+          <button
+            className="design__tab"
+            aria-pressed={showSource && activeRightTab === 'source'}
+            onClick={() => { setShowSource(true); setActiveRightTab('source'); }}
+          >
+            原始碼
+          </button>
+          <button
+            className="design__tab"
+            aria-pressed={showSource && activeRightTab === 'annotations'}
+            onClick={() => { setShowSource(true); setActiveRightTab('annotations'); }}
+          >
+            標註
+          </button>
+          <button
+            className="design__tab"
+            aria-pressed={showSource && activeRightTab === 'api-bindings'}
+            onClick={() => { setShowSource(true); setActiveRightTab('api-bindings'); }}
+          >
+            API 綁定
+          </button>
+          <button
+            className="design__tab"
+            aria-pressed={!showSource}
+            onClick={() => setShowSource(v => !v)}
+          >
+            {showSource ? '收合' : '展開'}
+          </button>
+        </div>
         {selectedId && (
           <button
             className="design__btn"
@@ -401,10 +422,17 @@ export default function DesignStage() {
         </div>
         {showSource && (
           <div className="design__source">
-            {sfcSource
-              ? <SfcSourceViewer source={sfcSource} />
-              : <div className="design__empty">沒有原始碼</div>
-            }
+            {activeRightTab === 'source' && (
+              sfcSource
+                ? <SfcSourceViewer source={sfcSource} />
+                : <div className="design__empty">沒有原始碼</div>
+            )}
+            {activeRightTab === 'annotations' && projectId && (
+              <AnnotationsPanel projectId={projectId} />
+            )}
+            {activeRightTab === 'api-bindings' && projectId && (
+              <ApiBindingsPanel projectId={projectId} />
+            )}
           </div>
         )}
       </div>

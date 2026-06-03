@@ -127,6 +127,100 @@
   overflow-wrap: anywhere;
 }
 
+/* ── Right-panel tabs ─────────────────────────────────────────── */
+.design__tabs {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.design__tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+.design__tab[aria-pressed="true"] {
+  background: var(--accent-glass);
+  color: var(--text-accent);
+  border-color: var(--border-accent);
+}
+
+/* ── Annotation cards ─────────────────────────────────────────── */
+.annotation-card {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.annotation-card__bridge {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: monospace;
+  margin-bottom: 4px;
+}
+.annotation-card__content { color: var(--text-secondary); }
+.annotation-card__actions { margin-top: 6px; text-align: right; }
+
+/* ── Architecture Wizard ──────────────────────────────────────── */
+.arch-wizard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  padding: 24px;
+}
+.arch-wizard__title { color: var(--text-primary); font-size: 15px; font-weight: 600; }
+.arch-wizard__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.arch-wizard__type-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+}
+.arch-wizard__type-btn:hover, .arch-wizard__type-btn[data-selected="true"] {
+  background: var(--accent-glass);
+  color: var(--text-accent);
+  border-color: var(--border-accent);
+}
+.arch-wizard__pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.arch-wizard__page-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+}
+.arch-wizard__generate-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
 /* RWD: stack preview / source on narrower screens */
 @media (max-width: 1280px) {
   .design__split { flex-direction: column; }

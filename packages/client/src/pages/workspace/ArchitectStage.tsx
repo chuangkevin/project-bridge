@@ -8,6 +8,7 @@ import { api } from '../../lib/api';
 import Transcript from './chat/Transcript';
 import Composer from './chat/Composer';
 import PageGraphViewer, { type PageGraphPayload } from './architect/PageGraphViewer';
+import ArchWizard from './architect/ArchWizard';
 
 // Debounce arch_data saves to avoid hammering the server on every small drag
 const SAVE_DEBOUNCE_MS = 800;
@@ -178,11 +179,9 @@ export default function ArchitectStage() {
 
         {displayGraph
           ? <PageGraphViewer payload={displayGraph} />
-          : (
-            <div className="architect__graph-empty">
-              {latest ? '載入中…' : '還沒有頁面結構。下方對話讓 AI 幫你規劃。'}
-            </div>
-          )
+          : latest
+            ? <div className="architect__graph-empty">載入中…</div>
+            : <ArchWizard onSend={handleSend} />
         }
       </div>
       <div className="architect__chat">
