@@ -76,7 +76,15 @@ export function buildSfcIframeSrc(sfc: string): string {
 </script>
 <script>
 (function() {
-  let _bm = 'browse';
+  // Intercept ALL anchor clicks to prevent iframe links from navigating
+  // the parent window. The preview is display-only — links should not work.
+  document.addEventListener('click', function(e) {
+    var anchor = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (anchor) { e.preventDefault(); e.stopPropagation(); return; }
+  }, true);
+
+  // Bridge mode for annotation / quick-regen interaction
+  var _bm = 'browse';
   window.addEventListener('message', function(e) {
     if (e.data && e.data.type === 'set-bridge-mode') {
       _bm = e.data.mode;
