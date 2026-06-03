@@ -462,53 +462,61 @@ export default function DesignStage() {
         </div>
       )}
 
-      <div className="design__split">
-        <div className="design__preview">
+      {/* ── Main area: left chat | center preview | right source drawer ── */}
+      <div className="design__body">
+        {/* Left: chat panel */}
+        <div className="design__chat-panel">
+          {/* Council toggle */}
+          <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button role="switch" aria-checked={councilEnabled} onClick={() => handleCouncilChange(!councilEnabled)}
+              style={{ position:'relative', display:'inline-flex', alignItems:'center', width:32, height:18, borderRadius:9, border:'none', cursor:'pointer', background: councilEnabled ? 'var(--accent)' : 'var(--bg-input)', transition:'background 0.2s', flexShrink:0, padding:0 }}>
+              <span style={{ position:'absolute', left: councilEnabled ? 15 : 2, width:14, height:14, borderRadius:'50%', background: councilEnabled ? '#fff' : 'var(--text-muted)', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+            </button>
+            <span style={{ fontSize:11, color: councilEnabled ? 'var(--text-accent)' : 'var(--text-muted)', cursor:'pointer', userSelect:'none' }} onClick={() => handleCouncilChange(!councilEnabled)}>
+              合議
+            </span>
+          </div>
+          <Transcript turns={filteredTurns} pending={pending} />
+          <Composer
+            projectId={projectId ?? ''}
+            disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
+            onSend={handleSend}
+          />
+        </div>
+
+        {/* Center: preview */}
+        <div className="design__preview-main">
           {sfcSource
             ? <VueSfcPreview sfc={sfcSource} key={selectedId} bridgeMode={bridgeMode} />
             : (
               <div className="design__empty">
                 {artifacts.length === 0
-                  ? '還沒有設計。在下方對話讓 AI 幫你產出 Vue + Tailwind 頁面。'
+                  ? '在左側對話讓 AI 幫你產出 Vue + Tailwind 頁面。'
                   : '載入中…'}
               </div>
             )
           }
         </div>
+
+        {/* Right: source/annotations drawer (shown when showSource) */}
         {showSource && (
-          <div className="design__source">
-            {activeRightTab === 'source' && (
-              sfcSource
-                ? <SfcSourceViewer source={sfcSource} />
-                : <div className="design__empty">沒有原始碼</div>
-            )}
-            {activeRightTab === 'annotations' && projectId && (
-              <AnnotationsPanel projectId={projectId} />
-            )}
-            {activeRightTab === 'api-bindings' && projectId && (
-              <ApiBindingsPanel projectId={projectId} />
-            )}
+          <div className="design__source-drawer">
+            <div className="design__source-tabs">
+              {(['source', 'annotations', 'api-bindings'] as const).map(t => (
+                <button key={t} className="design__tab" aria-pressed={activeRightTab === t} onClick={() => setActiveRightTab(t)}>
+                  {t === 'source' ? '原始碼' : t === 'annotations' ? '標註' : 'API'}
+                </button>
+              ))}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {activeRightTab === 'source' && (
+                sfcSource ? <SfcSourceViewer source={sfcSource} /> : <div className="design__empty">沒有原始碼</div>
+              )}
+              {activeRightTab === 'annotations' && projectId && <AnnotationsPanel projectId={projectId} />}
+              {activeRightTab === 'api-bindings' && projectId && <ApiBindingsPanel projectId={projectId} />}
+            </div>
           </div>
         )}
-      </div>
-
-      <div className="design__chat">
-        {/* Council toggle — same pill switch as ConsultStage */}
-        <div style={{ padding: '6px var(--space-5)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button role="switch" aria-checked={councilEnabled} onClick={() => handleCouncilChange(!councilEnabled)}
-            style={{ position:'relative', display:'inline-flex', alignItems:'center', width:36, height:20, borderRadius:10, border:'none', cursor:'pointer', background: councilEnabled ? 'var(--accent)' : 'var(--bg-input)', transition:'background 0.2s', flexShrink:0, padding:0 }}>
-            <span style={{ position:'absolute', left: councilEnabled ? 18 : 2, width:16, height:16, borderRadius:'50%', background: councilEnabled ? '#fff' : 'var(--text-muted)', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
-          </button>
-          <span style={{ fontSize:12, color: councilEnabled ? 'var(--text-accent)' : 'var(--text-muted)', cursor:'pointer', userSelect:'none' }} onClick={() => handleCouncilChange(!councilEnabled)}>
-            合議模式（PM / Designer / Engineer / Moderator 四方討論）
-          </span>
-        </div>
-        <Transcript turns={filteredTurns} pending={pending} />
-        <Composer
-          projectId={projectId ?? ''}
-          disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
-          onSend={handleSend}
-        />
       </div>
 
       {showVersionHistory && projectId && selectedId && (
