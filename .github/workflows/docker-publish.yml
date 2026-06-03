@@ -4,13 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'packages/**'
-      - 'Dockerfile'
-      - 'docker-compose*.yml'
-      - 'pnpm-workspace.yaml'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/*.yml'
   workflow_dispatch:
 
 env:
