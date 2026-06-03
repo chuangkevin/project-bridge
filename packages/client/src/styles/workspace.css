@@ -10,6 +10,14 @@
   color: var(--text-primary);
 }
 
+/* design/architect modes: no right inspector column */
+.workspace--no-right {
+  grid-template-areas:
+    "top top"
+    "left center";
+  grid-template-columns: 240px 1fr;
+}
+
 .workspace__top {
   grid-area: top;
   display: flex;

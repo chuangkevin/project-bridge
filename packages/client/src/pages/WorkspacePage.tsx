@@ -74,7 +74,7 @@ export default function WorkspacePage() {
 
   return (
     <div
-      className={`workspace${mobileRailOpen ? ' workspace--rail-open' : ''}`}
+      className={`workspace${mobileRailOpen ? ' workspace--rail-open' : ''}${mode !== 'consult' ? ' workspace--no-right' : ''}`}
       onMouseMove={handleMouseMove}
     >
       <TopBar projectName={project.name} />
@@ -84,7 +84,8 @@ export default function WorkspacePage() {
         {mode === 'architect' && <ArchitectStage />}
         {mode === 'design' && <DesignStage />}
       </main>
-      <RightInspector />
+      {/* RightInspector only for consult mode — design/architect have their own right panels */}
+      {mode === 'consult' && <RightInspector />}
 
       {/* Remote cursor dots */}
       {Object.entries(cursors).map(([socketId, { x, y, color }]) => (

@@ -13,13 +13,17 @@
 export function buildSfcIframeSrc(sfc: string): string {
   const { template, scriptBody, styles } = splitSfc(sfc);
 
-  // Convert top-level <script setup> body into a return object via heuristic:
-  // - We can't reliably parse imports/exports, so just wrap the body in setup() and
-  //   rely on the AI to write plain Vue.ref/Vue.reactive without imports.
-  // - Expose Vue globals as window-scoped helpers so the AI's code can use `ref()`/`reactive()`/etc.
-  const setupBody = scriptBody.trim()
-    // Strip imports (we provide Vue globally)
-    .replace(/^[ \t]*import[^;]+;?\s*$/gm, '');
+  const rawScript = scriptBody.trim()
+    .replace(/^[ \t]*import[^;]+;?\s*$/gm, ''); // strip imports
+
+  // Detect whether the AI wrote Options API (export default {...}) or Composition API
+  const isOptionsAPI = rawScript.includes('export default');
+
+  // For Options API: replace 'export default' with a variable assignment so eval works
+  // For Composition API: wrap in setup() and auto-expose reactive locals
+  const setupBody = isOptionsAPI
+    ? rawScript.replace(/export\s+default/, '__componentOpts =')
+    : rawScript;
 
   const safeStyles = styles.join('\n');
 
@@ -50,15 +54,32 @@ export function buildSfcIframeSrc(sfc: string): string {
 
   try {
     const template = ${JSON.stringify(template)};
-    const __setup = function() {
+    let componentOptions = {};
+
+    ${isOptionsAPI
+      ? `// Options API path: the script was transformed to '__componentOpts = { ... }'
+    var __componentOpts;
+    try {
       ${setupBody}
-      // Best-effort: return all locals as the setup() result
-      // Pick up all identifiers declared with let/const/var in the body.
-      const __locals = {};
-      ${extractIdentifiers(setupBody).map(id => `try { __locals[${JSON.stringify(id)}] = ${id}; } catch(_) {}`).join('\n      ')}
-      return __locals;
-    };
-    const app = createApp({ template, setup: __setup });
+      if (__componentOpts && typeof __componentOpts === 'object') {
+        componentOptions = __componentOpts;
+      }
+    } catch(__err) {
+      console.warn('SFC options eval error:', __err);
+    }`
+      : `// Composition API path: wrap in setup() and auto-expose reactive locals
+    componentOptions = {
+      setup: function() {
+        ${setupBody}
+        const __locals = {};
+        ${extractIdentifiers(setupBody).map(id => `try { __locals[${JSON.stringify(id)}] = ${id}; } catch(_) {}`).join('\n        ')}
+        return __locals;
+      }
+    };`
+    }
+
+    componentOptions.template = template;
+    const app = createApp(componentOptions);
     app.config.errorHandler = function(err, _vm, info) {
       const el = document.createElement('pre');
       el.style.cssText = 'padding:16px;color:#fca5a5;background:#1f1124;font-size:12px;white-space:pre-wrap;';
