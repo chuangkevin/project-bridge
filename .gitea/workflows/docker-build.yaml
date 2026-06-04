@@ -22,6 +22,7 @@ jobs:
           echo "Building image with tag: $IMAGE_TAG and latest"
           docker build --network=host \
             --build-arg INTERNAL_GIT_MIRROR="https://gitea.housefun.com.tw/H1114/" \
+            --build-arg COMMIT_SHA="$IMAGE_TAG" \
             -t srvhpgit1:32050/project-bridge:$IMAGE_TAG \
             -t srvhpgit1:32050/project-bridge:latest \
             .

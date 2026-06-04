@@ -46,6 +46,10 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Install all dependencies (M1 + legacy workspace members)
 RUN pnpm install --frozen-lockfile
 
+# Commit SHA for the version badge in the UI (no .git dir in Docker build context)
+ARG COMMIT_SHA=""
+ENV VITE_APP_VERSION=${COMMIT_SHA}
+
 # Copy M1 source only (legacy is preserved in the repo but NOT built for production)
 COPY packages/server/ packages/server/
 COPY packages/client/ packages/client/
