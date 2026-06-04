@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useResizable } from '../../hooks/useResizable';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
@@ -61,6 +61,28 @@ export default function DesignStage() {
   const [qualityScore, setQualityScore] = useState<QualityScore | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+
+  // ── Streaming preview ─────────────────────────────────────────────
+  // While the AI is still generating, extract partial SFC content from
+  // state.answerText so the preview updates in real-time instead of
+  // waiting for the full response to complete.
+  const streamingSfc = useMemo((): string | null => {
+    if (state.phase === 'idle' || state.phase === 'done' || state.phase === 'error') return null;
+    const text = state.answerText;
+    if (!text) return null;
+    // Look for <artifact ...> opening tag
+    const openMatch = text.match(/<artifact[^>]*>/i);
+    if (!openMatch) {
+      // Fallback: try markdown code block (```vue or ```html)
+      const codeMatch = text.match(/```(?:vue|html)\r?\n([\s\S]+)/i);
+      if (codeMatch) return codeMatch[1].replace(/```[\s\S]*$/, '').trim();
+      return null;
+    }
+    const contentStart = text.indexOf(openMatch[0]) + openMatch[0].length;
+    const contentRaw = text.slice(contentStart);
+    // Remove closing tag if already present
+    return contentRaw.replace(/<\/artifact>[\s\S]*$/, '').trim() || null;
+  }, [state.answerText, state.phase]);
 
   // Council toggle — same localStorage persistence as ConsultStage
   const COUNCIL_KEY = (pid: string) => `designbridge.council_enabled.${pid}`;
@@ -496,17 +518,33 @@ export default function DesignStage() {
           onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
         />
 
-        {/* Center: preview */}
+        {/* Center: preview — shows streaming content while generating, then final SFC */}
         <div className="design__preview-main">
-          {sfcSource
-            ? <VueSfcPreview sfc={sfcSource} key={selectedId} bridgeMode={bridgeMode} />
-            : (
-              <div className="design__empty">
-                {artifacts.length === 0
-                  ? '在左側對話讓 AI 幫你產出 Vue + Tailwind 頁面。'
-                  : '載入中…'}
-              </div>
+          {streamingSfc
+            ? (
+              <>
+                {/* Live streaming indicator */}
+                <div style={{
+                  position: 'absolute', top: 8, right: 12, zIndex: 5,
+                  background: 'var(--accent-glass)', border: '1px solid var(--border-accent)',
+                  borderRadius: 6, padding: '3px 8px', fontSize: 11, color: 'var(--text-accent)',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', animation: 'pulse 1.2s ease-in-out infinite' }} />
+                  即時生成中…
+                </div>
+                <VueSfcPreview sfc={streamingSfc} key="streaming" bridgeMode="browse" />
+              </>
             )
+            : sfcSource
+              ? <VueSfcPreview sfc={sfcSource} key={selectedId} bridgeMode={bridgeMode} />
+              : (
+                <div className="design__empty">
+                  {artifacts.length === 0
+                    ? '在左側對話讓 AI 幫你產出 Vue + Tailwind 頁面。'
+                    : '載入中…'}
+                </div>
+              )
           }
         </div>
 

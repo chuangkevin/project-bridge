@@ -175,10 +175,16 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
 
       // Extract facts + persist turn
       const thinkingText = extractTagText(fullText, 'thinking');
-      const answerText = stripTagText(fullText, 'thinking')
+      let answerText = stripTagText(fullText, 'thinking')
         .replace(/<facts>[\s\S]*?<\/facts>/g, '')
         .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
         .trim();
+      // In design mode the AI sometimes wraps code in markdown code blocks
+      // outside of <artifact> tags. Strip those from the displayed answer
+      // so the chat bubble stays clean; the code is already in the artifact.
+      if (mode === 'design') {
+        answerText = answerText.replace(/```(?:vue|html|HTML|Vue)[\s\S]*?```/gi, '').trim();
+      }
       const facts = parseFactsFromResponse(fullText);
 
       const turn = appendTurn(db, {
