@@ -88,7 +88,11 @@ export default function WorkspacePage() {
         <LeftRail />
         {/* Drag handle — absolutely positioned at right edge of left rail */}
         <div
-          {...leftHandleProps}
+          onPointerDown={leftHandleProps.onPointerDown}
+          onPointerMove={leftHandleProps.onPointerMove}
+          onPointerUp={leftHandleProps.onPointerUp}
+          onPointerEnter={leftHandleProps.onPointerEnter}
+          onPointerLeave={leftHandleProps.onPointerLeave}
           style={{
             position: 'absolute',
             right: 0,
@@ -98,9 +102,8 @@ export default function WorkspacePage() {
             cursor: 'col-resize',
             zIndex: 20,
             background: 'transparent',
+            touchAction: 'none',
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
         />
       </div>
       <main className="workspace__center">

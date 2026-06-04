@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 /**
- * Resizable panel via mouse-drag on a handle element.
+ * Resizable panel using Pointer Events + setPointerCapture.
+ *
+ * setPointerCapture is the correct API for drag interactions:
+ * - The element receives ALL pointer events even when the pointer
+ *   moves outside it or the window
+ * - pointerup fires reliably when the user releases (no missed mouseups)
+ * - No window.addEventListener needed — no stale-closure or
+ *   React re-render reference issues
  *
  * Returns:
  *   size        — current size in px
- *   handleProps — spread onto the drag-handle <div> (provides onMouseDown)
+ *   handleProps — spread onto the drag-handle <div>
  */
 export function useResizable(
   storageKey: string,
@@ -26,48 +33,42 @@ export function useResizable(
   })();
 
   const [size, setSize] = useState(stored);
-  const sizeRef = useRef(stored);
+  const dragging = useRef(false);
+  const startPos = useRef(0);
+  const startSize = useRef(stored);
 
-  // Keep sizeRef in sync so onMouseDown closure always gets the latest size
-  useEffect(() => { sizeRef.current = size; }, [size]);
-
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragging.current = true;
+    startPos.current = direction === 'horizontal' ? e.clientX : e.clientY;
+    startSize.current = size;
+    e.currentTarget.style.background = 'var(--accent)';
+  };
 
-    const startPos = direction === 'horizontal' ? e.clientX : e.clientY;
-    const startSize = sizeRef.current;
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    const pos = direction === 'horizontal' ? e.clientX : e.clientY;
+    const delta = pos - startPos.current;
+    const next = Math.min(max, Math.max(min, startSize.current + delta));
+    setSize(next);
+  };
 
-    document.body.style.cursor = direction === 'horizontal' ? 'col-resize' : 'row-resize';
-    document.body.style.userSelect = 'none';
-
-    // Create handlers in the closure so handleUp can remove the EXACT
-    // same handleMove reference — no React re-render can invalidate them.
-    const handleMove = (ev: MouseEvent) => {
-      const delta = direction === 'horizontal'
-        ? ev.clientX - startPos
-        : ev.clientY - startPos;
-      const next = Math.min(max, Math.max(min, startSize + delta));
-      setSize(next);
-    };
-
-    const handleUp = () => {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-      // Persist to localStorage after drag ends
-      setSize(curr => {
-        try { localStorage.setItem(storageKey, String(curr)); } catch {}
-        return curr;
-      });
-    };
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  }, [direction, min, max, storageKey]);
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    e.currentTarget.style.background = 'transparent';
+    setSize(curr => {
+      try { localStorage.setItem(storageKey, String(curr)); } catch {}
+      return curr;
+    });
+  };
 
   const handleProps = {
-    onMouseDown,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
     style: {
       flexShrink: 0,
       width: direction === 'horizontal' ? '5px' : '100%',
@@ -75,13 +76,14 @@ export function useResizable(
       cursor: direction === 'horizontal' ? 'col-resize' : 'row-resize',
       background: 'transparent',
       zIndex: 10,
-      transition: 'background 0.15s',
+      transition: 'background 0.1s',
+      touchAction: 'none', // required for pointer events on touch devices
     } as React.CSSProperties,
-    onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => {
-      (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)';
+    onPointerEnter: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragging.current) e.currentTarget.style.background = 'rgba(124,92,191,0.5)';
     },
-    onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => {
-      (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+    onPointerLeave: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragging.current) e.currentTarget.style.background = 'transparent';
     },
   };
 

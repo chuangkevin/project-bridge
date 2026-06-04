@@ -512,10 +512,12 @@ export default function DesignStage() {
 
         {/* Drag handle — flex sibling between chat and preview (same pattern as ArchitectStage) */}
         <div
-          onMouseDown={chatHandleProps.onMouseDown}
-          style={{ width: 5, flexShrink: 0, cursor: 'col-resize', background: 'transparent', zIndex: 10, transition: 'background 0.15s' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+          onPointerDown={chatHandleProps.onPointerDown}
+          onPointerMove={chatHandleProps.onPointerMove}
+          onPointerUp={chatHandleProps.onPointerUp}
+          onPointerEnter={chatHandleProps.onPointerEnter}
+          onPointerLeave={chatHandleProps.onPointerLeave}
+          style={{ width: 5, flexShrink: 0, cursor: 'col-resize', background: 'transparent', zIndex: 10, touchAction: 'none' }}
         />
 
         {/* Center: preview — shows streaming content while generating, then final SFC */}

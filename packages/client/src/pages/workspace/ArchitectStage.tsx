@@ -145,10 +145,12 @@ export default function ArchitectStage() {
           onSend={handleSend}
         />
         <div
-          {...chatHandleProps}
-          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 5, cursor: 'col-resize', zIndex: 20, background: 'transparent' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+          onPointerDown={chatHandleProps.onPointerDown}
+          onPointerMove={chatHandleProps.onPointerMove}
+          onPointerUp={chatHandleProps.onPointerUp}
+          onPointerEnter={chatHandleProps.onPointerEnter}
+          onPointerLeave={chatHandleProps.onPointerLeave}
+          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 5, cursor: 'col-resize', zIndex: 20, background: 'transparent', touchAction: 'none' }}
         />
       </div>
 
