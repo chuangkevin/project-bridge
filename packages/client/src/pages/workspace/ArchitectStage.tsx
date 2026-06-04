@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
+import { useResizable } from '../../hooks/useResizable';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useArtifacts, fetchArtifactPayload } from '../../hooks/useArtifacts';
@@ -22,6 +23,9 @@ interface ArchVersion {
 
 export default function ArchitectStage() {
   const { projectId } = useWorkspaceStore();
+  const { size: chatWidth, handleProps: chatHandleProps } = useResizable(
+    `designbridge.architect-chat-width.${projectId ?? 'default'}`, 300, 200, 600
+  );
   const { turns, refresh: refreshTurns } = useTurns(projectId);
   const { state, send, reset } = useChatStream();
   const { latest, refresh: refreshArtifacts } = useArtifacts(projectId, 'page-graph');
@@ -132,13 +136,19 @@ export default function ArchitectStage() {
 
   return (
     <div className="architect">
-      {/* Left: chat panel */}
-      <div className="architect__chat-panel">
+      {/* Left: chat panel with drag handle */}
+      <div className="architect__chat-panel" style={{ width: chatWidth, flexShrink: 0, position: 'relative' }}>
         <Transcript turns={filteredTurns} pending={pending} />
         <Composer
           projectId={projectId ?? ''}
           disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
           onSend={handleSend}
+        />
+        <div
+          {...chatHandleProps}
+          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 5, cursor: 'col-resize', zIndex: 20, background: 'transparent' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
         />
       </div>
 

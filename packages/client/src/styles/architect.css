@@ -5,9 +5,9 @@
   min-height: 0;
 }
 
-/* ── Left: chat panel ───────────────────────────────────── */
+/* ── Left: chat panel — width controlled by inline style (useResizable) */
 .architect__chat-panel {
-  width: 300px;
+  /* width set by inline style from useResizable */
   flex-shrink: 0;
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-card);

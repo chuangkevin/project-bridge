@@ -4,7 +4,7 @@
     "top top top"
     "left center right";
   grid-template-rows: 56px 1fr;
-  grid-template-columns: 240px 1fr 320px;
+  grid-template-columns: var(--left-w, 240px) 1fr 320px;
   height: 100vh;
   background: var(--bg-root);
   color: var(--text-primary);
@@ -15,7 +15,27 @@
   grid-template-areas:
     "top top"
     "left center";
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--left-w, 240px) 1fr;
+}
+
+/* Left rail wrapper — needed for absolute-positioned drag handle */
+.workspace__left-wrap {
+  grid-area: left;
+  position: relative;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  overflow-y: auto;
+  z-index: var(--z-rail);
+  display: flex;
+  flex-direction: column;
+}
+/* LeftRail fills the wrapper */
+.workspace__left-wrap > aside,
+.workspace__left-wrap > .workspace__left {
+  flex: 1;
+  border: none;
+  background: transparent;
+  overflow-y: auto;
 }
 
 .workspace__top {

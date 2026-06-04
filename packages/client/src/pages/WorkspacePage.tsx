@@ -3,6 +3,7 @@ import { useParams, Navigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { getSocket } from '../lib/socket';
+import { useResizable } from '../hooks/useResizable';
 import TopBar from './workspace/TopBar';
 import LeftRail from './workspace/LeftRail';
 import RightInspector from './workspace/RightInspector';
@@ -69,16 +70,39 @@ export default function WorkspacePage() {
     socket.emit('cursor:move', { projectId: id, x: e.clientX, y: e.clientY, color: '#c084fc' });
   }, [id]);
 
+  const { size: leftWidth, handleProps: leftHandleProps } = useResizable(
+    'designbridge.left-rail-width', 240, 160, 400
+  );
+
   if (notFound) return <Navigate to="/projects" replace />;
   if (!project) return <div style={{ padding: 24 }}>載入專案中…</div>;
 
   return (
     <div
       className={`workspace${mobileRailOpen ? ' workspace--rail-open' : ''}${mode !== 'consult' ? ' workspace--no-right' : ''}`}
+      style={{ '--left-w': `${leftWidth}px` } as React.CSSProperties}
       onMouseMove={handleMouseMove}
     >
       <TopBar projectName={project.name} />
-      <LeftRail />
+      <div className="workspace__left-wrap">
+        <LeftRail />
+        {/* Drag handle — absolutely positioned at right edge of left rail */}
+        <div
+          {...leftHandleProps}
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 6,
+            cursor: 'col-resize',
+            zIndex: 20,
+            background: 'transparent',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+        />
+      </div>
       <main className="workspace__center">
         {mode === 'consult' && <ConsultStage />}
         {mode === 'architect' && <ArchitectStage />}

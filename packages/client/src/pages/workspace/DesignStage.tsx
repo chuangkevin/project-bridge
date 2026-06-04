@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useResizable } from '../../hooks/useResizable';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useTurns } from '../../hooks/useTurns';
 import { useChatStream } from '../../hooks/useChatStream';
@@ -40,6 +41,9 @@ interface CrawlResult {
 
 export default function DesignStage() {
   const { projectId } = useWorkspaceStore();
+  const { size: chatWidth, handleProps: chatHandleProps } = useResizable(
+    `designbridge.design-chat-width.${projectId ?? 'default'}`, 300, 200, 600
+  );
   const { turns, refresh: refreshTurns } = useTurns(projectId);
   const { state, send, reset } = useChatStream();
   const { artifacts, latest, refresh: refreshArtifacts } = useArtifacts(projectId, 'vue-sfc');
@@ -464,8 +468,8 @@ export default function DesignStage() {
 
       {/* ── Main area: left chat | center preview | right source drawer ── */}
       <div className="design__body">
-        {/* Left: chat panel */}
-        <div className="design__chat-panel">
+        {/* Left: chat panel with right drag handle */}
+        <div className="design__chat-panel" style={{ width: chatWidth, flexShrink: 0, position: 'relative' }}>
           {/* Council toggle */}
           <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <button role="switch" aria-checked={councilEnabled} onClick={() => handleCouncilChange(!councilEnabled)}
@@ -481,6 +485,13 @@ export default function DesignStage() {
             projectId={projectId ?? ''}
             disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
             onSend={handleSend}
+          />
+          {/* Drag handle at right edge of chat panel */}
+          <div
+            {...chatHandleProps}
+            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 5, cursor: 'col-resize', zIndex: 20, background: 'transparent' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
           />
         </div>
 
