@@ -67,10 +67,10 @@ ARG INTERNAL_GIT_MIRROR=""
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 # Native build tools required to rebuild better-sqlite3 + bcrypt against glibc.
-# We do NOT install Chromium via apt here — Playwright will download its own
-# Chromium bundle during `pnpm install --prod` below (postinstall script).
-# This is more reliable than apt-get on slim images and works offline on
-# Gitea CI runners where the Debian repos may be unreachable.
+# Playwright deps (libnss3, libatk, etc.) are intentionally omitted — their
+# package names vary across Debian versions (libasound2 vs libasound2t64 etc.)
+# and websiteCrawler.ts uses a lazy dynamic import so the server starts fine
+# without Chromium; the crawler fails gracefully if called without a browser.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
@@ -78,18 +78,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     curl \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled output from builder
