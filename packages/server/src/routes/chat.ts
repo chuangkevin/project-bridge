@@ -118,6 +118,35 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
           .map(p => `### ${p.toUpperCase()}\n${cleanAnswerText(transcripts[p] ?? '', mode)}`)
           .join('\n\n');
 
+        // In design mode: after council discussion, generate the actual Vue SFC artifact
+        if (mode === 'design') {
+          sse(res, 'phase', { phase: 'answering' });
+          const councilContext = `Based on this team discussion:\n\n## PM:\n${transcripts.pm}\n\n## Designer:\n${transcripts.designer}\n\n## Engineer:\n${transcripts.engineer}\n\n## Conclusion:\n${finalAnswer}\n\nNow generate the actual Vue + Tailwind implementation.`;
+          let designFullText = '';
+          for await (const tok of callProvider({ mode: 'design', prompt: text.trim(), systemInstruction: userSystem + '\n\n' + councilContext, streaming: true })) {
+            designFullText += tok;
+            sse(res, 'token', { text: tok });
+          }
+          const designAnswer = cleanAnswerText(designFullText, 'design');
+          const turn = appendTurn(db, {
+            projectId, mode: 'design' as TurnMode,
+            userText: text.trim(),
+            aiResponse: { text: answerText, thinking: thinkingText },
+            skillsUsed: ['council-pm', 'council-designer', 'council-engineer', 'council-moderator'],
+          });
+          const facts = parseFactsFromResponse(designFullText);
+          for (const f of facts) addFact(db, { projectId, turnId: turn.id, kind: f.kind, text: f.text });
+          const artifactBlocks = parseArtifactsFromResponseWithFallback(designFullText);
+          const artifactsRoot = join(dataDir, 'projects', projectId, 'artifacts');
+          for (const block of artifactBlocks) {
+            const ext = block.kind === 'vue-sfc' ? 'vue' : 'json';
+            const a = createArtifact(db, { projectId, createdByTurn: turn.id, kind: block.kind, name: block.name, payload: block.payload, payloadExt: ext, artifactsRoot });
+            sse(res, 'artifact', { id: a.id, kind: a.kind, name: a.name });
+          }
+          sse(res, 'done', { turnId: turn.id });
+          return;
+        }
+
         const turn = appendTurn(db, {
           projectId,
           mode: mode as TurnMode,
