@@ -3,6 +3,20 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+/** Strip artifact tags, facts blocks, and code blocks from stored turn text.
+ *  Retroactively cleans up turns that were stored before the server-side fix. */
+function cleanDisplayText(text: string, mode?: string): string {
+  let t = text
+    .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+    .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .trim();
+  if (mode === 'design') {
+    t = t.replace(/```[\s\S]*?```/g, '').trim();
+  }
+  return t;
+}
+
 const PERSONA_LABEL: Record<string, string> = {
   pm: '📋 PM',
   designer: '🎨 Designer',
@@ -47,7 +61,7 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
           </>
         )}
         <div className="bubble__markdown">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.aiResponse.text}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanDisplayText(turn.aiResponse.text, turn.mode)}</ReactMarkdown>
         </div>
         {turn.skillsUsed && turn.skillsUsed.length > 0 && (
           <div className="bubble__skills">

@@ -60,7 +60,12 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
         )}
         {state.answerText && (
           <div className="bubble__markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{state.answerText}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {state.answerText
+                .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+                .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
+                .trim()}
+            </ReactMarkdown>
           </div>
         )}
         {state.phase === 'error' && (
