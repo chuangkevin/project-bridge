@@ -50,7 +50,12 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
                 aria-label={`${PERSONA_LABEL[c.persona] ?? c.persona} 的意見`}
               >
                 <div className="council__label">{PERSONA_LABEL[c.persona] ?? c.persona}</div>
-                <div className="council__text">{c.text}</div>
+                <div className="council__text">
+                  {c.text
+                    .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+                    .replace(/```[\s\S]*?```/g, '')
+                    .trim()}
+                </div>
               </div>
             ))}
           </div>
