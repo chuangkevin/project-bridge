@@ -101,12 +101,21 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         }
 
         const { transcripts, finalAnswer } = stepResult!.value;
-        // Strip both <thinking> and <facts> from the council final answer
-        const answerText = stripThinking(finalAnswer)
-          .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
-          .trim();
+
+        function cleanAnswerText(raw: string, m: string): string {
+          let t = stripThinking(raw)
+            .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
+            .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+            .trim();
+          if (m === 'design') {
+            t = t.replace(/```[\s\S]*?```/g, '').trim();
+          }
+          return t;
+        }
+
+        const answerText = cleanAnswerText(finalAnswer, mode);
         const thinkingText = ['pm', 'designer', 'engineer']
-          .map(p => `### ${p.toUpperCase()}\n${stripThinking(transcripts[p] ?? '').replace(/<facts>[\s\S]*?<\/facts>/gi, '').trim()}`)
+          .map(p => `### ${p.toUpperCase()}\n${cleanAnswerText(transcripts[p] ?? '', mode)}`)
           .join('\n\n');
 
         const turn = appendTurn(db, {
@@ -183,7 +192,8 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       // outside of <artifact> tags. Strip those from the displayed answer
       // so the chat bubble stays clean; the code is already in the artifact.
       if (mode === 'design') {
-        answerText = answerText.replace(/```(?:vue|html|HTML|Vue)[\s\S]*?```/gi, '').trim();
+        // Strip ALL code blocks — code belongs in the artifact, not the chat bubble
+        answerText = answerText.replace(/```[\s\S]*?```/g, '').trim();
       }
       const facts = parseFactsFromResponse(fullText);
 
