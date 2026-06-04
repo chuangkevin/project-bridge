@@ -520,12 +520,27 @@ export default function DesignStage() {
           style={{ width: 5, flexShrink: 0, cursor: 'col-resize', background: 'transparent', zIndex: 10, touchAction: 'none' }}
         />
 
-        {/* Center: preview — shows streaming content while generating, then final SFC */}
-        <div className="design__preview-main">
+        {/* Center: preview */}
+        <div className="design__preview-main" style={{ position: 'relative' }}>
+          {/* Generating overlay — shown while streaming but no SFC content yet */}
+          {state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error' && !streamingSfc && !sfcSource && (
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', background: 'rgba(6,13,26,0.85)',
+              zIndex: 3, gap: 12,
+            }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', animation: 'pulse 1.2s ease-in-out infinite' }} />
+              <span style={{ color: 'var(--text-accent)', fontSize: 14 }}>
+                {state.phase.startsWith('council') ? '合議討論中，完成後自動生成設計…' : '生成設計中…'}
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11, maxWidth: 260, textAlign: 'center' }}>
+                預覽將在 AI 生成第一段 HTML 後自動出現
+              </span>
+            </div>
+          )}
           {streamingSfc
             ? (
               <>
-                {/* Live streaming indicator */}
                 <div style={{
                   position: 'absolute', top: 8, right: 12, zIndex: 5,
                   background: 'var(--accent-glass)', border: '1px solid var(--border-accent)',

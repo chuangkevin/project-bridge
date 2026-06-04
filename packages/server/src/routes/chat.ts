@@ -120,6 +120,9 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
 
         // In design mode: after council discussion, generate the actual Vue SFC artifact
         if (mode === 'design') {
+          // Clear signal to the client: council done, now generating design
+          sse(res, 'phase', { phase: 'thinking', message: '合議完成，正在生成設計…' });
+          await new Promise(r => setTimeout(r, 300)); // brief pause so UI shows the transition
           sse(res, 'phase', { phase: 'answering' });
           const councilContext = `Based on this team discussion:\n\n## PM:\n${transcripts.pm}\n\n## Designer:\n${transcripts.designer}\n\n## Engineer:\n${transcripts.engineer}\n\n## Conclusion:\n${finalAnswer}\n\nNow generate the actual Vue + Tailwind implementation.`;
           let designFullText = '';

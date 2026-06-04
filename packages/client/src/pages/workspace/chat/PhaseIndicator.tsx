@@ -6,7 +6,7 @@ const PHASE_LABEL: Record<string, string> = {
   loading_memory: '讀取專案記憶…',
   selecting_skills: '選擇技能…',
   thinking: '推理中…',
-  answering: '回答中…',
+  answering: '生成設計中…',
   council_start: '合議啟動…',
   council_pm: 'PM 分析中…',
   council_designer: 'Designer 分析中…',
