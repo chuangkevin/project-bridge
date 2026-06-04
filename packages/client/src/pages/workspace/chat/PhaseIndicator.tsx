@@ -32,7 +32,13 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
         {isStreaming && (
           <div className="phase-indicator" role="status" aria-live="polite">
             <span className="phase-indicator__dot" aria-hidden="true" />
-            <span>{PHASE_LABEL[state.phase] ?? state.phase}</span>
+            <span>
+              {state.phase.startsWith('council')
+                // Council: show "合議討論中 (X/3 完成)" — avoid confusing "PM 分析中" when PM is done
+                ? `合議討論中（${state.council.length}/3 完成）`
+                : (PHASE_LABEL[state.phase] ?? state.phase)
+              }
+            </span>
             {state.selectedSkills.length > 0 && state.phase === 'selecting_skills' && (
               <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
                 ({state.selectedSkills.slice(0, 3).join(', ')}{state.selectedSkills.length > 3 ? '…' : ''})
