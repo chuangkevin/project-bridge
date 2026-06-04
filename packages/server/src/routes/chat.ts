@@ -101,9 +101,12 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         }
 
         const { transcripts, finalAnswer } = stepResult!.value;
-        const answerText = stripThinking(finalAnswer);
+        // Strip both <thinking> and <facts> from the council final answer
+        const answerText = stripThinking(finalAnswer)
+          .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
+          .trim();
         const thinkingText = ['pm', 'designer', 'engineer']
-          .map(p => `### ${p.toUpperCase()}\n${stripThinking(transcripts[p] ?? '')}`)
+          .map(p => `### ${p.toUpperCase()}\n${stripThinking(transcripts[p] ?? '').replace(/<facts>[\s\S]*?<\/facts>/gi, '').trim()}`)
           .join('\n\n');
 
         const turn = appendTurn(db, {
