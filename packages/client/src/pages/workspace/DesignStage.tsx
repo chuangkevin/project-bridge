@@ -246,10 +246,12 @@ export default function DesignStage() {
     if (!projectId) return;
     pendingRef.current = text;
     const result = await send({ projectId, mode: 'design', text, attachmentIds, council: councilEnabled });
+    // Always refresh turns so the stored turn shows up even on partial success
+    await refreshTurns().catch(() => {});
+    await refreshArtifacts().catch(() => {});
+    pendingRef.current = '';
+    reset(); // always reset so overlay clears
     if (result.ok) {
-      await Promise.all([refreshTurns(), refreshArtifacts()]);
-      pendingRef.current = '';
-      reset();
       // Fire quality score request in background for the latest artifact
       // We read latest from the hook via a ref updated after refreshArtifacts()
       setTimeout(() => {
@@ -265,7 +267,6 @@ export default function DesignStage() {
           .catch(() => {});
       }, 200);
     }
-    // On error: keep state.phase === 'error' so the user sees the error message.
   };
 
   return (

@@ -124,7 +124,14 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
           sse(res, 'phase', { phase: 'thinking', message: '合議完成，正在生成設計…' });
           await new Promise(r => setTimeout(r, 300)); // brief pause so UI shows the transition
           sse(res, 'phase', { phase: 'answering' });
-          const councilContext = `Based on this team discussion:\n\n## PM:\n${transcripts.pm}\n\n## Designer:\n${transcripts.designer}\n\n## Engineer:\n${transcripts.engineer}\n\n## Conclusion:\n${finalAnswer}\n\nNow generate the actual Vue + Tailwind implementation.`;
+          // Truncate transcripts to avoid context length errors.
+          // Engineer may have output code — strip it and cap at 500 chars each.
+          const trunc = (s: string, max = 500) =>
+            s.replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+             .replace(/```[\s\S]*?```/g, '[code omitted]')
+             .trim()
+             .slice(0, max);
+          const councilContext = `Team discussion summary:\n- PM: ${trunc(transcripts.pm)}\n- Designer: ${trunc(transcripts.designer)}\n- Engineer: ${trunc(transcripts.engineer)}\n- Conclusion: ${trunc(finalAnswer, 800)}\n\nNow generate the Vue + Tailwind design.`;
           let designFullText = '';
           for await (const tok of callProvider({ mode: 'design', prompt: text.trim(), systemInstruction: userSystem + '\n\n' + councilContext, streaming: true })) {
             designFullText += tok;
