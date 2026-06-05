@@ -101,6 +101,27 @@ export default function DesignStage() {
     if (projectId) localStorage.setItem(COUNCIL_KEY(projectId), String(val));
   };
 
+  // 繼承全域風格 — persisted server-side on the project record
+  const [inheritGlobal, setInheritGlobal] = useState(true);
+  useEffect(() => {
+    if (!projectId) return;
+    fetch(`/api/projects/${projectId}`)
+      .then(r => r.json())
+      .then((p: { inheritGlobalStyle?: boolean }) => {
+        if (typeof p.inheritGlobalStyle === 'boolean') setInheritGlobal(p.inheritGlobalStyle);
+      })
+      .catch(() => {});
+  }, [projectId]);
+  const handleInheritChange = (val: boolean) => {
+    setInheritGlobal(val);
+    if (!projectId) return;
+    fetch(`/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inheritGlobalStyle: val }),
+    }).catch(() => {});
+  };
+
   // Bridge interaction state
   const [bridgeMode, setBridgeMode] = useState<'browse' | 'annotate' | 'regen'>('browse');
   const [bridgeClick, setBridgeClick] = useState<{selector:string;tag:string;text:string;x:number;y:number}|null>(null);
@@ -501,6 +522,15 @@ export default function DesignStage() {
             </button>
             <span style={{ fontSize:11, color: councilEnabled ? 'var(--text-accent)' : 'var(--text-muted)', cursor:'pointer', userSelect:'none' }} onClick={() => handleCouncilChange(!councilEnabled)}>
               合議
+            </span>
+            <span style={{ width: 1, height: 14, background: 'var(--border-subtle)' }} />
+            <button role="switch" aria-checked={inheritGlobal} onClick={() => handleInheritChange(!inheritGlobal)}
+              title="開啟時，設計生成會套用「設定 → 全域風格」的設計方向、規範與 tokens"
+              style={{ position:'relative', display:'inline-flex', alignItems:'center', width:32, height:18, borderRadius:9, border:'none', cursor:'pointer', background: inheritGlobal ? 'var(--accent)' : 'var(--bg-input)', transition:'background 0.2s', flexShrink:0, padding:0 }}>
+              <span style={{ position:'absolute', left: inheritGlobal ? 15 : 2, width:14, height:14, borderRadius:'50%', background: inheritGlobal ? '#fff' : 'var(--text-muted)', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+            </button>
+            <span style={{ fontSize:11, color: inheritGlobal ? 'var(--text-accent)' : 'var(--text-muted)', cursor:'pointer', userSelect:'none' }} onClick={() => handleInheritChange(!inheritGlobal)}>
+              繼承全域風格
             </span>
           </div>
           <Transcript turns={filteredTurns} pending={pending} />

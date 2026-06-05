@@ -49,7 +49,15 @@ export function buildProjectsRouter(db: Database.Database): Router {
         return;
       }
     }
-    const updated = updateProject(db, req.params.id as string, { name });
+    let inheritGlobalStyle: boolean | undefined;
+    if (req.body?.inheritGlobalStyle !== undefined) {
+      if (typeof req.body.inheritGlobalStyle !== 'boolean') {
+        res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: 'inheritGlobalStyle 必須是布林值' } });
+        return;
+      }
+      inheritGlobalStyle = req.body.inheritGlobalStyle;
+    }
+    const updated = updateProject(db, req.params.id as string, { name, inheritGlobalStyle });
     res.json(updated);
   });
 

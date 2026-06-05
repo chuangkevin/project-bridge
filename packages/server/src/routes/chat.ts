@@ -14,6 +14,22 @@ import { getAttachment, type Attachment } from '../services/ingestionService.js'
 import { buildSystemPrompt, parseArtifactsFromResponseWithFallback } from '../services/chatOrchestrator.js';
 import { createArtifact } from '../services/artifactService.js';
 import { runCouncil } from '../services/councilOrchestrator.js';
+import { readSetting } from '../services/settings.js';
+
+/** Build the global-design system prompt block for design mode, or '' when
+ *  the project opted out (inherit_global_style = 0) or nothing is configured. */
+function globalStyleBlock(db: Database.Database, inherit: boolean): string {
+  if (!inherit) return '';
+  const description = readSetting(db, 'global_design_description') ?? '';
+  const convention = readSetting(db, 'global_design_convention') ?? '';
+  const tokens = readSetting(db, 'global_design_tokens') ?? '';
+  if (!description && !convention && !tokens) return '';
+  const parts = ['## 全域設計風格（必須遵循）'];
+  if (description) parts.push(`### 設計方向\n${description}`);
+  if (convention) parts.push(`### 設計規範\n${convention}`);
+  if (tokens) parts.push(`### CSS Tokens（生成的 UI 必須使用這些變數值）\n${tokens}`);
+  return '\n\n' + parts.join('\n\n');
+}
 
 const VALID_MODES: TurnMode[] = ['consult', 'architect', 'design'];
 
@@ -70,12 +86,12 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         }
       }
 
-      // Compose system prompt
+      // Compose system prompt. Design mode appends global style when the project inherits it.
       const userSystem = buildSystemPrompt({
         mode, memorySnapshot: snapshot, skillDescriptions,
         forcedSkillBody: forcedSkill?.body,
         attachments: attachments.map(a => ({ kind: a.kind, parsedText: a.parsedText, originalName: a.originalName })),
-      });
+      }) + (mode === 'design' ? globalStyleBlock(db, project.inheritGlobalStyle) : '');
 
       sse(res, 'phase', { phase: 'thinking' });
 

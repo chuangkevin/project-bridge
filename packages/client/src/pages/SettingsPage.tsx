@@ -6,11 +6,12 @@ import SkillsTab from './settings/SkillsTab';
 import UsersTab from './settings/UsersTab';
 import AboutTab from './settings/AboutTab';
 import PresetsTab from './settings/PresetsTab';
+import GlobalStyleTab from './settings/GlobalStyleTab';
 
-type Tab = 'providers' | 'mcp' | 'skills' | 'users' | 'about' | 'presets';
+type Tab = 'providers' | 'mcp' | 'skills' | 'users' | 'about' | 'presets' | 'globalstyle';
 
 const TAB_STORAGE_KEY = 'designbridge.settings.tab';
-const VALID_TABS: Tab[] = ['providers', 'mcp', 'skills', 'users', 'about', 'presets'];
+const VALID_TABS: Tab[] = ['providers', 'mcp', 'skills', 'users', 'about', 'presets', 'globalstyle'];
 
 function readInitialTab(): Tab {
   const fromHash = window.location.hash.replace('#', '') as Tab;
@@ -51,6 +52,7 @@ export default function SettingsPage() {
         <button className="settings__tab" aria-pressed={tab === 'users'} onClick={() => setTab('users')}>使用者</button>
         <button className="settings__tab" aria-pressed={tab === 'about'} onClick={() => setTab('about')}>關於</button>
         <button className="settings__tab" aria-pressed={tab === 'presets'} onClick={() => setTab('presets')}>設計預設</button>
+        <button className="settings__tab" aria-pressed={tab === 'globalstyle'} onClick={() => setTab('globalstyle')}>全域風格</button>
       </nav>
       <div className="settings__body">
         {tab === 'providers' && <ProvidersTab />}
@@ -59,6 +61,7 @@ export default function SettingsPage() {
         {tab === 'users' && <UsersTab />}
         {tab === 'about' && <AboutTab />}
         {tab === 'presets' && <PresetsTab />}
+        {tab === 'globalstyle' && <GlobalStyleTab />}
       </div>
     </div>
   );

@@ -18,6 +18,17 @@
   grid-template-columns: var(--left-w, 240px) 1fr;
 }
 
+/* Desktop rail collapse (☰ button) — hide the left column entirely */
+.workspace--rail-collapsed {
+  grid-template-columns: 0 1fr 320px;
+}
+.workspace--rail-collapsed.workspace--no-right {
+  grid-template-columns: 0 1fr;
+}
+.workspace--rail-collapsed .workspace__left-wrap {
+  display: none;
+}
+
 /* Left rail wrapper — needed for absolute-positioned drag handle */
 .workspace__left-wrap {
   grid-area: left;

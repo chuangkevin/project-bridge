@@ -10,7 +10,7 @@ const MODE_LABELS: Record<Mode, string> = {
 };
 
 export default function TopBar({ projectName }: { projectName: string }) {
-  const { mode, setMode, setMobileRailOpen, projectId } = useWorkspaceStore();
+  const { mode, setMode, setMobileRailOpen, toggleRailCollapsed, projectId } = useWorkspaceStore();
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
 
@@ -36,8 +36,14 @@ export default function TopBar({ projectName }: { projectName: string }) {
   return (
     <header className="workspace__top">
       <button
-        aria-label="開啟側欄"
-        onClick={() => setMobileRailOpen(true)}
+        aria-label="切換側欄"
+        title="收合 / 展開左側欄"
+        onClick={() => {
+          // Mobile (≤768px, matches workspace.css breakpoint): open the drawer.
+          // Desktop: toggle rail collapse, persisted in the store.
+          if (window.innerWidth <= 768) setMobileRailOpen(true);
+          else toggleRailCollapsed();
+        }}
         style={{
           background: 'transparent', border: 'none', color: 'var(--text-secondary)',
           padding: 'var(--space-2)', cursor: 'pointer', fontSize: 18,

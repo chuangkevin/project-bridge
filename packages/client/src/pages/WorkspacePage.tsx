@@ -20,7 +20,7 @@ const CURSOR_THROTTLE_MS = 33;
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
-  const { mode, setProject, mobileRailOpen } = useWorkspaceStore();
+  const { mode, setProject, mobileRailOpen, railCollapsed } = useWorkspaceStore();
   const [project, setProject_] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [cursors, setCursors] = useState<Record<string, CursorState>>({});
@@ -79,7 +79,7 @@ export default function WorkspacePage() {
 
   return (
     <div
-      className={`workspace${mobileRailOpen ? ' workspace--rail-open' : ''}${mode !== 'consult' ? ' workspace--no-right' : ''}`}
+      className={`workspace${mobileRailOpen ? ' workspace--rail-open' : ''}${mode !== 'consult' ? ' workspace--no-right' : ''}${railCollapsed ? ' workspace--rail-collapsed' : ''}`}
       style={{ '--left-w': `${leftWidth}px` } as React.CSSProperties}
       onMouseMove={handleMouseMove}
     >
