@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid';
 import { readSetting, writeSetting } from '../services/settings.js';
 import { crawlWebsite, aggregateStyles } from '../services/websiteCrawler.js';
 import { getProvider, defaultModel, withJsonInstruction, extractJsonBody, trackProviderUsage } from '../services/provider.js';
+import { frontendDesignSkillBody } from '../services/callProvider.js';
 
 export interface DesignPreset {
   id: string;
@@ -126,10 +127,24 @@ export function buildDesignPresetsRouter(db: Database.Database): Router {
     }
 
     const agg = aggregateStyles(ok);
+    // Full per-site detail (headings, buttons, colors) + aggregate — the art
+    // director reads everything the crawler captured, not just the summary.
+    const perSiteDetail = ok.map(c => ({
+      url: c.url,
+      colors: c.colors.slice(0, 20),
+      typography: c.typography,
+      buttons: c.buttons.slice(0, 10),
+      backgrounds: c.backgrounds.slice(0, 10),
+      borderRadii: c.borderRadii,
+      shadows: c.shadows,
+    }));
     const prompt = `Analyze this crawled design system data from ${ok.length} reference website(s) and produce a reusable design style definition in Traditional Chinese.
 
-Crawled data (real computed styles):
-${JSON.stringify(agg, null, 2).slice(0, 12_000)}
+Aggregated design system:
+${JSON.stringify(agg, null, 2).slice(0, 10_000)}
+
+Per-site raw computed styles:
+${JSON.stringify(perSiteDetail, null, 2).slice(0, 15_000)}
 
 Return JSON exactly in this shape:
 {
@@ -149,7 +164,10 @@ Return JSON exactly in this shape:
       const client = getProvider();
       const exec = await client.generateWithSelection({
         model: defaultModel(),
-        systemInstruction: withJsonInstruction('You are a senior design-system analyst.'),
+        systemInstruction: withJsonInstruction(
+          'You are an art-director AI agent (美術總監). Apply the following design-quality standards when reading and characterising the reference sites:\n\n'
+          + frontendDesignSkillBody()
+        ),
         prompt,
         maxOutputTokens: 4096,
       });

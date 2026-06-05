@@ -1,5 +1,21 @@
 import { getProvider, defaultModel } from './provider.js';
 import type { GenerateParams } from './provider.js';
+import { readSkill } from './skillRegistry.js';
+
+/** Art-director knowledge: the embedded frontend-design skill body, loaded once.
+ *  Every design-mode generation carries it so the AI acts as a 美術 agent with
+ *  real design-quality standards instead of generic AI aesthetics. */
+let frontendDesignSkillCache: string | null | undefined;
+export function frontendDesignSkillBody(): string {
+  if (frontendDesignSkillCache !== undefined) return frontendDesignSkillCache ?? '';
+  try {
+    frontendDesignSkillCache = readSkill('frontend-design')?.body ?? null;
+  } catch {
+    // skill registry not initialised (unit tests) — degrade gracefully
+    frontendDesignSkillCache = null;
+  }
+  return frontendDesignSkillCache ?? '';
+}
 
 export interface CallProviderOptions {
   mode: 'consult' | 'architect' | 'design';
@@ -89,7 +105,11 @@ export async function* callProvider(opts: CallProviderOptions): AsyncIterable<st
   // the artifact directly. Thinking in design mode causes the UI to show "推理中..."
   // for a long time before the artifact appears, which looks broken.
   const thinkingInstr = opts.mode === 'design' ? '' : THINKING_INSTRUCTION;
-  const systemInstruction = [baseSystem, userSystem, thinkingInstr].filter(Boolean).join('\n\n');
+  // Design mode: inject the frontend-design skill so generation follows
+  // art-director-level aesthetics (bold direction, distinctive typography,
+  // intentional color, no generic AI design).
+  const artDirectorBlock = opts.mode === 'design' ? frontendDesignSkillBody() : '';
+  const systemInstruction = [baseSystem, artDirectorBlock, userSystem, thinkingInstr].filter(Boolean).join('\n\n');
 
   const params: GenerateParams = {
     model: resolveModel(opts.model),
