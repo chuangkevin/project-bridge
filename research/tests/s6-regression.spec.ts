@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
 
+async function getExistingProjectPath(page: any): Promise<string | null> {
+  const r = await page.request.get('/api/projects');
+  if (!r.ok()) return null;
+  const data = await r.json();
+  const projects: any[] = data.projects || [];
+  return projects.length > 0 ? `/projects/${projects[0].id}` : null;
+}
+
 test('R1: 首頁不跳 login', async ({ page }) => {
   await page.goto('/');
   await page.waitForURL(/.+/, { timeout: 8000 });
@@ -15,47 +23,32 @@ test('R2: /api/health 回 ok + db ok', async ({ request }) => {
 });
 
 test('R3: 設計模式 workspace__right 不顯示', async ({ page }) => {
-  await page.goto('/projects');
-  const link = page.locator('a[href*="/projects/"]:not([href="/projects"])').first();
-  if (await link.count() > 0) {
-    await link.click();
-    await page.waitForURL(/\/projects\/.+/);
-    await page.locator('button:has-text("設計"), text=設計').first().click().catch(() => {});
-    await page.waitForTimeout(500);
-    await expect(page.locator('.workspace__right')).not.toBeVisible();
-  } else {
-    test.skip();
-  }
+  const path = await getExistingProjectPath(page);
+  if (!path) { test.skip(); return; }
+  await page.goto(path);
+  await page.getByRole('tab', { name: '設計' }).click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('.workspace__right')).not.toBeVisible();
 });
 
 test('R4: 架構模式 workspace__right 不顯示', async ({ page }) => {
-  await page.goto('/projects');
-  const link = page.locator('a[href*="/projects/"]:not([href="/projects"])').first();
-  if (await link.count() > 0) {
-    await link.click();
-    await page.waitForURL(/\/projects\/.+/);
-    await page.locator('button:has-text("架構"), text=架構').first().click().catch(() => {});
-    await page.waitForTimeout(500);
-    await expect(page.locator('.workspace__right')).not.toBeVisible();
-  } else {
-    test.skip();
-  }
+  const path = await getExistingProjectPath(page);
+  if (!path) { test.skip(); return; }
+  await page.goto(path);
+  await page.getByRole('tab', { name: '架構' }).click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('.workspace__right')).not.toBeVisible();
 });
 
 test('R5: 顧問模式合議 toggle 有 aria-checked 屬性', async ({ page }) => {
-  await page.goto('/projects');
-  const link = page.locator('a[href*="/projects/"]:not([href="/projects"])').first();
-  if (await link.count() > 0) {
-    await link.click();
-    await page.waitForURL(/\/projects\/.+/);
-    await page.locator('button:has-text("顧問"), text=顧問').first().click().catch(() => {});
-    const toggle = page.locator('[role="switch"]').first();
-    await expect(toggle).toBeVisible({ timeout: 5000 });
-    const checked = await toggle.getAttribute('aria-checked');
-    expect(['true', 'false']).toContain(checked);
-  } else {
-    test.skip();
-  }
+  const path = await getExistingProjectPath(page);
+  if (!path) { test.skip(); return; }
+  await page.goto(path);
+  await page.getByRole('tab', { name: '顧問' }).click();
+  const toggle = page.locator('[role="switch"]').first();
+  await expect(toggle).toBeVisible({ timeout: 5000 });
+  const checked = await toggle.getAttribute('aria-checked');
+  expect(['true', 'false']).toContain(checked);
 });
 
 test('R6: /settings 直接進入無密碼阻擋', async ({ page }) => {
@@ -64,18 +57,13 @@ test('R6: /settings 直接進入無密碼阻擋', async ({ page }) => {
 });
 
 test('R7: TopBar 顯示 v2.0 還是 hash（記錄）', async ({ page }) => {
-  await page.goto('/projects');
-  const link = page.locator('a[href*="/projects/"]:not([href="/projects"])').first();
-  if (await link.count() > 0) {
-    await link.click();
-    await page.waitForURL(/\/projects\/.+/);
-    const bodyText = await page.textContent('body') ?? '';
-    const hasV20 = bodyText.includes('v2.0');
-    const hashMatch = bodyText.match(/\b[a-f0-9]{7}\b/);
-    console.log(`Version display: v2.0=${hasV20}, hashFound=${!!hashMatch?.[0]}`);
-    // FAIL if still showing v2.0 as hardcoded
-    expect(hasV20).toBe(false);
-  } else {
-    test.skip();
-  }
+  const path = await getExistingProjectPath(page);
+  if (!path) { test.skip(); return; }
+  await page.goto(path);
+  const bodyText = await page.textContent('body') ?? '';
+  const hasV20 = bodyText.includes('v2.0');
+  const hashMatch = bodyText.match(/\b[a-f0-9]{7}\b/);
+  console.log(`Version display: v2.0=${hasV20}, hashFound=${!!hashMatch?.[0]}`);
+  // FAIL if still showing v2.0 as hardcoded
+  expect(hasV20).toBe(false);
 });
