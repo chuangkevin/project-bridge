@@ -14,6 +14,8 @@ import ArtifactPicker from './design/ArtifactPicker';
 import AnnotationsPanel from './design/AnnotationsPanel';
 import ApiBindingsPanel from './design/ApiBindingsPanel';
 import VersionHistoryModal from './design/VersionHistoryModal';
+import AnnotateQuickForm from './design/AnnotateQuickForm';
+import RegenQuickForm from './design/RegenQuickForm';
 
 interface QualityScore {
   overall: number;
@@ -673,49 +675,3 @@ export default function DesignStage() {
 }
 
 const pendingRef = { current: '' };
-
-function AnnotateQuickForm({ projectId, bridgeId, onDone }: { projectId:string; bridgeId:string; onDone:()=>void }) {
-  const [content, setContent] = useState('');
-  const [saving, setSaving] = useState(false);
-  const handleSave = async () => {
-    if (!content.trim()) return;
-    setSaving(true);
-    try {
-      await fetch(`/api/projects/${projectId}/annotations`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ bridgeId, content, label: bridgeId }),
-      });
-      onDone();
-    } finally { setSaving(false); }
-  };
-  return (
-    <div>
-      <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="標註內容…" rows={3}
-        style={{width:'100%',background:'var(--bg-input)',border:'1px solid var(--border-primary)',color:'var(--text-primary)',padding:6,borderRadius:4,fontSize:12,resize:'vertical'}} />
-      <div style={{display:'flex',gap:6,marginTop:6,justifyContent:'flex-end'}}>
-        <button className="design__btn" onClick={onDone}>取消</button>
-        <button className="design__btn" onClick={handleSave} disabled={saving||!content.trim()}
-          style={{background:'var(--accent)',color:'white',border:'none'}}>
-          {saving?'儲存中…':'新增標註'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function RegenQuickForm({ instruction, onChange, loading, onSubmit, onCancel }:
-  { instruction:string; onChange:(v:string)=>void; loading:boolean; onSubmit:()=>void; onCancel:()=>void }) {
-  return (
-    <div>
-      <textarea value={instruction} onChange={e=>onChange(e.target.value)} placeholder="描述要怎麼修改這個元素…" rows={3}
-        style={{width:'100%',background:'var(--bg-input)',border:'1px solid var(--border-primary)',color:'var(--text-primary)',padding:6,borderRadius:4,fontSize:12,resize:'vertical'}} />
-      <div style={{display:'flex',gap:6,marginTop:6,justifyContent:'flex-end'}}>
-        <button className="design__btn" onClick={onCancel}>取消</button>
-        <button className="design__btn" onClick={onSubmit} disabled={loading||!instruction.trim()}
-          style={{background:'var(--accent)',color:'white',border:'none'}}>
-          {loading?'生成中…':'⚡ 重新生成'}
-        </button>
-      </div>
-    </div>
-  );
-}
