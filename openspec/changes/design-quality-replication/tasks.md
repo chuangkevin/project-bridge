@@ -4,14 +4,14 @@
 
 ## 1. Phase 1 — 地基：生成 context + fallback 顯性化
 
-- [ ] 1.1 `chatOrchestrator.buildSystemPrompt`：新增 active artifact source 區段（讀取 artifact payload；>60KB 走結構摘要 + 警告），單元測試含兩種路徑
-- [ ] 1.2 結構摘要產生器（v-if 頁面清單、nav 標籤、元件名）— 可先以 sfcSurgeon 雛形或 regex-free parser 實作
-- [ ] 1.3 `callProvider`：以 AsyncLocalStorage correlation 捕捉實際 selection（`generateWithSelection` 非流式 / `onSelect` hook 流式），回傳 `{provider, model, fallback}`
-- [ ] 1.4 `routes/chat.ts`：selection 寫入 `turns.model_used`、發 SSE `meta` 事件
-- [ ] 1.5 新設定 `disallow_model_fallback`（settings 讀寫 + route policy 動態建構 + `invalidateProvider`），單元測試驗證 policy 建構
-- [ ] 1.6 Client `TurnBubble` provider/model badge（fallback 橘色警示樣式）；`ProvidersTab` 開關 UI
-- [ ] 1.7 修正 `provider.ts:338` 錯誤註解與過時 vision 註解（provider.ts / designExtractor.ts）
-- [ ] 1.8 Phase 1 測試全綠 + commit
+- [x] 1.1 `chatOrchestrator.buildSystemPrompt`：新增 active artifact source 區段（讀取 artifact payload；>60KB 走結構摘要 + 警告），單元測試含兩種路徑
+- [x] 1.2 結構摘要產生器（v-if 頁面清單、nav 標籤、元件名）— 可先以 sfcSurgeon 雛形或 regex-free parser 實作
+- [x] 1.3 `callProvider`：以 AsyncLocalStorage correlation 捕捉實際 selection（`generateWithSelection` 非流式 / `onSelect` hook 流式），回傳 `{provider, model, fallback}`
+- [x] 1.4 `routes/chat.ts`：selection 寫入 `turns.model_used`、發 SSE `meta` 事件
+- [x] 1.5 新設定 `disallow_model_fallback`（settings 讀寫 + route policy 動態建構 + `invalidateProvider`），單元測試驗證 policy 建構
+- [x] 1.6 Client `TurnBubble` provider/model badge（fallback 橘色警示樣式）；`ProvidersTab` 開關 UI
+- [x] 1.7 修正 `provider.ts:338` 錯誤註解與過時 vision 註解（provider.ts / designExtractor.ts）
+- [x] 1.8 Phase 1 測試全綠 + commit
 
 ## 2. Phase 2 — sfcSurgeon + 雙軌編輯
 

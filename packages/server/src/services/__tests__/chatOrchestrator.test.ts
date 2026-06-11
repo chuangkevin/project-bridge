@@ -131,3 +131,44 @@ describe('parseArtifactsFromResponse', () => {
     expect(result[1].name).toBe('tokens');
   });
 });
+
+describe('buildSystemPrompt — active artifact source (design-generation-context)', () => {
+  const SMALL_SFC = '<template>\n  <div v-if="currentPage===\'home\'"><h1>首頁</h1></div>\n</template>\n<script>export default {}</script>';
+
+  it('injects full source for a normal-sized artifact', () => {
+    const result = buildSystemPrompt({
+      mode: 'design',
+      memorySnapshot: { facts: [], turns: [], earlierTurnCount: 0 },
+      skillDescriptions: '',
+      activeArtifact: { id: 'a1', name: 'site', source: SMALL_SFC },
+    });
+    expect(result).toContain('## Active artifact source (id: a1, name: site)');
+    expect(result).toContain(SMALL_SFC);
+    expect(result).toContain('preserve everything they did not mention');
+  });
+
+  it('degrades to structural summary with warning when source exceeds limit', () => {
+    const bigBody = '<p>' + 'x'.repeat(70_000) + '</p>';
+    const bigSfc = `<template>\n<div>\n<div v-if="currentPage==='home'"><h1>首頁標題</h1>${bigBody}</div>\n</div>\n</template>`;
+    const result = buildSystemPrompt({
+      mode: 'design',
+      memorySnapshot: { facts: [], turns: [], earlierTurnCount: 0 },
+      skillDescriptions: '',
+      activeArtifact: { id: 'a2', name: 'big', source: bigSfc },
+    });
+    expect(result).toContain('## Active artifact structure (id: a2, name: big)');
+    expect(result).toContain('原始碼過大');
+    expect(result).toContain("currentPage==='home'");
+    // No mid-payload truncated source dump
+    expect(result).not.toContain('x'.repeat(1000));
+  });
+
+  it('falls back to bare id line when only activeArtifactId is known', () => {
+    const result = buildSystemPrompt({
+      mode: 'design',
+      memorySnapshot: { facts: [], turns: [], earlierTurnCount: 0, activeArtifactId: 'a3' },
+      skillDescriptions: '',
+    });
+    expect(result).toContain('## Active artifact: a3');
+  });
+});

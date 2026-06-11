@@ -7,6 +7,13 @@ export type ChatPhase = 'idle' | 'loading_memory' | 'selecting_skills' | 'thinki
 
 export interface CouncilEntry { persona: 'pm' | 'designer' | 'engineer' | 'moderator'; text: string; }
 
+export interface ProviderMeta {
+  provider: string;
+  model: string;
+  requestedModel: string;
+  fallback: boolean;
+}
+
 export interface ChatStreamState {
   phase: ChatPhase;
   selectedSkills: string[];
@@ -16,11 +23,12 @@ export interface ChatStreamState {
   turnId: string | null;
   council: CouncilEntry[];
   activeCouncilPersona: CouncilEntry['persona'] | null;
+  providerMeta: ProviderMeta | null;
 }
 
 const INITIAL: ChatStreamState = {
   phase: 'idle', selectedSkills: [], thinkingText: '', answerText: '', error: null, turnId: null,
-  council: [], activeCouncilPersona: null,
+  council: [], activeCouncilPersona: null, providerMeta: null,
 };
 
 export interface SendParams {
@@ -166,6 +174,17 @@ function handleEvent(ev: { event: string; data: string }, setState: Dispatch<Set
     } else if (ev.event === 'token') {
       const parsed = JSON.parse(ev.data);
       setState((s) => ({ ...s, answerText: s.answerText + (parsed.text ?? '') }));
+    } else if (ev.event === 'meta') {
+      const parsed = JSON.parse(ev.data);
+      setState((s) => ({
+        ...s,
+        providerMeta: {
+          provider: parsed.provider ?? '',
+          model: parsed.model ?? '',
+          requestedModel: parsed.requestedModel ?? '',
+          fallback: parsed.fallback === true,
+        },
+      }));
     } else if (ev.event === 'done') {
       const parsed = JSON.parse(ev.data);
       setState((s) => ({ ...s, phase: 'done', turnId: parsed.turnId ?? null, activeCouncilPersona: null }));

@@ -1,5 +1,12 @@
 import type { MemorySnapshot } from './memorySnapshot.js';
 import type { TurnMode } from './turnService.js';
+import { summarizeSfcStructure } from './sfcSurgeon.js';
+
+export interface ActiveArtifactContext {
+  id: string;
+  name: string;
+  source: string;
+}
 
 export interface BuildPromptOpts {
   mode: TurnMode;
@@ -7,7 +14,14 @@ export interface BuildPromptOpts {
   skillDescriptions: string;         // pre-formatted "Available skills:\n- name: desc\n…"
   forcedSkillBody?: string;          // from slash command
   attachments?: Array<{ kind: string; parsedText?: string; originalName: string }>;
+  /** Current design source — injected verbatim so modification requests are
+   *  grounded in the real artifact instead of the AI re-imagining it. */
+  activeArtifact?: ActiveArtifactContext;
 }
+
+/** Above this size the artifact source is replaced by a structural summary —
+ *  a mid-payload truncation would be worse than an honest summary. */
+export const ACTIVE_ARTIFACT_SOURCE_LIMIT = 60_000;
 
 const FACTS_CLOSING =
   'If you produce structured facts, append a `<facts>...</facts>` JSON block at the end of your answer with `[{kind, text}, ...]`.';
@@ -35,8 +49,25 @@ export function buildSystemPrompt(opts: BuildPromptOpts): string {
     sections.push(`## Earlier conversation\n(${snapshot.earlierTurnCount} earlier turns omitted for brevity.)`);
   }
 
-  // 4. Active artifact
-  if (snapshot.activeArtifactId) {
+  // 4. Active artifact — full source when available, structural summary when oversized
+  if (opts.activeArtifact) {
+    const { id, name, source } = opts.activeArtifact;
+    if (source.length <= ACTIVE_ARTIFACT_SOURCE_LIMIT) {
+      sections.push(
+        `## Active artifact source (id: ${id}, name: ${name})\n` +
+        'This is the CURRENT design the user sees. When the user asks for modifications, ' +
+        'modify THIS source — preserve everything they did not mention.\n' +
+        '```vue\n' + source + '\n```',
+      );
+    } else {
+      sections.push(
+        `## Active artifact structure (id: ${id}, name: ${name})\n` +
+        `⚠️ 原始碼過大（${Math.round(source.length / 1024)} KB）已省略，以下為結構摘要。` +
+        '修改時保留摘要中列出的所有頁面與互動元素，僅變更使用者要求的部分。\n\n' +
+        summarizeSfcStructure(source),
+      );
+    }
+  } else if (snapshot.activeArtifactId) {
     sections.push(`## Active artifact: ${snapshot.activeArtifactId}`);
   }
 

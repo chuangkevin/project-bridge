@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApiKeys } from '../../hooks/useApiKeys';
 import { useOpencodeServers, type OpencodeTestResult, type OpencodeModel } from '../../hooks/useOpencodeServers';
+import { useSetting } from '../../hooks/useSettings';
 import { apiAdmin as api } from '../../lib/api';
 
 function formatTokens(n: number): string {
@@ -330,12 +331,52 @@ function OpenAiOAuthSection() {
   );
 }
 
+function FallbackPolicySection() {
+  const { value, loading, save } = useSetting('disallow_model_fallback');
+  const [msg, setMsg] = useState<string | null>(null);
+  const disallow = value === 'true';
+
+  const toggle = async () => {
+    setMsg(null);
+    try {
+      await save(disallow ? 'false' : 'true');
+      setMsg('已儲存，立即生效');
+      setTimeout(() => setMsg(null), 2000);
+    } catch (e) {
+      setMsg(`儲存失敗：${(e as Error).message}`);
+    }
+  };
+
+  return (
+    <section className="settings-section">
+      <header className="settings-section__head">
+        <h2 className="settings-section__title">模型 Fallback 政策</h2>
+        {disallow && <span className="settings-section__badge settings-section__badge--ok">已鎖定模型</span>}
+      </header>
+      <p className="settings-muted">
+        預設情況下，首選 provider 失敗時允許改用其他 provider 的「不同模型」出貨（例如 gpt-5.5 請求被 gemini-2.5-flash 接手）。
+        開啟此選項後將禁止跨模型降級 — 失敗會直接回報錯誤，不會默默換成較弱的模型。每則 AI 回覆都會顯示實際服務的 provider/model。
+      </p>
+      {loading ? <p className="settings-muted">載入中…</p> : (
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginTop: 'var(--space-2)' }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+            <input type="checkbox" checked={disallow} onChange={() => { void toggle(); }} />
+            禁止跨模型 fallback（嚴格模式）
+          </label>
+          {msg && <span className="settings-muted" style={{ fontSize: 12 }}>{msg}</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ProvidersTab() {
   return (
     <div className="settings-sections">
       <ApiKeysSection />
       <OpencodeSection />
       <OpenAiOAuthSection />
+      <FallbackPolicySection />
     </div>
   );
 }

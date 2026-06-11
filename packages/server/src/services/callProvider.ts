@@ -17,6 +17,20 @@ export function frontendDesignSkillBody(): string {
   return frontendDesignSkillCache ?? '';
 }
 
+export interface ProviderCallMeta {
+  /** Provider that actually served the call (e.g. "opencode", "gemini"). */
+  provider: string;
+  /** Model that actually served the call. */
+  model: string;
+  /** Model the caller asked for (after default resolution). */
+  requestedModel: string;
+  /** True when the serving model differs from the requested model — i.e. a
+   *  cross-model fallback degraded the request. Provider switches that keep
+   *  the same model are legitimate configured routes and not flagged. */
+  fallback: boolean;
+  credentialRef?: string;
+}
+
 export interface CallProviderOptions {
   mode: 'consult' | 'architect' | 'design';
   prompt: string;
@@ -25,6 +39,8 @@ export interface CallProviderOptions {
   streaming?: boolean;
   /** Override the model ID. Defaults to `defaultModel()` from provider settings. */
   model?: string;
+  /** Fired once with the actual routing selection before tokens flow. */
+  onMeta?: (meta: ProviderCallMeta) => void;
 }
 
 const MODE_SYSTEM_PROMPT: Record<CallProviderOptions['mode'], string> = {
@@ -111,19 +127,35 @@ export async function* callProvider(opts: CallProviderOptions): AsyncIterable<st
   const artDirectorBlock = opts.mode === 'design' ? frontendDesignSkillBody() : '';
   const systemInstruction = [baseSystem, artDirectorBlock, userSystem, thinkingInstr].filter(Boolean).join('\n\n');
 
+  const requestedModel = resolveModel(opts.model);
   const params: GenerateParams = {
-    model: resolveModel(opts.model),
+    model: requestedModel,
     prompt: opts.prompt,
     systemInstruction,
     history: opts.history,
   };
 
+  const emitMeta = (selection: { provider: string; model: string; credentialRef?: string }): void => {
+    opts.onMeta?.({
+      provider: selection.provider,
+      model: selection.model,
+      requestedModel,
+      fallback: selection.model !== requestedModel,
+      credentialRef: selection.credentialRef,
+    });
+  };
+
   if (opts.streaming !== false) {
-    for await (const tok of provider.streamContent(params)) {
+    // streamWithSelection resolves the route eagerly and ai-core performs no
+    // mid-stream candidate fallback, so this selection is the serving one.
+    const routed = provider.streamWithSelection(params);
+    emitMeta(routed.selection);
+    for await (const tok of routed.stream) {
       yield tok;
     }
   } else {
-    const res = await provider.generateContent(params);
-    yield res.text;
+    const exec = await provider.generateWithSelection(params);
+    emitMeta(exec.selection);
+    yield exec.response.text;
   }
 }

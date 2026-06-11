@@ -8,6 +8,7 @@ export interface Turn {
   userText: string;
   aiResponse: { text: string; thinking?: string };
   skillsUsed?: string[];
+  modelUsed?: string;
   createdAt: string;
 }
 

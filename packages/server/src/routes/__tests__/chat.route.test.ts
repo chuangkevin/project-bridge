@@ -24,10 +24,26 @@ afterEach(() => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
+const SELECTION = { provider: 'opencode', model: 'gemini-2.5-flash', credentialType: 'api', credentialRef: 'opencode-1' };
+
 function mockProvider(stream: string[]) {
   vi.spyOn(providerModule, 'getProvider').mockReturnValue({
-    streamContent: async function* () { for (const t of stream) yield t; },
-    generateContent: vi.fn(),
+    streamWithSelection: () => ({
+      selection: SELECTION,
+      stream: (async function* () { for (const t of stream) yield t; })(),
+    }),
+    generateWithSelection: vi.fn(),
+  } as never);
+}
+
+/** Capturing variant: hands params to the callback, streams its return. */
+function mockProviderCapture(fn: (params: { systemInstruction?: string }) => string) {
+  vi.spyOn(providerModule, 'getProvider').mockReturnValue({
+    streamWithSelection: (params: { systemInstruction?: string }) => ({
+      selection: SELECTION,
+      stream: (async function* () { yield fn(params); })(),
+    }),
+    generateWithSelection: vi.fn(),
   } as never);
 }
 
@@ -78,27 +94,18 @@ describe('POST /api/projects/:id/chat (M1 anonymous)', () => {
   it('slash command forces a skill into prompt', async () => {
     // Provider captures what systemInstruction came in
     let captured = '';
-    vi.spyOn(providerModule, 'getProvider').mockReturnValue({
-      streamContent: async function* (params: { systemInstruction?: string }) {
-        captured = params.systemInstruction ?? '';
-        yield 'ok';
-      },
-      generateContent: vi.fn(),
-    } as never);
+    mockProviderCapture((params) => { captured = params.systemInstruction ?? ''; return 'ok'; });
     await request(app).post(`/api/projects/${projectId}/chat`).send({ mode: 'consult', text: '/consult-clarify-first hello' });
     expect(captured).toContain('Consult'); // matches built-in skill body
   });
 
   it('council mode runs four personas and emits council_token events', async () => {
     const callCount = { n: 0 };
-    vi.spyOn(providerModule, 'getProvider').mockReturnValue({
-      streamContent: async function* (params: { systemInstruction?: string }) {
-        callCount.n += 1;
-        const which = params.systemInstruction?.match(/council-(pm|designer|engineer|moderator)/);
-        yield `[${which?.[1] ?? 'unknown'}] reply`;
-      },
-      generateContent: vi.fn(),
-    } as never);
+    mockProviderCapture((params) => {
+      callCount.n += 1;
+      const which = params.systemInstruction?.match(/council-(pm|designer|engineer|moderator)/);
+      return `[${which?.[1] ?? 'unknown'}] reply`;
+    });
 
     const r = await request(app).post(`/api/projects/${projectId}/chat`)
       .send({ mode: 'consult', text: 'design a counter', council: true });

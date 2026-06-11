@@ -63,9 +63,19 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
         <div className="bubble__markdown">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanDisplayText(turn.aiResponse.text, turn.mode)}</ReactMarkdown>
         </div>
-        {turn.skillsUsed && turn.skillsUsed.length > 0 && (
+        {(turn.modelUsed || (turn.skillsUsed && turn.skillsUsed.length > 0)) && (
           <div className="bubble__skills">
-            使用技能：{turn.skillsUsed.map((s) => <span key={s}>{s}</span>)}
+            {turn.modelUsed && (
+              <span
+                className={`bubble__model-badge${turn.modelUsed.includes('(fallback)') ? ' bubble__model-badge--fallback' : ''}`}
+                title={turn.modelUsed.includes('(fallback)') ? '此回覆由降級模型生成（首選模型失敗）' : '此回覆實際使用的 provider/model'}
+              >
+                {turn.modelUsed}
+              </span>
+            )}
+            {turn.skillsUsed && turn.skillsUsed.length > 0 && (
+              <>使用技能：{turn.skillsUsed.map((s) => <span key={s}>{s}</span>)}</>
+            )}
           </div>
         )}
       </div>

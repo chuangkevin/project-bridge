@@ -20,9 +20,9 @@
 ### D1: active artifact 原始碼放 system prompt 而非 history
 沒人傳 `history` 且 OpenCode adapter 會丟棄它 — 放 system prompt 是唯一在三個 provider 路徑都生效的位置。60KB 門檻內全文注入；超過則注入結構摘要（v-if 頁面清單、nav 標籤、元件名）+ 明確警告。替代方案（傳 history）被 OpenCode adapter 行為否決。
 
-### D2: selection 取得方式 — 改用 `generateWithSelection` 與流式 selection 回報
-`callProvider` 非流式路徑改 `generateWithSelection`（ai-core 已回傳 `{selection, response}`）；流式路徑 ai-core 不回 selection，改為：stream 開始前先 `selectAdapter(policy)` 預取 candidate 清單寫入 turn meta，stream 結束後以 `onSelect` callback 實錄為準校正（`getProvider()` 建構時已有 `onSelect` hook，加一個 per-call correlation id）。若 ai-core hook 拿不到 per-call 對應，fallback：在 `onSelect` 記錄最後一次 selection 到 module-level slot，callProvider 呼叫前後讀取（單行程 Express 足夠，但要在 await 邊界內讀取避免併發污染 — 用 AsyncLocalStorage 包 correlation）。
-**選 AsyncLocalStorage correlation 為正解**，module slot 只作測試 fallback。
+### D2: selection 取得方式 — `generateWithSelection` / `streamWithSelection`
+實測 ai-core dist：`streamWithSelection` 回傳 `{selection, stream}` 且 **executeStream 沒有 mid-stream cross-candidate fallback**（eager 選定即開流，失敗直接拋錯）— 流式 selection 是準的；`generateWithSelection` 在 execute() 候選迴圈成功後回傳實際勝出 selection。兩者皆免 correlation 機制，原 AsyncLocalStorage 方案不需要。`callProvider` 增加 `onMeta` callback 把 `{provider, model, fallback}` 交給呼叫端；`fallback := selection.model !== requestedModel`（provider 切換但同 model 屬合法配置路徑，badge 仍會顯示 provider 讓使用者看見）。
+附帶事實更正：「靜默 fallback 到 flash」只發生在**非流式**呼叫（design.ts variants/regenerate、extractor 等）；主聊天流式路徑會直接報錯而非降級 — badge + 可關閉 fallback 仍涵蓋兩者。
 
 ### D3: `disallow_model_fallback` 的語意
 設定 ON 時 route policy 建構為 `allowCrossModelFallback: false`（cross-provider 仍允許 — Gemini adapter 若恰好支援同名 model 才可承接，等於實質禁止 flash 頂替 gpt-5.5）。不直接關 `allowCrossProviderFallback`，保留 OpenAI credential 承接 gpt-* 的合法路徑。

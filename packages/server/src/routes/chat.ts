@@ -11,8 +11,9 @@ import { appendTurn, type TurnMode } from '../services/turnService.js';
 import { addFact } from '../services/factService.js';
 import { parseFactsFromResponse } from '../services/factExtractor.js';
 import { getAttachment, type Attachment } from '../services/ingestionService.js';
-import { buildSystemPrompt, parseArtifactsFromResponseWithFallback } from '../services/chatOrchestrator.js';
-import { createArtifact } from '../services/artifactService.js';
+import { buildSystemPrompt, parseArtifactsFromResponseWithFallback, type ActiveArtifactContext } from '../services/chatOrchestrator.js';
+import { createArtifact, getArtifact, listArtifacts, readArtifactPayload } from '../services/artifactService.js';
+import type { ProviderCallMeta } from '../services/callProvider.js';
 import { runCouncil } from '../services/councilOrchestrator.js';
 import { readSetting } from '../services/settings.js';
 
@@ -86,11 +87,29 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         }
       }
 
+      // Active artifact source — design mode modifications must see the real
+      // current design, not just an artifact id (design-generation-context spec).
+      let activeArtifact: ActiveArtifactContext | undefined;
+      if (mode === 'design') {
+        const requestedArtifactId = typeof req.body?.activeArtifactId === 'string' ? req.body.activeArtifactId : undefined;
+        const candidate = requestedArtifactId
+          ? getArtifact(db, requestedArtifactId)
+          : listArtifacts(db, projectId, { kind: 'vue-sfc' })[0] ?? null;
+        if (candidate && candidate.projectId === projectId && candidate.kind === 'vue-sfc') {
+          try {
+            activeArtifact = { id: candidate.id, name: candidate.name, source: readArtifactPayload(dataDir, candidate) };
+          } catch (e) {
+            console.warn(`[chat] failed to read active artifact ${candidate.id} payload:`, (e as Error).message);
+          }
+        }
+      }
+
       // Compose system prompt. Design mode appends global style when the project inherits it.
       const userSystem = buildSystemPrompt({
         mode, memorySnapshot: snapshot, skillDescriptions,
         forcedSkillBody: forcedSkill?.body,
         attachments: attachments.map(a => ({ kind: a.kind, parsedText: a.parsedText, originalName: a.originalName })),
+        activeArtifact,
       }) + (mode === 'design' ? globalStyleBlock(db, project.inheritGlobalStyle) : '');
 
       sse(res, 'phase', { phase: 'thinking' });
@@ -149,7 +168,11 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
              .slice(0, max);
           const councilContext = `Team discussion summary:\n- PM: ${trunc(transcripts.pm)}\n- Designer: ${trunc(transcripts.designer)}\n- Engineer: ${trunc(transcripts.engineer)}\n- Conclusion: ${trunc(finalAnswer, 800)}\n\nNow generate the Vue + Tailwind design.`;
           let designFullText = '';
-          for await (const tok of callProvider({ mode: 'design', prompt: text.trim(), systemInstruction: userSystem + '\n\n' + councilContext, streaming: true })) {
+          let designMeta: ProviderCallMeta | null = null;
+          for await (const tok of callProvider({
+            mode: 'design', prompt: text.trim(), systemInstruction: userSystem + '\n\n' + councilContext, streaming: true,
+            onMeta: (m) => { designMeta = m; sse(res, 'meta', m); },
+          })) {
             designFullText += tok;
             sse(res, 'token', { text: tok });
           }
@@ -159,6 +182,7 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
             userText: text.trim(),
             aiResponse: { text: answerText, thinking: thinkingText },
             skillsUsed: ['council-pm', 'council-designer', 'council-engineer', 'council-moderator'],
+            modelUsed: formatModelUsed(designMeta),
           });
           const facts = parseFactsFromResponse(designFullText);
           for (const f of facts) addFact(db, { projectId, turnId: turn.id, kind: f.kind, text: f.text });
@@ -191,7 +215,11 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       let fullText = '';
 
       const cleanText = slashCmd ? slashCmd.rest : text.trim();
-      for await (const tok of callProvider({ mode, prompt: cleanText, systemInstruction: userSystem, streaming: true })) {
+      let callMeta: ProviderCallMeta | null = null;
+      for await (const tok of callProvider({
+        mode, prompt: cleanText, systemInstruction: userSystem, streaming: true,
+        onMeta: (m) => { callMeta = m; sse(res, 'meta', m); },
+      })) {
         fullText += tok;
         buffer += tok;
         // Detect <thinking>...</thinking> blocks and route tokens accordingly
@@ -258,6 +286,7 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         userText: text.trim(),
         aiResponse: { text: answerText, thinking: thinkingText || undefined },
         skillsUsed: forcedSkill ? [forcedSkill.name] : undefined,
+        modelUsed: formatModelUsed(callMeta),
       });
       for (const f of facts) addFact(db, { projectId, turnId: turn.id, kind: f.kind, text: f.text });
 
@@ -298,6 +327,13 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
   });
 
   return r;
+}
+
+/** "provider/model" label persisted into turns.model_used; cross-model
+ *  fallback is marked inline so historical turns stay self-explanatory. */
+function formatModelUsed(meta: ProviderCallMeta | null): string | undefined {
+  if (!meta) return undefined;
+  return `${meta.provider}/${meta.model}${meta.fallback ? ' (fallback)' : ''}`;
 }
 
 function stripThinking(text: string): string {

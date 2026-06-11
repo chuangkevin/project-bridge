@@ -45,6 +45,17 @@ const DEFAULT_ROUTE_POLICY: RoutePolicy = {
   allowSameProviderCredentialFallback: true,
 };
 
+/**
+ * Effective route policy. `disallow_model_fallback` (settings) flips
+ * allowCrossModelFallback off so a request for e.g. gpt-5.5 can never be
+ * silently served by a different model (gemini-2.5-flash). Cross-provider
+ * fallback stays on — another provider may legitimately serve the SAME model.
+ */
+export function buildRoutePolicy(): RoutePolicy {
+  const disallow = readSetting(getDb(), "disallow_model_fallback") === "true";
+  return { ...DEFAULT_ROUTE_POLICY, allowCrossModelFallback: !disallow };
+}
+
 interface OpenCodeServerConfig {
   id: string;
   label: string;
@@ -267,7 +278,8 @@ function snapshot(): string {
   const opencodeUrl = readSetting(getDb(), "opencode_url") || process.env.OPENCODE_URL || "";
   const opencodeServers = readSetting(getDb(), "opencode_servers") || process.env.OPENCODE_SERVERS || "";
   const opencodePassword = readSetting(getDb(), "opencode_server_password") || process.env.OPENCODE_SERVER_PASSWORD || "";
-  return `${oauth}|${api}|${env}|${opencodeUrl}|${opencodeServers}|${opencodePassword}`;
+  const disallowModelFallback = readSetting(getDb(), "disallow_model_fallback") || "";
+  return `${oauth}|${api}|${env}|${opencodeUrl}|${opencodeServers}|${opencodePassword}|${disallowModelFallback}`;
 }
 
 /** Get the singleton MultiProviderClient. Rebuilt automatically when OpenAI credentials change. */
@@ -318,7 +330,7 @@ export function getProvider(): MultiProviderClient {
 
   cachedClient = new MultiProviderClient({
     adapters,
-    defaultPolicy: DEFAULT_ROUTE_POLICY,
+    defaultPolicy: buildRoutePolicy(),
     onSelect: (sel) => {
       console.log(
         `[provider] selected provider=${sel.provider} model=${sel.model} cred=${sel.credentialType}:${sel.credentialRef}`,
@@ -337,11 +349,15 @@ export function invalidateProvider(): void {
 
 /**
  * Default model — read from `default_ai_model` setting (set by the user in the
- * settings page). The selection is honored *as-is*: if the user picked an
- * OpenAI model but the OpenAI credential is missing/expired, the router will
- * throw `No provider/model combination matches` rather than silently swap to
- * Gemini. Surfacing the failure is the whole point — we got bitten by silent
- * fallback masquerading as an OpenAI response.
+ * settings page).
+ *
+ * ⚠️ Routing truth (verified 2026-06-11): with the default policy
+ * (`allowCrossModelFallback: true`) a NON-STREAMING call whose preferred
+ * provider fails IS silently served by the next provider's own model
+ * (e.g. gemini-2.5-flash standing in for gpt-5.5). Streaming calls pick one
+ * candidate eagerly and error out instead. Set `disallow_model_fallback` to
+ * forbid the model swap entirely; the serving selection is always reported
+ * via callProvider's onMeta → SSE `meta` → turns.model_used.
  */
 export function defaultModel(): string {
   // Master switch: the model picked in "生成偏好 → AI Model". Router decides
@@ -422,9 +438,11 @@ export function hasOpenAICredential(): boolean {
 /**
  * Vision-only call via Gemini SDK directly, bypassing MultiProviderClient.
  *
- * OpenCodeProviderAdapter does not support multimodal input. This helper calls
- * the Gemini API directly (same pattern as settings.ts key validation) and is
- * used as a Gemini-only vision path when needed.
+ * NOTE (2026-06-11): ai-core v3.4.1's OpenCode adapter DOES support
+ * multimodal input (`sendMessage` converts params.images into session file
+ * parts), so getProvider() vision calls can ride the normal route. This
+ * helper remains as the deterministic Gemini fallback when the OpenCode
+ * server/model rejects image parts.
  *
  * Returns null when no Gemini key is available (caller should degrade
  * gracefully instead of crashing).

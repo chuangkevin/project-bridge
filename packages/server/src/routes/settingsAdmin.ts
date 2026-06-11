@@ -13,6 +13,7 @@ const WRITABLE_KEYS = new Set([
   'openai_api_key',
   'openai_oauth_client_id',
   'public_base_url',
+  'disallow_model_fallback',   // 'true' forbids cross-model degradation (e.g. flash standing in for gpt-5.5)
 ]);
 
 const SECRET_KEYS = new Set([
