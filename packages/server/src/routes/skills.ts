@@ -82,6 +82,26 @@ export function buildSkillsRouter(deps: SkillRoutesDeps): Router {
 export function buildProjectSkillsRouter(deps: SkillRoutesDeps): Router {
   const r = Router({ mergeParams: true });
 
+  // GET /api/projects/:id/skills — skills visible to the project.
+  // LeftRail consumes this; the route was missing → permanent 404 in the rail.
+  r.get('/', (req: Request, res: Response) => {
+    const projectId = req.params.id as string;
+    const p = getProject(deps.db, projectId);
+    if (!p) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
+    const skills = listSkills({ projectId });
+    res.json({ skills: skills.map(s => ({ name: s.name, description: s.description, layer: s.layer, metadata: s.metadata })) });
+  });
+
+  // GET /api/projects/:id/skills/:name — skill detail (RightInspector).
+  r.get('/:name', (req: Request, res: Response) => {
+    const projectId = req.params.id as string;
+    const p = getProject(deps.db, projectId);
+    if (!p) { fail(res, 404, 'NOT_FOUND', '專案不存在'); return; }
+    const skill = readSkill(req.params.name as string, { projectId });
+    if (!skill) { fail(res, 404, 'SKILL_NOT_FOUND', 'skill 不存在'); return; }
+    res.json(skill);
+  });
+
   r.post('/', (req: Request, res: Response) => {
     const projectId = req.params.id as string;
     const p = getProject(deps.db, projectId);

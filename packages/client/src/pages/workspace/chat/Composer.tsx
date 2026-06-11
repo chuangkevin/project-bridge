@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type KeyboardEvent, type ChangeEvent } from 'react';
+import { useState, useRef, useCallback, type KeyboardEvent, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent } from 'react';
 import { getToken } from '../../../lib/api';
 import SlashAutocomplete from './SlashAutocomplete';
 
@@ -65,14 +65,13 @@ export default function Composer({ projectId, disabled, onSend, enableReplicatio
     }
   };
 
-  const handleFiles = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const uploadFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0 || disabled) return;
     setUploading(true);
     try {
       const token = getToken();
       const fd = new FormData();
-      for (const f of Array.from(files)) fd.append('files', f);
+      for (const f of files) fd.append('files', f);
       const res = await fetch(`/api/projects/${projectId}/ingest`, {
         method: 'POST',
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -88,6 +87,33 @@ export default function Composer({ projectId, disabled, onSend, enableReplicatio
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
     }
+  }, [projectId, disabled]);
+
+  const handleFiles = (e: ChangeEvent<HTMLInputElement>) => {
+    void uploadFiles(Array.from(e.target.files ?? []));
+  };
+
+  /** 剪貼簿貼圖（截圖直接 Ctrl+V）。文字貼上不受影響。 */
+  const handlePaste = (e: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const images = items
+      .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+      .map(it => it.getAsFile())
+      .filter((f): f is File => !!f)
+      .map((f, i) => f.name && f.name !== 'image.png'
+        ? f
+        : new File([f], `pasted-${Date.now()}-${i}.png`, { type: f.type || 'image/png' }));
+    if (images.length === 0) return;
+    e.preventDefault();
+    void uploadFiles(images);
+  };
+
+  /** 拖放圖片/檔案進輸入區。 */
+  const [dragOver, setDragOver] = useState(false);
+  const handleDrop = (e: ReactDragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    void uploadFiles(Array.from(e.dataTransfer?.files ?? []));
   };
 
   const handleSlashPick = (skillName: string) => {
@@ -105,10 +131,15 @@ export default function Composer({ projectId, disabled, onSend, enableReplicatio
   );
 
   return (
-    <div className="composer">
+    <div
+      className={`composer${dragOver ? ' composer--dragover' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+    >
       {showIntake && (
-        <div className="composer__intake" style={{ position: 'absolute', bottom: 'calc(100% + 34px)', left: 'var(--space-5)', right: 'var(--space-5)' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>偵測到圖片/網址 — 要怎麼用？</span>
+        <div className="composer__intake">
+          <span className="composer__intake-label">偵測到圖片/網址 — 要怎麼用？</span>
           {intakeBtn('replicate', '🎯 照抄', '像素級重建這個設計')}
           {intakeBtn('style-only', '🎨 只取風格', '只套用色彩字體質感，不抄版面')}
           {intakeBtn('reference', '💬 只當參考', '僅供討論，不照抄')}
@@ -166,7 +197,8 @@ export default function Composer({ projectId, disabled, onSend, enableReplicatio
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? '回答中…' : '輸入訊息（Enter 送出，Shift+Enter 換行；輸入 / 查看技能）'}
+        onPaste={handlePaste}
+        placeholder={disabled ? '回答中…' : uploading ? '上傳中…' : '輸入訊息（Enter 送出；可直接貼上/拖入截圖）'}
         rows={1}
       />
       <button

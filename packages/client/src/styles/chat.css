@@ -70,18 +70,28 @@
   border-radius: 999px;
   margin-right: var(--space-2);
 }
+/* In-flow full-width row above the input (absolute positioning爆版 at
+   narrow chat widths — this wraps gracefully instead). */
 .composer__intake {
+  order: -1;
+  flex: 1 1 100%;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 999px;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-lg);
   background: var(--glass-bg-soft);
   -webkit-backdrop-filter: blur(16px) saturate(var(--glass-saturate));
   backdrop-filter: blur(16px) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 24px rgba(2, 6, 23, 0.35);
-  z-index: 5;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+.composer__intake-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 .composer__intake-btn {
   font-size: 11px;
@@ -91,6 +101,8 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .composer__intake-btn--active {
   background: var(--accent);
@@ -145,6 +157,7 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   align-items: flex-end;
   position: relative;
@@ -335,4 +348,9 @@
     left: var(--space-3);
     right: var(--space-3);
   }
+}
+
+.composer--dragover {
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
 }

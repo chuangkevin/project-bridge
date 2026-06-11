@@ -19,6 +19,10 @@ export interface SkillSelection {
 const MAX_SKILLS = 3;
 const PER_SKILL_CAP = 8_000;
 const TOTAL_CAP = 20_000;
+/** Hard deadline for the selector pre-call. The selector runs BEFORE the main
+ *  generation — without this, a slow provider blocks the whole chat at the
+ *  「挑選知識中」phase. Past the deadline we generate without injection. */
+const SELECTOR_TIMEOUT_MS = 8_000;
 
 const SELECTOR_SYSTEM =
   'You route design/consulting requests to domain-knowledge skills. ' +
@@ -38,12 +42,17 @@ export async function selectSkills(opts: { userText: string; projectId: string }
 
   let names: string[] = [];
   try {
-    const exec = await getProvider().generateWithSelection({
-      model: defaultModel(),
-      systemInstruction: withJsonInstruction(SELECTOR_SYSTEM),
-      prompt: `Skill index:\n${index}\n\nUser request:\n${opts.userText.slice(0, 2_000)}`,
-      maxOutputTokens: 512,
-    });
+    const exec = await Promise.race([
+      getProvider().generateWithSelection({
+        model: defaultModel(),
+        systemInstruction: withJsonInstruction(SELECTOR_SYSTEM),
+        prompt: `Skill index:\n${index}\n\nUser request:\n${opts.userText.slice(0, 2_000)}`,
+        maxOutputTokens: 512,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`selector timeout after ${SELECTOR_TIMEOUT_MS}ms`)), SELECTOR_TIMEOUT_MS).unref?.(),
+      ),
+    ]);
     const parsed = JSON.parse(extractJsonBody(exec.response.text)) as { skills?: unknown };
     if (Array.isArray(parsed.skills)) {
       names = parsed.skills.filter((n): n is string => typeof n === 'string');

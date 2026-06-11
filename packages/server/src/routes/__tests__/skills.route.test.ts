@@ -88,3 +88,20 @@ describe('GET /api/skills (M1 anonymous)', () => {
     expect(d.status).toBe(200);
   });
 });
+
+describe('GET /api/projects/:id/skills (rail list — was 404)', () => {
+  it('lists skills visible to the project', async () => {
+    const p = await request(app).post('/api/projects').send({ name: 'SkillRail' });
+    const r = await request(app).get(`/api/projects/${p.body.id}/skills`);
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body.skills)).toBe(true);
+    expect(r.body.skills.length).toBeGreaterThan(0);
+    expect(r.body.skills[0]).toHaveProperty('name');
+    expect(r.body.skills[0]).toHaveProperty('description');
+  });
+
+  it('404 for unknown project', async () => {
+    const r = await request(app).get('/api/projects/no-such/skills');
+    expect(r.status).toBe(404);
+  });
+});

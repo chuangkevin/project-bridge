@@ -6,7 +6,7 @@
   grid-template-rows: 56px 1fr;
   grid-template-columns: var(--left-w, 240px) 1fr 320px;
   height: 100vh;
-  background: var(--bg-root);
+  background: transparent; /* 讓 body 的 aurora 透上來 — 玻璃才有東西可 blur */
   color: var(--text-primary);
 }
 
@@ -53,6 +53,8 @@
 
 .workspace__top {
   grid-area: top;
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -80,7 +82,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--bg-root);
+  background: transparent;
 }
 
 .workspace__right {
@@ -115,9 +117,10 @@
   cursor: pointer;
 }
 .mode-tabs button[aria-pressed="true"] {
-  background: var(--accent-glass);
-  color: var(--text-accent);
-  border-color: var(--border-accent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)), var(--accent-glass);
+  color: #fff;
+  border-color: var(--glass-border);
+  box-shadow: 0 2px 10px rgba(2, 6, 23, 0.45), inset 0 1px 0 var(--glass-highlight);
 }
 
 .glass-card {

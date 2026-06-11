@@ -10,12 +10,12 @@
 :root, [data-theme="dark"] {
   /* ── Layer 1: liquid glass material ── */
   --glass-blur: 22px;
-  --glass-saturate: 1.7;
-  --glass-bg: rgba(13, 20, 38, 0.55);
-  --glass-bg-strong: rgba(11, 17, 32, 0.78);
-  --glass-bg-soft: rgba(30, 41, 59, 0.38);
-  --glass-border: rgba(255, 255, 255, 0.09);
-  --glass-highlight: rgba(255, 255, 255, 0.16);
+  --glass-saturate: 1.9;
+  --glass-bg: rgba(13, 20, 38, 0.42);
+  --glass-bg-strong: rgba(11, 17, 32, 0.58);
+  --glass-bg-soft: rgba(40, 53, 80, 0.32);
+  --glass-border: rgba(255, 255, 255, 0.13);
+  --glass-highlight: rgba(255, 255, 255, 0.25);
   --glass-shadow:
     0 12px 40px rgba(2, 6, 23, 0.55),
     inset 0 1px 0 var(--glass-highlight),
@@ -114,21 +114,53 @@ html, body, #root {
   line-height: 1.6;
 }
 
-/* Ambient atmosphere — glass needs depth behind it to read as glass. */
+/* ── Ambient aurora — 液態玻璃的靈魂：玻璃後面要有會動的彩色光 ──
+   Two fixed, slowly-drifting colour fields sit behind the app (z-index -1).
+   Every translucent surface blurs/saturates THESE — that's what makes the
+   glass read as glass instead of flat dark panels. */
 body {
-  background:
-    radial-gradient(1100px 760px at 88% -12%, rgba(139, 108, 224, 0.20), transparent 60%),
-    radial-gradient(900px 640px at -8% 112%, rgba(56, 189, 248, 0.12), transparent 55%),
-    radial-gradient(700px 500px at 50% 120%, rgba(192, 132, 252, 0.08), transparent 60%),
-    var(--bg-root);
-  background-attachment: fixed;
+  background: var(--bg-root);
+  position: relative;
 }
-[data-theme="light"] body {
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(70px);
+}
+body::before {
   background:
-    radial-gradient(1100px 760px at 88% -12%, rgba(139, 108, 224, 0.14), transparent 60%),
-    radial-gradient(900px 640px at -8% 112%, rgba(56, 189, 248, 0.12), transparent 55%),
-    var(--bg-root);
-  background-attachment: fixed;
+    radial-gradient(42% 38% at 78% 12%, rgba(139, 108, 224, 0.55), transparent 70%),
+    radial-gradient(36% 34% at 12% 86%, rgba(56, 189, 248, 0.38), transparent 70%),
+    radial-gradient(30% 28% at 55% 55%, rgba(236, 72, 153, 0.20), transparent 70%);
+  animation: aurora-a 26s ease-in-out infinite alternate;
+}
+body::after {
+  background:
+    radial-gradient(34% 30% at 22% 18%, rgba(192, 132, 252, 0.30), transparent 70%),
+    radial-gradient(40% 36% at 86% 78%, rgba(34, 211, 238, 0.26), transparent 70%);
+  animation: aurora-b 34s ease-in-out infinite alternate;
+}
+@keyframes aurora-a {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(4%, -3%) scale(1.08); }
+  100% { transform: translate(-4%, 3%) scale(1.02); }
+}
+@keyframes aurora-b {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  100% { transform: translate(-5%, 4%) rotate(8deg); }
+}
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(42% 38% at 78% 12%, rgba(139, 108, 224, 0.30), transparent 70%),
+    radial-gradient(36% 34% at 12% 86%, rgba(56, 189, 248, 0.24), transparent 70%);
+}
+[data-theme="light"] body::after {
+  background:
+    radial-gradient(40% 36% at 86% 78%, rgba(34, 211, 238, 0.18), transparent 70%);
 }
 
 /* ── Liquid glass utilities ───────────────────────────────────────────── */
@@ -213,6 +245,34 @@ button:active { transform: scale(0.97); }
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ── Apple-style typography & control polish ── */
+h1, h2, h3 { font-weight: 650; letter-spacing: -0.02em; }
+h1 { font-size: 26px; }
+
+input[type="text"], input:not([type]), textarea, select {
+  border-radius: 12px;
+}
+
+/* Hover lift on interactive glass */
+.glass-panel { transition: transform 0.35s var(--spring), box-shadow 0.3s var(--ease-glass), background 0.3s var(--ease-glass); }
+.glass-panel:hover { box-shadow: var(--glass-shadow-float); }
+
+/* Specular sheen sweeping across chrome surfaces（液態高光） */
+.glass-chrome { position: relative; overflow: hidden; }
+.glass-chrome::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.06) 45%, rgba(255, 255, 255, 0.10) 50%, rgba(255, 255, 255, 0.06) 55%, transparent 70%);
+  background-size: 250% 100%;
+  animation: sheen 9s var(--ease-glass) infinite;
+}
+@keyframes sheen {
+  0%, 55% { background-position: 120% 0; }
+  100%    { background-position: -130% 0; }
 }
 
 /* Prefer-reduced-motion respect */
