@@ -33,7 +33,9 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
           <div className="phase-indicator" role="status" aria-live="polite">
             <span className="phase-indicator__dot" aria-hidden="true" />
             <span>
-              {state.phase.startsWith('council')
+              {state.phaseMessage
+                ? state.phaseMessage
+                : state.phase.startsWith('council')
                 // Council: show "合議討論中 (X/3 完成)" — avoid confusing "PM 分析中" when PM is done
                 ? `合議討論中（${state.council.length}/3 完成）`
                 : (PHASE_LABEL[state.phase] ?? state.phase)
@@ -59,6 +61,8 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
                 <div className="council__text">
                   {c.text
                     .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+                    .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
+                    .replace(/<facts>[\s\S]*$/i, '') // streaming: unterminated facts block
                     .replace(/```[\s\S]*?```/g, '')
                     .trim()}
                 </div>
@@ -78,6 +82,9 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
                 .trim()}
             </ReactMarkdown>
           </div>
+        )}
+        {state.phase === 'done' && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 8 }} role="status">✓ 回答完成</div>
         )}
         {state.phase === 'error' && (
           <div style={{ color: '#fca5a5', fontSize: 13, marginTop: 8 }}>錯誤：{state.error}</div>

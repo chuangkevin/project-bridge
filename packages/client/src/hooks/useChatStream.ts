@@ -24,11 +24,13 @@ export interface ChatStreamState {
   council: CouncilEntry[];
   activeCouncilPersona: CouncilEntry['persona'] | null;
   providerMeta: ProviderMeta | null;
+  /** Server-provided human-readable phase detail（例：合議完成，正在生成設計…） */
+  phaseMessage: string | null;
 }
 
 const INITIAL: ChatStreamState = {
   phase: 'idle', selectedSkills: [], thinkingText: '', answerText: '', error: null, turnId: null,
-  council: [], activeCouncilPersona: null, providerMeta: null,
+  council: [], activeCouncilPersona: null, providerMeta: null, phaseMessage: null,
 };
 
 export interface SendParams {
@@ -159,6 +161,7 @@ function handleEvent(ev: { event: string; data: string }, setState: Dispatch<Set
           ...s,
           phase: parsed.phase as ChatPhase,
           selectedSkills: Array.isArray(parsed.skills) ? parsed.skills : s.selectedSkills,
+          phaseMessage: typeof parsed.message === 'string' ? parsed.message : null,
         }));
       }
     } else if (ev.event === 'council_token') {
