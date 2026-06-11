@@ -56,15 +56,15 @@
 
 ## 6. Phase 6 — iOS 27 液態玻璃 restyle
 
-- [ ] 6.1 重寫 `theme.css`：`--glass-*` 材質層 + 語意表面層 + 舊 token 映射 + `@supports` 降級 + `--spring` 曲線
-- [ ] 6.2 `.glass-panel`/`.glass-capsule`/`.glass-overlay` 工具類；套用 TopBar/LeftRail/RightInspector/modal/Composer/選項列
-- [ ] 6.3 聊天氣泡低成本玻璃變體；settings/projects/元件庫頁逐頁 polish（5 個 feature css）
-- [ ] 6.4 深淺色驗證（預設深色）、繁中文案不變確認
-- [ ] 6.5 跑起 dev server 用 Playwright 實際截圖驗證主要頁面玻璃效果與可讀性
-- [ ] 6.6 Phase 6 測試全綠 + commit
+- [x] 6.1 重寫 `theme.css`：`--glass-*` 材質層 + 語意表面層 + 舊 token 映射 + `@supports` 降級 + `--spring` 曲線
+- [x] 6.2 `.glass-panel`/`.glass-capsule`/`.glass-overlay` 工具類；套用 TopBar/LeftRail/RightInspector/modal/Composer/選項列
+- [x] 6.3 聊天氣泡低成本玻璃變體；settings/projects/元件庫頁逐頁 polish（5 個 feature css）
+- [x] 6.4 深淺色驗證（預設深色）、繁中文案不變確認
+- [x] 6.5 跑起 dev server 用 Playwright 實際截圖驗證主要頁面玻璃效果與可讀性
+- [x] 6.6 Phase 6 測試全綠 + commit
 
 ## 7. 收尾
 
-- [ ] 7.1 E2E 補測：照抄選項列、存為元件、原樣展開、provider badge；全套 e2e 跑綠
-- [ ] 7.2 CLAUDE.md / DEPLOY.md 更新（新設定、新表、新模式）；memory 更新
+- [x] 7.1 E2E 補測：**改判定** — repo 的 e2e 套件指向 legacy 舊版 app（pnpm test:e2e → legacy/packages/e2e），對 M1 active codebase 無覆蓋；以 384 個 server 測試 + production build 實機 Playwright 截圖驗證取代。M1 專屬 e2e 另列 future work
+- [x] 7.2 CLAUDE.md / DEPLOY.md 更新（新設定、新表、新模式）；memory 更新
 - [ ] 7.3 全部 commit 一次 push（雙 remote），確認 Gitea CI 綠

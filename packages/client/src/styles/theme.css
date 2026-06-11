@@ -1,19 +1,54 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   DesignBridge theme — iOS 27 液態玻璃 (Liquid Glass) token system.
+
+   Layer 1: glass material tokens (--glass-*)
+   Layer 2: semantic surfaces (--surface-*)
+   Layer 3: legacy token names preserved and remapped so existing feature CSS
+            picks up the new material without a rewrite (liquid-glass-ui spec).
+   ───────────────────────────────────────────────────────────────────────── */
+
 :root, [data-theme="dark"] {
-  --bg-root: #060d1a;
-  --bg-card: #0f172a;
-  --bg-elevated: #1e293b;
-  --bg-input: #334155;
-  --accent: #7c5cbf;
-  --accent-glass: rgba(124, 92, 191, 0.22);
-  --accent-grad-start: #7c5cbf;
+  /* ── Layer 1: liquid glass material ── */
+  --glass-blur: 22px;
+  --glass-saturate: 1.7;
+  --glass-bg: rgba(13, 20, 38, 0.55);
+  --glass-bg-strong: rgba(11, 17, 32, 0.78);
+  --glass-bg-soft: rgba(30, 41, 59, 0.38);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-highlight: rgba(255, 255, 255, 0.16);
+  --glass-shadow:
+    0 12px 40px rgba(2, 6, 23, 0.55),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --glass-shadow-float:
+    0 24px 64px rgba(2, 6, 23, 0.65),
+    inset 0 1px 0 var(--glass-highlight);
+
+  /* Motion */
+  --spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --ease-glass: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── Layer 2: semantic surfaces ── */
+  --surface-chrome: var(--glass-bg-strong);   /* topbar / rails */
+  --surface-floating: var(--glass-bg);        /* cards, popovers */
+  --surface-overlay: rgba(8, 12, 24, 0.82);   /* modals */
+
+  /* ── Layer 3: legacy tokens (remapped — keep the names) ── */
+  --bg-root: #050a15;
+  --bg-card: rgba(15, 23, 42, 0.60);
+  --bg-elevated: rgba(36, 48, 70, 0.55);
+  --bg-input: rgba(51, 65, 85, 0.48);
+  --accent: #8b6ce0;
+  --accent-glass: rgba(139, 108, 224, 0.26);
+  --accent-grad-start: #8b6ce0;
   --accent-grad-end: #c084fc;
-  --text-primary: #f1f5f9;
+  --text-primary: #f3f6fb;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
   --text-accent: #e9d5ff;
-  --border-primary: #334155;
-  --border-subtle: #1e293b;
-  --border-accent: rgba(192, 132, 252, 0.3);
+  --border-primary: rgba(148, 163, 184, 0.24);
+  --border-subtle: rgba(148, 163, 184, 0.13);
+  --border-accent: rgba(192, 132, 252, 0.34);
 
   /* Spacing scale */
   --space-1: 4px;
@@ -24,16 +59,11 @@
   --space-6: 32px;
   --space-8: 48px;
 
-  /* Radii */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-
-  /* Glass surfaces */
-  --glass-bg: rgba(15, 23, 42, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  /* Radii — continuous-curve feel: larger and softer */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
 
   /* Z layers */
   --z-rail: 10;
@@ -41,20 +71,128 @@
   --z-modal: 50;
 }
 
+[data-theme="light"] {
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.75);
+  --glass-bg-soft: rgba(255, 255, 255, 0.40);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+  --glass-shadow:
+    0 12px 40px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 var(--glass-highlight);
+  --glass-shadow-float:
+    0 24px 64px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 var(--glass-highlight);
+
+  --surface-chrome: var(--glass-bg-strong);
+  --surface-floating: var(--glass-bg);
+  --surface-overlay: rgba(241, 245, 249, 0.85);
+
+  --bg-root: #eef2f8;
+  --bg-card: rgba(255, 255, 255, 0.65);
+  --bg-elevated: rgba(255, 255, 255, 0.8);
+  --bg-input: rgba(226, 232, 240, 0.7);
+  --accent: #6d4fc7;
+  --accent-glass: rgba(109, 79, 199, 0.16);
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-accent: #6d4fc7;
+  --border-primary: rgba(15, 23, 42, 0.16);
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-accent: rgba(109, 79, 199, 0.3);
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root {
   margin: 0; padding: 0;
   height: 100%;
-  background: var(--bg-root);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
   font-size: 14px;
   line-height: 1.6;
 }
 
+/* Ambient atmosphere — glass needs depth behind it to read as glass. */
+body {
+  background:
+    radial-gradient(1100px 760px at 88% -12%, rgba(139, 108, 224, 0.20), transparent 60%),
+    radial-gradient(900px 640px at -8% 112%, rgba(56, 189, 248, 0.12), transparent 55%),
+    radial-gradient(700px 500px at 50% 120%, rgba(192, 132, 252, 0.08), transparent 60%),
+    var(--bg-root);
+  background-attachment: fixed;
+}
+[data-theme="light"] body {
+  background:
+    radial-gradient(1100px 760px at 88% -12%, rgba(139, 108, 224, 0.14), transparent 60%),
+    radial-gradient(900px 640px at -8% 112%, rgba(56, 189, 248, 0.12), transparent 55%),
+    var(--bg-root);
+  background-attachment: fixed;
+}
+
+/* ── Liquid glass utilities ───────────────────────────────────────────── */
+
+.glass-panel {
+  background: var(--surface-floating);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-lg);
+}
+
+.glass-chrome {
+  background: var(--surface-chrome);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.glass-capsule {
+  background: var(--glass-bg-soft);
+  -webkit-backdrop-filter: blur(16px) saturate(var(--glass-saturate));
+  backdrop-filter: blur(16px) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.glass-overlay {
+  background: var(--surface-overlay);
+  -webkit-backdrop-filter: blur(28px) saturate(var(--glass-saturate));
+  backdrop-filter: blur(28px) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-float);
+  border-radius: var(--radius-xl);
+}
+
+/* 低成本玻璃變體（聊天氣泡等大量元素）：透明 + 邊光，無 blur */
+.glass-soft {
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Graceful degradation: solid translucent surfaces keep layout + contrast */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-panel, .glass-chrome, .glass-capsule, .glass-overlay {
+    background: rgba(13, 19, 36, 0.94);
+  }
+  [data-theme="light"] .glass-panel,
+  [data-theme="light"] .glass-chrome,
+  [data-theme="light"] .glass-capsule,
+  [data-theme="light"] .glass-overlay {
+    background: rgba(248, 250, 252, 0.96);
+  }
+}
+
 a { color: var(--text-accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+button { transition: transform 0.28s var(--spring), background 0.2s var(--ease-glass), box-shadow 0.2s var(--ease-glass); }
+button:active { transform: scale(0.97); }
 
 /* Visible focus ring on keyboard navigation only */
 *:focus-visible {

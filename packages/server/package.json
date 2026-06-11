@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"const{cpSync}=require('fs');cpSync('src/db/migrations','dist/db/migrations',{recursive:true,force:true});cpSync('src/skills','dist/skills',{recursive:true,force:true});\"",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",

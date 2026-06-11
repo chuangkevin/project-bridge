@@ -51,7 +51,7 @@ Composer 偵測 image attachment / URL regex → 顯示選項列（照抄/只取
 
 - [sfcSurgeon round-trip 改壞 template] → 替換後 re-parse 驗證 + 失敗降級整頁軌道 + 大量 round-trip 單元測試（含 v-if/v-for/slot/註解/中文內容）
 - [流式 selection correlation 在併發下錯置] → AsyncLocalStorage 包裹；單元測試模擬兩個並發 stream
-- [元件 style 與頁面 style 衝突] → 展開時 class 前綴化（`lc-<component>-`）僅套用於元件庫內建 style 區塊；Tailwind class 不動
+- [元件 style 與頁面 style 衝突] → **實作時放棄 class 前綴化**：前綴會破壞「template 逐字元原樣展開」的 spec 要求（驗收測試要求 byte-identical）。實際緩解：元件 css 以原文去重合併進 style 區塊；元件主要使用 Tailwind class，自訂 css 衝突風險低且可由使用者改名元件 class 解決
 - [vision 經 OpenCode 在特定 server 仍可能失敗] → try/catch 後自動走 geminiVisionQuery 規格路徑，SSE 告知使用者目前用文字規格重建（不靜默）
 - [液態玻璃 backdrop-filter 效能（大量層疊）] → 限制同屏 glass 表面數（聊天氣泡用低成本變體：無 blur 只有透明+邊光）
 - [selector call 增加每次生成延遲] → 與主生成前置並行不可行（結果要進 prompt），接受 ~1-2s；UI phase 顯示「挑選知識中」

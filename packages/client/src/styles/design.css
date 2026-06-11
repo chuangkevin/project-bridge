@@ -80,14 +80,19 @@
 }
 
 .design__btn {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-primary);
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   color: var(--text-secondary);
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  border-radius: 999px;
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
+}
+.design__btn:hover:not(:disabled) {
+  background: var(--accent-glass);
+  color: var(--text-accent);
 }
 .design__btn:disabled { opacity: 0.5; cursor: not-allowed; }
 

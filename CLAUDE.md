@@ -40,6 +40,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Page Variant Selector**: 多版本頁面預覽與選擇
 - **Vision-based Intent**: AI 看截圖判斷調整意圖
 
+### design-quality-replication（2026-06-11，openspec/changes/design-quality-replication）
+
+- **生成 context**：design mode system prompt 自帶 active artifact **完整原始碼**（>60KB 降級結構摘要），修改不再盲改。請求可帶 `activeArtifactId` 指定。
+- **Provider 透明化**：每 turn 記錄實際服務 `provider/model`（SSE `meta` + `turns.model_used` + 氣泡 badge，fallback 橘色標示）。設定 `disallow_model_fallback=true` 禁止跨模型降級（flash 頂替 gpt-5.5 會直接報錯）。⚠️ 預設 policy 下**非流式**呼叫仍會靜默跨模型 fallback；流式呼叫失敗直接報錯（ai-core executeStream 無 mid-stream fallback）。
+- **雙軌編輯**：預覽 template 注入 `data-db-path` 結構路徑（`sfcRuntime.instrumentTemplate`，語意同 server `sfcSurgeon.locateByPath`，兩邊必須同步）。quick-regen 帶 `elementPath` 走元素軌道（只把子樹給 AI、原位 splice、其餘 byte-identical）；失敗自動降級整頁軌道（回應帶 `downgraded`）。
+- **元件庫**：選取元素「📦 存元素為元件」→ `components` table（+`description`、`component_versions` 歷史）。生成 prompt 注入元件索引；AI 用 `<lib-component name="x"/>` 佔位符，伺服器**原樣展開**（逐字元相等），未知名稱發 SSE error。同名衝突 409，`overwrite:true` 升版。元件庫頁 `/components`。
+- **照抄**：Composer 偵測圖片/URL → 選項列（照抄/只取風格/只當參考 × 新頁面/插入選取區域），`replicationIntent` 隨 chat 送出；未選擇時 AI 先確認（雙保險）。`replicate` callProvider 模式：不注入 frontend-design、像素忠實、圖走 OpenCode multimodal（ai-core 3.4.2 已支援），失敗自動 `geminiVisionQuery` 規格路徑（SSE 告知）。URL 照抄用精簡爬蟲（`services/replication.ts`）。
+- **Domain skill 自動選擇**：design/consult 生成前 selector call 選 0–3 個 skill 注入（8K/skill、20K 上限），斜槓強制跳過，失敗不擋生成；結果入 `turns.skills_used` + badge。
+- **液態玻璃 UI**：`theme.css` 三層 token（`--glass-*` 材質 / `--surface-*` 語意 / 舊名映射）+ `.glass-*` 工具類；`@supports` 降級實色；淺色主題 `[data-theme="light"]` token 已備。
+- ⚠️ **Build 必須複製 assets**：`pnpm build` = `tsc` + 複製 `src/db/migrations`、`src/skills` 進 dist（過去漏複製導致生產 migration 停在 008、art-director skill 讀不到 — 已修）。
+- ⚠️ `pnpm --filter server` 會命中 **legacy** 套件；active 套件是 `@designbridge/server`，請直接 `cd packages/server && pnpm build`。
+- E2E 注意：root `test:e2e` 指向 legacy app，對 active M1 codebase 無覆蓋。
+
 ## Development Commands
 
 ```bash
