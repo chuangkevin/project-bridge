@@ -68,7 +68,7 @@ export default function LeftRail() {
             className="rail-item"
             aria-selected={selectedSkillName === s.name}
             onClick={() => selectSkill(s.name)}
-            title={s.description}
+            title={s.description.length > 120 ? s.description.slice(0, 120) + "…" : s.description}
           >
             {s.name}
           </div>

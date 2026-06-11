@@ -92,6 +92,31 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       const skillDescriptions = getSystemPromptSkillList({ projectId });
       sse(res, 'phase', { phase: 'selecting_skills', skills: [] });
 
+      // 早退：設計模式貼了網址但沒選意圖 — 不丟給 AI（design prompt 強制出
+      // artifact，模型會把「問題」畫成一張 wireframe）。確定性回問 + 可點選項，
+      // 零 AI 呼叫、不燒 selector。chips 點下去的句型由後面的意圖推斷接住。
+      if (mode === 'design' && !parseReplicationIntent(req.body?.replicationIntent)) {
+        const earlyUrl = detectFirstUrl(text);
+        const impliedIntent = /^照抄|^只取|^只當參考/.test(text.trim());
+        if (earlyUrl && !impliedIntent) {
+          const q = `你貼了 ${earlyUrl} — 要怎麼用？點下面的選項就直接開工。`;
+          const confirmChoices = [
+            `照抄 ${earlyUrl} 做成可互動 wireframe`,
+            `只取 ${earlyUrl} 的風格，做新的設計`,
+            `只當參考，先跟我討論`,
+          ];
+          sse(res, 'token', { text: q });
+          sse(res, 'choices', { choices: confirmChoices });
+          const turn = appendTurn(db, {
+            projectId, mode: 'design' as TurnMode,
+            userText: text.trim(),
+            aiResponse: { text: q, choices: confirmChoices },
+          });
+          sse(res, 'done', { turnId: turn.id });
+          return;
+        }
+      }
+
       // Domain-skill auto-selection (domain-skill-selection spec): skipped when
       // a slash command forces a skill; failure falls back to no injection.
       let autoSkills: { selected: string[]; block: string } = { selected: [], block: '' };
@@ -141,12 +166,21 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       // ── Replication intake (design-replication spec) ─────────────────────
       // 顧問與設計分頁都吃得到照抄：顧問選了照抄會自動轉設計分頁。
       const replicationEligible = mode === 'design' || mode === 'consult';
-      const replicationIntent = parseReplicationIntent(req.body?.replicationIntent);
+      let replicationIntent = parseReplicationIntent(req.body?.replicationIntent);
       const replicationImages = replicationEligible ? imagesFromAttachments(dataDir, attachments) : [];
       const replicationUrl = replicationEligible ? detectFirstUrl(text) : null;
       const hasReplicationMedia = replicationImages.length > 0 || !!replicationUrl;
-      if (mode === 'design' && hasReplicationMedia && !replicationIntent) {
-        userSystem += prefixed(REPLICATE_CONFIRM_INSTRUCTION); // 雙保險：UI 選項被忽略時 AI 先確認
+
+      // 確認選項 chips 送回來的是純文字 — 從句型推回意圖，讓「點了就開工」成立。
+      if (!replicationIntent && replicationEligible && replicationUrl) {
+        const t = text.trim();
+        if (/^照抄/.test(t)) replicationIntent = { intent: 'replicate', destination: 'new' };
+        else if (/^只取/.test(t)) replicationIntent = { intent: 'style-only', destination: 'new' };
+        else if (/^只當參考/.test(t)) replicationIntent = { intent: 'reference', destination: 'new' };
+      }
+
+      if (mode === 'design' && replicationImages.length > 0 && !replicationIntent) {
+        userSystem += prefixed(REPLICATE_CONFIRM_INSTRUCTION); // 圖片附件且未選意圖：AI 先口頭確認
       } else if (mode === 'design' && replicationIntent?.intent === 'style-only') {
         userSystem += prefixed(STYLE_ONLY_INSTRUCTION);
       } else if (mode === 'design' && replicationIntent?.intent === 'reference') {

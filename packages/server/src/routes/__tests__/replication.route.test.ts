@@ -72,15 +72,17 @@ describe('design chat — replication intake', () => {
     expect(call.prompt).toContain('照抄來源');
   });
 
-  it('media without intent → confirm-first instruction appended, normal design flow', async () => {
+  it('URL without intent → deterministic confirm short-circuit (no AI call)', async () => {
+    // 舊行為（AI 口頭確認）已被確定性回問取代 — design prompt 強制出 artifact，
+    // 丟給 AI 會把「問題」畫成 wireframe。
     const captured = mockProvider({ streamText: ART });
     const r = await request(app).post(`/api/projects/${projectId}/chat`).send({
       mode: 'design', text: '看看這個 https://example.com/page',
     });
     expect(r.status).toBe(200);
-    const call = captured[captured.length - 1];
-    expect(call.systemInstruction).toContain('尚未表明是否要照抄');
-    expect(call.systemInstruction).toContain('Vue 3 + Tailwind CSS UI designer'); // still design mode
+    expect(captured.length).toBe(0);
+    expect(r.text).toContain('event: choices');
+    expect(r.text).not.toContain('event: artifact');
   });
 
   it('style-only intent appends style-only instruction and stays in design mode', async () => {
@@ -152,5 +154,33 @@ describe('council handoff with URL → crawled replicate generation', () => {
     expect(gen).toBeTruthy();
     expect(gen!.prompt).toContain('爬到的內容'); // crawled source rode the prompt
     expect(gen!.prompt).toContain('照抄來源');
+  });
+});
+
+describe('deterministic intent confirm (design + URL, no intent)', () => {
+  it('returns question + chips with ZERO provider calls and no artifact', async () => {
+    const captured = mockProvider({ streamText: 'should-not-be-called' });
+    const r = await request(app).post(`/api/projects/${projectId}/chat`)
+      .send({ mode: 'design', text: '我想要這個 https://buy.houseprice.tw/' });
+    expect(r.status).toBe(200);
+    expect(captured.length).toBe(0); // 不燒任何 AI 呼叫（含 selector）
+    expect(r.text).toContain('event: choices');
+    expect(r.text).toContain('照抄 https://buy.houseprice.tw/');
+    expect(r.text).not.toContain('event: artifact');
+    const turns = await request(app).get(`/api/projects/${projectId}/turns`);
+    const last = turns.body.turns[turns.body.turns.length - 1];
+    expect(last.aiResponse.choices?.length).toBe(3);
+  });
+
+  it('chip text 「照抄 <url> …」 implies replicate intent and generates', async () => {
+    const captured = mockProvider({ streamText: '<artifact kind="vue-sfc" name="cloned"><template><div>抄好了</div></template></artifact>' });
+    const r = await request(app).post(`/api/projects/${projectId}/chat`)
+      .send({ mode: 'design', text: '照抄 https://buy.houseprice.tw/ 做成可互動 wireframe' });
+    expect(r.status).toBe(200);
+    expect(r.text).toContain('event: artifact');
+    // replicate prompt carried the crawled source
+    const gen = captured.find(c => c.systemInstruction?.includes('pixel-faithful UI replicator'));
+    expect(gen).toBeTruthy();
+    expect(gen!.prompt).toContain('爬到的內容');
   });
 });
