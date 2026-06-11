@@ -264,7 +264,8 @@ export default function DesignStage() {
     }
   };
 
-  const filteredTurns = turns.filter((t) => t.mode === 'design');
+  // 統一對話流：所有 mode 的 turns 都顯示（mode badge 區分），切分頁不再像對話消失
+  const filteredTurns = turns;
   const pending = state.phase === 'idle' ? null : { userText: state.userText, state };
 
   const handleSend = async (text: string, attachmentIds: string[], replicationIntent?: import('./chat/Composer').ReplicationIntent) => {
@@ -540,7 +541,11 @@ export default function DesignStage() {
               繼承全域風格
             </span>
           </div>
-          <Transcript turns={filteredTurns} pending={pending} />
+          <Transcript
+            turns={filteredTurns} pending={pending}
+            onQuickReply={(text) => { void handleSend(text, []); }}
+            quickReplyDisabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
+          />
           <Composer
             projectId={projectId ?? ''}
             disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}

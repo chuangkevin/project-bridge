@@ -116,7 +116,8 @@ export default function ArchitectStage() {
     }
   };
 
-  const filteredTurns = turns.filter((t) => t.mode === 'architect');
+  // 統一對話流：所有 mode 的 turns 都顯示
+  const filteredTurns = turns;
 
   const pending = state.phase === 'idle' ? null : { userText: pendingRef.current, state };
 

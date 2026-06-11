@@ -11,6 +11,8 @@ export interface AiResponse {
   thinking?: string;
   discussion?: Voice[];
   artifactRef?: string;
+  /** Quick-reply options the AI offered（client 渲染為可點選 chips） */
+  choices?: string[];
 }
 
 export interface Turn {

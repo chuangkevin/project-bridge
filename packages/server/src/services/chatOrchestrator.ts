@@ -96,6 +96,35 @@ export function buildSystemPrompt(opts: BuildPromptOpts): string {
   return sections.join('\n\n');
 }
 
+// ─── Quick-reply choices ─────────────────────────────────────────────────
+// When the AI must ask the user to pick among enumerable options it appends
+// `<choices>["完整回答1","完整回答2"]</choices>`. The block is stripped from
+// display text; the client renders the options as one-click reply chips
+// (使用者不用手打).
+
+const CHOICES_RE = /<choices>\s*(\[[\s\S]*?\])\s*<\/choices>/i;
+const MAX_CHOICES = 6;
+const MAX_CHOICE_LEN = 120;
+
+export function parseChoicesFromResponse(fullText: string): string[] {
+  const m = CHOICES_RE.exec(fullText);
+  if (!m) return [];
+  try {
+    const parsed = JSON.parse(m[1]) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+      .map(c => c.trim().slice(0, MAX_CHOICE_LEN))
+      .slice(0, MAX_CHOICES);
+  } catch {
+    return [];
+  }
+}
+
+export function stripChoicesBlock(text: string): string {
+  return text.replace(/<choices>[\s\S]*?<\/choices>/gi, '').replace(/<choices>[\s\S]*$/i, '').trim();
+}
+
 export interface ExtractedArtifact {
   kind: 'vue-sfc' | 'page-graph' | 'design-tokens';
   name: string;

@@ -11,7 +11,7 @@ import { appendTurn, type TurnMode } from '../services/turnService.js';
 import { addFact } from '../services/factService.js';
 import { parseFactsFromResponse } from '../services/factExtractor.js';
 import { getAttachment, type Attachment } from '../services/ingestionService.js';
-import { buildSystemPrompt, parseArtifactsFromResponseWithFallback, type ActiveArtifactContext } from '../services/chatOrchestrator.js';
+import { buildSystemPrompt, parseArtifactsFromResponseWithFallback, parseChoicesFromResponse, stripChoicesBlock, type ActiveArtifactContext } from '../services/chatOrchestrator.js';
 import { createArtifact, getArtifact, listArtifacts, readArtifactPayload } from '../services/artifactService.js';
 import type { ProviderCallMeta } from '../services/callProvider.js';
 import { runCouncil } from '../services/councilOrchestrator.js';
@@ -154,8 +154,8 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       // Verbatim expansion of <lib-component name="..."/> placeholders before
       // persisting any vue-sfc artifact (component-library spec). Unknown names
       // surface as explicit SSE errors — never silently guessed.
-      const expandComponents = (kind: string, payload: string): string => {
-        if (kind !== 'vue-sfc' || mode !== 'design') return payload;
+      const expandComponents = (kind: string, payload: string, effectiveMode: string = mode): string => {
+        if (kind !== 'vue-sfc' || effectiveMode !== 'design') return payload;
         try {
           const result = expandLibComponents(db, projectId, payload);
           for (const name of result.unknown) {
@@ -294,10 +294,11 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         const { transcripts, finalAnswer } = stepResult!.value;
 
         function cleanAnswerText(raw: string, m: string): string {
-          let t = stripThinking(raw)
+          let t = stripChoicesBlock(stripThinking(raw)
             .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
             .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
-            .trim();
+            .replace(/<handoff>[\s\S]*?<\/handoff>/gi, '')
+            .trim());
           if (m === 'design') {
             t = t.replace(/```[\s\S]*?```/g, '').trim();
           }
@@ -359,13 +360,71 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         // turns refresh, which reads as「討論完卻沒有回答」.
         if (answerText) sse(res, 'token', { text: answerText });
 
+        // Quick-reply chips: the moderator may offer clickable options so the
+        // user never has to type an enumerable answer by hand.
+        const councilChoices = parseChoicesFromResponse(finalAnswer);
+        if (councilChoices.length > 0) sse(res, 'choices', { choices: councilChoices });
+
         const turn = appendTurn(db, {
           projectId,
           mode: mode as TurnMode,
           userText: text.trim(),
-          aiResponse: { text: answerText, thinking: thinkingText },
+          aiResponse: { text: answerText, thinking: thinkingText, ...(councilChoices.length > 0 ? { choices: councilChoices } : {}) },
           skillsUsed: ['council-pm', 'council-designer', 'council-engineer', 'council-moderator'],
         });
+
+        // ── Mode handoff: moderator 宣告動工 → 直接轉設計模式生成，不要只是嘴上說會做。
+        const wantsHandoff = /<handoff>\s*design\s*<\/handoff>/i.test(finalAnswer);
+        if (mode === 'consult' && wantsHandoff) {
+          sse(res, 'mode_handoff', { to: 'design' });
+          sse(res, 'phase', { phase: 'answering', message: '已轉入設計模式，正在生成 wireframe…' });
+
+          const designSystem = userSystem
+            + globalStyleBlock(db, project.inheritGlobalStyle)
+            + prefixed(componentIndexBlock(db, projectId));
+          const truncCtx = (s2: string, max = 500) =>
+            s2.replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+              .replace(/```[\s\S]*?```/g, '[code omitted]')
+              .trim()
+              .slice(0, max);
+          const handoffContext = `Team discussion summary:
+- PM: ${truncCtx(transcripts.pm)}
+- Designer: ${truncCtx(transcripts.designer)}
+- Engineer: ${truncCtx(transcripts.engineer)}
+- Conclusion: ${truncCtx(finalAnswer, 800)}
+
+Now generate the Vue + Tailwind interactive wireframe.`;
+
+          let designFullText = '';
+          let handoffMeta: ProviderCallMeta | null = null;
+          for await (const tok of callProvider({
+            mode: 'design', prompt: text.trim(), systemInstruction: `${designSystem}\n\n${handoffContext}`, streaming: true,
+            onMeta: (m) => { handoffMeta = m; sse(res, 'meta', m); },
+          })) {
+            designFullText += tok;
+            sse(res, 'token', { text: tok });
+          }
+
+          const designTurn = appendTurn(db, {
+            projectId, mode: 'design' as TurnMode,
+            userText: `[自動轉入設計] ${text.trim()}`,
+            aiResponse: { text: cleanAnswerText(designFullText, 'design') || '[wireframe 已生成]' },
+            skillsUsed: autoSkills.selected.length > 0 ? autoSkills.selected : undefined,
+            modelUsed: formatModelUsed(handoffMeta),
+          });
+          const designFacts = parseFactsFromResponse(designFullText);
+          for (const f of designFacts) addFact(db, { projectId, turnId: designTurn.id, kind: f.kind, text: f.text });
+          const handoffBlocks = parseArtifactsFromResponseWithFallback(designFullText);
+          const handoffRoot = join(dataDir, 'projects', projectId, 'artifacts');
+          for (const block of handoffBlocks) {
+            const ext = block.kind === 'vue-sfc' ? 'vue' : 'json';
+            const payload = expandComponents(block.kind, block.payload, 'design');
+            const a = createArtifact(db, { projectId, createdByTurn: designTurn.id, kind: block.kind, name: block.name, payload, payloadExt: ext, artifactsRoot: handoffRoot });
+            sse(res, 'artifact', { id: a.id, kind: a.kind, name: a.name });
+          }
+          sse(res, 'done', { turnId: designTurn.id });
+          return;
+        }
 
         sse(res, 'done', { turnId: turn.id });
         return; // cleanup handled by finally block
@@ -429,10 +488,12 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
 
       // Extract facts + persist turn
       const thinkingText = extractTagText(fullText, 'thinking');
-      let answerText = stripTagText(fullText, 'thinking')
+      const choices = parseChoicesFromResponse(fullText);
+      let answerText = stripChoicesBlock(stripTagText(fullText, 'thinking')
         .replace(/<facts>[\s\S]*?<\/facts>/g, '')
         .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
-        .trim();
+        .trim());
+      if (choices.length > 0) sse(res, 'choices', { choices });
       // In design mode the AI sometimes wraps code in markdown code blocks
       // outside of <artifact> tags. Strip those from the displayed answer
       // so the chat bubble stays clean; the code is already in the artifact.
@@ -446,7 +507,7 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         projectId,
         mode: mode as TurnMode,
         userText: text.trim(),
-        aiResponse: { text: answerText, thinking: thinkingText || undefined },
+        aiResponse: { text: answerText, thinking: thinkingText || undefined, ...(choices.length > 0 ? { choices } : {}) },
         skillsUsed: forcedSkill ? [forcedSkill.name] : (autoSkills.selected.length > 0 ? autoSkills.selected : undefined),
         modelUsed: formatModelUsed(callMeta),
       });

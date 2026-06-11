@@ -142,3 +142,49 @@ describe('POST /api/projects/:id/chat (M1 anonymous)', () => {
     expect(artifacts.body.artifacts[0].name).toBe('ia');
   });
 });
+
+describe('quick-reply choices + consult→design handoff', () => {
+  it('moderator <choices> become SSE choices event and persist on the turn', async () => {
+    mockProviderCapture((params) => {
+      // 每個 persona 的 prompt 都含全部 council-* skill 名（Available skills 清單），
+      // 必須用「你的身份」區塊辨識實際 persona。
+      if (params.systemInstruction?.includes('主持人（Moderator）')) {
+        return '結論文字 <choices>["首頁","搜尋結果頁"]</choices>';
+      }
+      return 'persona reply';
+    });
+    const r = await request(app).post(`/api/projects/${projectId}/chat`)
+      .send({ mode: 'consult', text: '做個房屋網', council: true });
+    expect(r.text).toContain('event: choices');
+    expect(r.text).toContain('首頁');
+    const turns = await request(app).get(`/api/projects/${projectId}/turns`);
+    const last = turns.body.turns[turns.body.turns.length - 1];
+    expect(last.aiResponse.choices).toEqual(['首頁', '搜尋結果頁']);
+    expect(last.aiResponse.text).not.toContain('<choices>');
+  });
+
+  it('moderator <handoff>design</handoff> triggers design generation in the same stream', async () => {
+    let calls = 0;
+    mockProviderCapture((params) => {
+      calls += 1;
+      if (params.systemInstruction?.includes('主持人（Moderator）')) {
+        return '接下來會做首頁 wireframe <handoff>design</handoff>';
+      }
+      if (params.systemInstruction?.includes('Vue 3 + Tailwind CSS UI designer')) {
+        // the handed-off design generation call
+        return '<artifact kind="vue-sfc" name="home"><template><div>自動生成</div></template></artifact>';
+      }
+      return 'persona reply';
+    });
+    const r = await request(app).post(`/api/projects/${projectId}/chat`)
+      .send({ mode: 'consult', text: '我想要這個 wireframe', council: true });
+    expect(calls).toBe(5); // 4 council personas + 1 design generation
+    expect(r.text).toContain('event: mode_handoff');
+    expect(r.text).toContain('event: artifact');
+    const turns = await request(app).get(`/api/projects/${projectId}/turns`);
+    const modes = turns.body.turns.map((t: { mode: string }) => t.mode);
+    expect(modes).toContain('design');
+    const consultTurn = turns.body.turns.find((t: { mode: string }) => t.mode === 'consult');
+    expect(consultTurn.aiResponse.text).not.toContain('<handoff>');
+  });
+});

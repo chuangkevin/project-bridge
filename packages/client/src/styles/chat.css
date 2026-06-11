@@ -356,3 +356,33 @@
   outline: 2px dashed var(--accent);
   outline-offset: -6px;
 }
+
+
+/* Quick-reply chips — AI 問選擇題時點選即送出，不用手打 */
+.chat__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 760px;
+  align-self: flex-start;
+  margin-top: calc(var(--space-2) * -1);
+}
+.chat__choice-chip {
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-accent);
+  background: var(--glass-bg-soft);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  color: var(--text-accent);
+  cursor: pointer;
+  text-align: left;
+}
+.chat__choice-chip:hover:not(:disabled) {
+  background: var(--accent-glass);
+  border-color: var(--accent);
+}
+.chat__choice-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 統一對話流的 mode 標記在 user 氣泡內 */
+.bubble--user .mode-badge { vertical-align: middle; }

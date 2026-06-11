@@ -6,7 +6,7 @@ export interface Turn {
   projectId: string;
   mode: 'consult' | 'architect' | 'design';
   userText: string;
-  aiResponse: { text: string; thinking?: string };
+  aiResponse: { text: string; thinking?: string; choices?: string[] };
   skillsUsed?: string[];
   modelUsed?: string;
   createdAt: string;

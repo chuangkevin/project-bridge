@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import { useChatStream } from '../hooks/useChatStream';
 import { getSocket } from '../lib/socket';
 import { useResizable } from '../hooks/useResizable';
 import TopBar from './workspace/TopBar';
@@ -20,7 +21,12 @@ const CURSOR_THROTTLE_MS = 33;
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
-  const { mode, setProject, mobileRailOpen, railCollapsed } = useWorkspaceStore();
+  const { mode, setProject, setMode, mobileRailOpen, railCollapsed } = useWorkspaceStore();
+  // 顧問合議宣告動工時，server 發 mode_handoff → 自動切到設計分頁讓使用者看到生成過程
+  const { state: liveStream } = useChatStream(id ?? null, 'consult');
+  useEffect(() => {
+    if (liveStream.handoffTo === 'design' && mode !== 'design') setMode('design');
+  }, [liveStream.handoffTo]);
   const [project, setProject_] = useState<Project | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [cursors, setCursors] = useState<Record<string, CursorState>>({});

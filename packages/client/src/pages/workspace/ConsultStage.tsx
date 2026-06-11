@@ -86,7 +86,11 @@ export default function ConsultStage() {
           合議模式（PM / Designer / Engineer / Moderator 四方討論）
         </span>
       </div>
-      <Transcript turns={turns} pending={pending} />
+      <Transcript
+        turns={turns} pending={pending}
+        onQuickReply={(text) => { void handleSend(text, []); }}
+        quickReplyDisabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
+      />
       <Composer
         projectId={projectId ?? ''}
         disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}

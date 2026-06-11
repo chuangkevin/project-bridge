@@ -29,11 +29,16 @@ export interface ChatStreamState {
   phaseMessage: string | null;
   /** The user message that started this stream（pending bubble 顯示用） */
   userText: string;
+  /** Quick-reply options offered by the AI（點了直接送出，不用手打） */
+  choices: string[];
+  /** Server asked the client to switch workspace mode（顧問→設計自動接力） */
+  handoffTo: 'design' | null;
 }
 
 const INITIAL: ChatStreamState = {
   phase: 'idle', selectedSkills: [], thinkingText: '', answerText: '', error: null, turnId: null,
   council: [], activeCouncilPersona: null, providerMeta: null, phaseMessage: null, userText: '',
+  choices: [], handoffTo: null,
 };
 
 export interface SendParams {
@@ -55,8 +60,10 @@ export interface SendResult {
   error: string | null;
 }
 
-export function streamKey(projectId: string, mode: SendParams['mode']): string {
-  return `${projectId}:${mode}`;
+export function streamKey(projectId: string, _mode?: SendParams['mode']): string {
+  // ONE conversation per project — the key ignores mode on purpose so
+  // switching 顧問/架構/設計 tabs never "loses" the live stream.
+  return projectId;
 }
 
 // ─── Global stream store ────────────────────────────────────────────────────
@@ -220,6 +227,12 @@ function handleEvent(
     } else if (ev.event === 'token') {
       const parsed = JSON.parse(ev.data);
       setState((s) => ({ ...s, answerText: s.answerText + (parsed.text ?? '') }));
+    } else if (ev.event === 'choices') {
+      const parsed = JSON.parse(ev.data);
+      setState((s) => ({ ...s, choices: Array.isArray(parsed.choices) ? parsed.choices.filter((c: unknown) => typeof c === 'string') : [] }));
+    } else if (ev.event === 'mode_handoff') {
+      const parsed = JSON.parse(ev.data);
+      if (parsed.to === 'design') setState((s) => ({ ...s, handoffTo: 'design' }));
     } else if (ev.event === 'meta') {
       const parsed = JSON.parse(ev.data);
       setState((s) => ({

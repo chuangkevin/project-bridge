@@ -10,6 +10,8 @@ function cleanDisplayText(text: string, mode?: string): string {
     .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
     .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<choices>[\s\S]*?<\/choices>/gi, '')
+    .replace(/<handoff>[\s\S]*?<\/handoff>/gi, '')
     .trim();
   if (mode === 'design') {
     t = t.replace(/```[\s\S]*?```/g, '').trim();
@@ -30,7 +32,10 @@ export default function TurnBubble({ turn }: { turn: Turn }) {
 
   return (
     <>
-      <div className="bubble bubble--user">{turn.userText}</div>
+      <div className="bubble bubble--user">
+        <span className="mode-badge" data-mode={turn.mode}>{turn.mode === 'consult' ? '顧問' : turn.mode === 'architect' ? '架構' : '設計'}</span>
+        {turn.userText}
+      </div>
       <div className="bubble bubble--ai">
         {turn.aiResponse.thinking && (
           <>

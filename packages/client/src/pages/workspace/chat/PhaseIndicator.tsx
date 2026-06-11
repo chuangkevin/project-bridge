@@ -63,6 +63,9 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
                     .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
                     .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
                     .replace(/<facts>[\s\S]*$/i, '') // streaming: unterminated facts block
+                    .replace(/<choices>[\s\S]*?<\/choices>/gi, '')
+                    .replace(/<choices>[\s\S]*$/i, '')
+                    .replace(/<handoff>[\s\S]*?<\/handoff>/gi, '')
                     .replace(/```[\s\S]*?```/g, '')
                     .trim()}
                 </div>
@@ -79,6 +82,9 @@ export default function PhaseIndicator({ state, userText }: { state: ChatStreamS
               {state.answerText
                 .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
                 .replace(/<facts>[\s\S]*?<\/facts>/gi, '')
+                .replace(/<choices>[\s\S]*?<\/choices>/gi, '')
+                .replace(/<choices>[\s\S]*$/i, '')
+                .replace(/<handoff>[\s\S]*?<\/handoff>/gi, '')
                 .trim()}
             </ReactMarkdown>
           </div>
