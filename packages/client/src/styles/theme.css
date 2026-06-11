@@ -247,6 +247,24 @@ button:active { transform: scale(0.97); }
   border: 0;
 }
 
+/* ── Scrollbars — 細、半透明、圓角，貼合玻璃材質 ── */
+* {
+  scrollbar-width: thin;                                   /* Firefox */
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;  /* Firefox */
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.30);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.55); background-clip: padding-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
+[data-theme="light"] * { scrollbar-color: rgba(15, 23, 42, 0.30) transparent; }
+[data-theme="light"] *::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.25); background-clip: padding-box; }
+
 /* ── Apple-style typography & control polish ── */
 h1, h2, h3 { font-weight: 650; letter-spacing: -0.02em; }
 h1 { font-size: 26px; }

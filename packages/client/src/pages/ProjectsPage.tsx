@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useProjectsStore } from '../stores/useProjectsStore';
 
 export default function ProjectsPage() {
-  const { projects, list, create } = useProjectsStore();
+  const { projects, list, create, remove } = useProjectsStore();
   const navigate = useNavigate();
   const [name, setName] = useState('');
 
@@ -85,6 +85,21 @@ export default function ProjectsPage() {
               title="下載備份 (.tar.gz)"
             >
               下載備份
+            </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!confirm(`刪除專案「${p.name}」？所有對話、設計與附件將一併刪除，無法復原。`)) return;
+                try {
+                  await remove(p.id);
+                } catch (err) {
+                  alert('刪除失敗：' + (err as Error).message);
+                }
+              }}
+              style={{ ...backupBtn, color: '#f87171', borderColor: 'rgba(248, 113, 113, 0.4)' }}
+              title="刪除專案（無法復原）"
+            >
+              刪除
             </button>
           </li>
         ))}

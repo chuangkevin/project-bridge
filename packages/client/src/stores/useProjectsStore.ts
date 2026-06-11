@@ -8,6 +8,7 @@ interface State {
   loading: boolean;
   list: () => Promise<void>;
   create: (name: string) => Promise<Project>;
+  remove: (id: string) => Promise<void>;
 }
 
 export const useProjectsStore = create<State>((set, get) => ({
@@ -22,5 +23,9 @@ export const useProjectsStore = create<State>((set, get) => ({
     const p = await api<Project>('/api/projects', { method: 'POST', body: JSON.stringify({ name }) });
     set({ projects: [p, ...get().projects] });
     return p;
+  },
+  remove: async (id) => {
+    await api(`/api/projects/${id}`, { method: 'DELETE' });
+    set({ projects: get().projects.filter(p => p.id !== id) });
   },
 }));

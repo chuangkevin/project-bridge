@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type KeyboardEvent, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent } from 'react';
 import { getToken } from '../../../lib/api';
 import SlashAutocomplete from './SlashAutocomplete';
 
@@ -38,6 +38,24 @@ export default function Composer({ projectId, disabled, onSend, enableReplicatio
   const showSlash = text.startsWith('/') && !text.includes(' ');
   const hasMedia = attachments.some(a => a.kind === 'image') || URL_RE.test(text);
   const showIntake = !!enableReplicationIntake && hasMedia;
+
+  // 記住使用者拖出的輸入框高度（native resize handle → ResizeObserver → localStorage）
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const saved = Number(localStorage.getItem('composer-height') || '');
+    if (Number.isFinite(saved) && saved >= 40) ta.style.height = `${saved}px`;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const h = Math.round(ta.getBoundingClientRect().height);
+        if (h >= 40) localStorage.setItem('composer-height', String(h));
+      });
+    });
+    ro.observe(ta);
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); };
+  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();

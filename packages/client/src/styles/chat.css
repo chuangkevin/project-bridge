@@ -172,9 +172,9 @@
   padding: var(--space-3);
   font-size: 14px;
   font-family: inherit;
-  resize: none;
+  resize: vertical;          /* 使用者可上下拖曳輸入框大小 */
   min-height: 40px;
-  max-height: 200px;
+  max-height: 60vh;
   line-height: 1.5;
 }
 .composer__textarea:focus {
