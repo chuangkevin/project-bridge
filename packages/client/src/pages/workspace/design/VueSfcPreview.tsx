@@ -25,7 +25,8 @@ export default function VueSfcPreview({ sfc, bridgeMode = 'browse' }: { sfc: str
         width: '100%',
         height: '100%',
         border: 'none',
-        background: 'white',
+        // 跟著生成內容走，不要硬塞白底 — 深色設計會在邊緣漏出白邊
+        background: 'transparent',
         borderRadius: 'var(--radius-md)',
       }}
     />

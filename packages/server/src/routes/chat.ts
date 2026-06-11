@@ -139,9 +139,11 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         + prefixed(autoSkills.block);
 
       // ── Replication intake (design-replication spec) ─────────────────────
+      // 顧問與設計分頁都吃得到照抄：顧問選了照抄會自動轉設計分頁。
+      const replicationEligible = mode === 'design' || mode === 'consult';
       const replicationIntent = parseReplicationIntent(req.body?.replicationIntent);
-      const replicationImages = mode === 'design' ? imagesFromAttachments(dataDir, attachments) : [];
-      const replicationUrl = mode === 'design' ? detectFirstUrl(text) : null;
+      const replicationImages = replicationEligible ? imagesFromAttachments(dataDir, attachments) : [];
+      const replicationUrl = replicationEligible ? detectFirstUrl(text) : null;
       const hasReplicationMedia = replicationImages.length > 0 || !!replicationUrl;
       if (mode === 'design' && hasReplicationMedia && !replicationIntent) {
         userSystem += prefixed(REPLICATE_CONFIRM_INSTRUCTION); // 雙保險：UI 選項被忽略時 AI 先確認
@@ -169,7 +171,8 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       };
 
       // ── 照抄 branch (design-replication spec) ─────────────────────────────
-      if (mode === 'design' && replicationIntent?.intent === 'replicate' && hasReplicationMedia) {
+      if (replicationEligible && replicationIntent?.intent === 'replicate' && hasReplicationMedia) {
+        if (mode === 'consult') sse(res, 'mode_handoff', { to: 'design' }); // 顧問選照抄 → 自動跳設計分頁
         sse(res, 'phase', { phase: 'thinking', message: '照抄模式：整理來源素材…' });
 
         let sourceBlock = '';
@@ -395,10 +398,25 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
 
 Now generate the Vue + Tailwind interactive wireframe.`;
 
+          // 「我想要這個 <網址>」的視覺以該站為準：有 URL 就先爬、走 replicate
+          // 模式忠實重建 — 不爬就生成等於憑空想像（使用者已抱怨過產出不像原站）。
+          let handoffMode: 'design' | 'replicate' = 'design';
+          let handoffSourceBlock = '';
+          if (replicationUrl) {
+            sse(res, 'phase', { phase: 'thinking', message: `爬取參考網站：${replicationUrl}` });
+            try {
+              const crawled = await crawlForReplication(replicationUrl);
+              handoffSourceBlock = '\n\n' + crawledSourceBlock(crawled);
+              handoffMode = 'replicate';
+            } catch (e) {
+              sse(res, 'error', { code: 'CRAWL_FAILED', message: `參考網站爬取失敗（${(e as Error).message}），改以描述生成 — 視覺可能與原站不同` });
+            }
+          }
+
           let designFullText = '';
           let handoffMeta: ProviderCallMeta | null = null;
           for await (const tok of callProvider({
-            mode: 'design', prompt: text.trim(), systemInstruction: `${designSystem}\n\n${handoffContext}`, streaming: true,
+            mode: handoffMode, prompt: text.trim() + handoffSourceBlock, systemInstruction: `${designSystem}\n\n${handoffContext}`, streaming: true,
             onMeta: (m) => { handoffMeta = m; sse(res, 'meta', m); },
           })) {
             designFullText += tok;

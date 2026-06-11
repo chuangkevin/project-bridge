@@ -124,3 +124,33 @@ describe('design chat — replication intake', () => {
     expect(payload.indexOf('照抄的卡片')).toBeLessThan(payload.indexOf('</section>') + 20);
   });
 });
+
+describe('council handoff with URL → crawled replicate generation', () => {
+  it('handoff design generation uses replicate mode with crawled source', async () => {
+    const captured: Array<{ systemInstruction?: string; prompt?: string }> = [];
+    vi.spyOn(providerModule, 'getProvider').mockReturnValue({
+      streamWithSelection: (params: { systemInstruction?: string; prompt?: string }) => {
+        captured.push(params);
+        let text = 'persona reply';
+        if (params.systemInstruction?.includes('主持人（Moderator）')) {
+          text = '接下來會做該站首頁 wireframe <handoff>design</handoff>';
+        } else if (params.systemInstruction?.includes('pixel-faithful UI replicator')) {
+          text = '<artifact kind="vue-sfc" name="cloned-home"><template><div>忠實重建</div></template></artifact>';
+        }
+        return { selection: SELECTION, stream: (async function* () { yield text; })() };
+      },
+      generateWithSelection: vi.fn(async () => ({ selection: SELECTION, response: { text: '' } })),
+    } as never);
+
+    const r = await request(app).post(`/api/projects/${projectId}/chat`)
+      .send({ mode: 'consult', text: '我想要這個 https://buy.houseprice.tw/', council: true });
+
+    expect(r.status).toBe(200);
+    expect(r.text).toContain('event: mode_handoff');
+    expect(r.text).toContain('event: artifact');
+    const gen = captured.find(c => c.systemInstruction?.includes('pixel-faithful UI replicator'));
+    expect(gen).toBeTruthy();
+    expect(gen!.prompt).toContain('爬到的內容'); // crawled source rode the prompt
+    expect(gen!.prompt).toContain('照抄來源');
+  });
+});

@@ -90,6 +90,18 @@ export function buildSfcIframeSrc(sfc: string): string {
 <style>
   html, body, #app { height: 100%; margin: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  /* 預覽文件內也用細圓角 scrollbar，避免系統預設粗白卷軸毀掉版面 */
+  * { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.5) transparent; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.45);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.7); background-clip: padding-box; }
+  *::-webkit-scrollbar-corner { background: transparent; }
   ${safeStyles}
 </style>
 </head>
