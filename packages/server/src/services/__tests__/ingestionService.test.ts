@@ -116,7 +116,9 @@ describe('ingestFile – application/pdf (invalid bytes, graceful)', () => {
 // ─── DOCX (no bytes — graceful degradation) ──────────────────────────────────
 
 describe('ingestFile – docx (invalid bytes, graceful)', () => {
-  it('stores file with kind=docx; parsedText is undefined when bytes are not valid DOCX', async () => {
+  // 20s budget: mammoth's dynamic import can exceed the 5s default under
+  // parallel suite load (observed 6.8s) — this was a recurring flake.
+  it('stores file with kind=docx; parsedText is undefined when bytes are not valid DOCX', { timeout: 20_000 }, async () => {
     const fakeDocxBytes = Buffer.from('PK fake docx that is not really a zip');
 
     const att = await ingestFile(db, {

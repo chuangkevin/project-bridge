@@ -260,7 +260,9 @@
 }
 .council-thinking { background: transparent; padding: 0; border: none; max-height: none; }
 
-.bubble__markdown { line-height: 1.6; }
+/* Markdown 渲染區必須蓋掉 .bubble 的 pre-wrap — 否則原始換行 + <p> margin
+   疊加，回覆出現大片空白。 */
+.bubble__markdown { line-height: 1.6; white-space: normal; }
 .bubble__markdown h1, .bubble__markdown h2, .bubble__markdown h3 {
   color: var(--text-primary); margin: 12px 0 6px; font-weight: 600;
 }

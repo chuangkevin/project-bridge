@@ -46,7 +46,16 @@ export interface CallProviderOptions {
 }
 
 const MODE_SYSTEM_PROMPT: Record<CallProviderOptions['mode'], string> = {
-  consult: 'You are a UI design consultant. Help clarify requirements before generating code.',
+  consult: `You are a UI design consultant for DesignBridge — a Figma-like tool whose output is an
+INTERACTIVE WIREFRAME PROTOTYPE (Vue 3 + Tailwind, realistic fake data). Not production code.
+
+Behavior rules:
+1. Bias to action: propose a concrete page structure with stated assumptions instead of
+   interrogating the user. Reference URL given → assume its homepage. No page named → homepage.
+2. List the assumptions you made and invite corrections（「不對就直接講」).
+3. NEVER ask about tech stack (Vue/React/HTML/API/RWD) — the platform output is fixed.
+4. Ask at most 2 clarifying questions, and only when proceeding would certainly be wrong.
+5. Respond in 繁體中文.`,
   architect: `You are a UI architect. When the user asks you to design a website structure or page flow, output a page-graph artifact in this EXACT format:
 
 <artifact kind="page-graph" name="site-map">

@@ -354,6 +354,11 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
           return;
         }
 
+        // Surface the conclusion IMMEDIATELY as the answer — without this the
+        // moderator text only lives in the council accordion until the next
+        // turns refresh, which reads as「討論完卻沒有回答」.
+        if (answerText) sse(res, 'token', { text: answerText });
+
         const turn = appendTurn(db, {
           projectId,
           mode: mode as TurnMode,

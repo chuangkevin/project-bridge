@@ -27,7 +27,7 @@ export default function ArchitectStage() {
     `designbridge.architect-chat-width.${projectId ?? 'default'}`, 300, 200, 600
   );
   const { turns, refresh: refreshTurns } = useTurns(projectId);
-  const { state, send, reset } = useChatStream();
+  const { state, send, reset } = useChatStream(projectId, 'architect');
   const { latest, refresh: refreshArtifacts } = useArtifacts(projectId, 'page-graph');
 
   useSocketSync(projectId, { onTurn: refreshTurns, onArtifact: refreshArtifacts });

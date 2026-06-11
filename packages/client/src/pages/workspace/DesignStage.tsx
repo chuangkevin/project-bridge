@@ -47,7 +47,7 @@ export default function DesignStage() {
     `designbridge.design-chat-width.${projectId ?? 'default'}`, 300, 200, 600
   );
   const { turns, refresh: refreshTurns } = useTurns(projectId);
-  const { state, send, reset } = useChatStream();
+  const { state, send, reset } = useChatStream(projectId, 'design');
   const { artifacts, latest, refresh: refreshArtifacts } = useArtifacts(projectId, 'vue-sfc');
 
   useSocketSync(projectId, { onTurn: refreshTurns, onArtifact: refreshArtifacts });
@@ -265,16 +265,14 @@ export default function DesignStage() {
   };
 
   const filteredTurns = turns.filter((t) => t.mode === 'design');
-  const pending = state.phase === 'idle' ? null : { userText: pendingRef.current, state };
+  const pending = state.phase === 'idle' ? null : { userText: state.userText, state };
 
   const handleSend = async (text: string, attachmentIds: string[], replicationIntent?: import('./chat/Composer').ReplicationIntent) => {
     if (!projectId) return;
-    pendingRef.current = text;
     const result = await send({ projectId, mode: 'design', text, attachmentIds, council: councilEnabled, replicationIntent });
     // Always refresh turns so the stored turn shows up even on partial success
     await refreshTurns().catch(() => {});
     await refreshArtifacts().catch(() => {});
-    pendingRef.current = '';
     reset(); // always reset so overlay clears
     if (result.ok) {
       // Fire quality score request in background for the latest artifact
@@ -762,4 +760,3 @@ export default function DesignStage() {
   );
 }
 
-const pendingRef = { current: '' };

@@ -11,7 +11,7 @@ const COUNCIL_KEY = (pid: string) => `designbridge.council_enabled.${pid}`;
 export default function ConsultStage() {
   const { projectId } = useWorkspaceStore();
   const { turns, refresh } = useTurns(projectId);
-  const { state, send, reset } = useChatStream();
+  const { state, send, reset } = useChatStream(projectId, 'consult');
 
   useSocketSync(projectId, { onTurn: refresh });
   // Council mode defaults to ON. Only persists OFF if user explicitly turns it off.
@@ -34,21 +34,14 @@ export default function ConsultStage() {
 
   const pending = useMemo(() => {
     if (state.phase === 'idle') return null;
-    return { userText: pendingUserTextRef.current, state };
+    return { userText: state.userText, state };
   }, [state]);
-
-  // Hack to retain the user's text after send (state already cleared from composer)
-  // Use a closure-stable ref that send() sets before the request kicks off.
-  // Implement via outer ref:
-  // (see ref below)
 
   const handleSend = async (text: string, attachmentIds: string[]) => {
     if (!projectId) return;
-    pendingUserTextRef.current = text;
     const result = await send({ projectId, mode: 'consult', text, attachmentIds, council: councilEnabled });
     if (result.ok) {
       await refresh();
-      pendingUserTextRef.current = '';
       reset();
     }
     // On error: keep state.phase === 'error' so the user sees the error message;
@@ -103,5 +96,3 @@ export default function ConsultStage() {
   );
 }
 
-// Module-level ref proxy — single workspace instance so this is fine.
-const pendingUserTextRef = { current: '' };
