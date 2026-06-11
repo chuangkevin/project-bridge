@@ -10,8 +10,60 @@
  *  - <style scoped> works because Vue's runtime compiler handles it.
  *  - <script lang="ts"> is treated as JS (no transpile). Use plain JS in SFCs.
  */
+import { parseDocument } from 'htmlparser2';
+import type { Element, AnyNode } from 'domhandler';
+
+/**
+ * Instrument every element in the template with a `data-db-path` attribute
+ * encoding its structural path (element-child indices, '/'-joined). Vue passes
+ * unknown attributes through to the rendered DOM, so a click in the preview
+ * maps straight back to the template source node — including elements inside
+ * v-if branches and v-for repeats (repeats share one path: one template node).
+ *
+ * ⚠️ Path semantics MUST stay identical to the server-side walker
+ * (packages/server/src/services/sfcSurgeon.ts locateByPath): count element
+ * nodes only, skip text/comment nodes, root = template's top-level elements.
+ */
+export function instrumentTemplate(template: string): string {
+  try {
+    const doc = parseDocument(template, {
+      recognizeSelfClosing: true,
+      lowerCaseTags: false,
+      lowerCaseAttributeNames: false,
+      withStartIndices: true,
+      withEndIndices: true,
+    });
+    const isElement = (n: AnyNode): n is Element => n.type === 'tag' || n.type === 'script' || n.type === 'style';
+    const insertions: Array<{ at: number; text: string }> = [];
+
+    const walk = (nodes: AnyNode[], prefix: number[]): void => {
+      let idx = 0;
+      for (const n of nodes) {
+        if (!isElement(n)) continue;
+        const path = [...prefix, idx];
+        if (n.startIndex != null) {
+          // Insert right after '<tagname'
+          insertions.push({ at: n.startIndex + 1 + n.name.length, text: ` data-db-path="${path.join('/')}"` });
+        }
+        walk(n.children ?? [], path);
+        idx += 1;
+      }
+    };
+    walk(doc.children, []);
+
+    let out = template;
+    for (const ins of insertions.sort((a, b) => b.at - a.at)) {
+      out = out.slice(0, ins.at) + ins.text + out.slice(ins.at);
+    }
+    return out;
+  } catch {
+    return template; // instrumentation is best-effort; preview must never break
+  }
+}
+
 export function buildSfcIframeSrc(sfc: string): string {
-  const { template, scriptBody, styles } = splitSfc(sfc);
+  const { template: rawTemplate, scriptBody, styles } = splitSfc(sfc);
+  const template = instrumentTemplate(rawTemplate);
 
   const rawScript = scriptBody.trim()
     .replace(/^[ \t]*import[^;]+;?\s*$/gm, ''); // strip imports
@@ -126,7 +178,12 @@ export function buildSfcIframeSrc(sfc: string): string {
     var id = el.id, cls = Array.from(el.classList||[]).slice(0,3).join('.');
     var selector = id ? '#'+id : cls ? '.'+cls : tag;
     var text = (el.textContent||'').trim().slice(0,40);
-    window.parent.postMessage({type:'bridge-click',mode:_bm,selector:selector,tag:tag,text:text,x:e.clientX,y:e.clientY},'*');
+    // Structural template path from instrumentation (element track). Falls
+    // back to the nearest instrumented ancestor when the click landed on a
+    // text node wrapper or un-instrumented node.
+    var pathEl = el.closest ? el.closest('[data-db-path]') : null;
+    var dbPath = pathEl ? pathEl.getAttribute('data-db-path') : null;
+    window.parent.postMessage({type:'bridge-click',mode:_bm,selector:selector,tag:tag,text:text,dbPath:dbPath,x:e.clientX,y:e.clientY},'*');
   }, true);
 })();
 </script>

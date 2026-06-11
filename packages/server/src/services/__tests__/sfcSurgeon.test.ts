@@ -72,3 +72,97 @@ describe('summarizeSfcStructure', () => {
     expect(summarizeSfcStructure('not an sfc at all')).toContain('無法解析');
   });
 });
+
+import { locateByPath, validateSubtree, replaceByPath, relatedStyles } from '../sfcSurgeon';
+
+const EDIT_SFC = `<template>
+  <div class="app">
+    <!-- header comment -->
+    <header class="hero">
+      <h1>歡迎</h1>
+      <button @click="go" :class="btnCls">開始</button>
+    </header>
+    <main>
+      <div v-for="item in items" :key="item.id" class="card">
+        <span>{{ item.name }}</span>
+        <img :src="item.img" />
+      </div>
+    </main>
+  </div>
+</template>
+<script>
+export default { data() { return { items: [], btnCls: 'primary' } }, methods: { go() {} } }
+</script>
+<style>
+.card { border: 1px solid #eee; }
+.hero { background: black; }
+.unrelated { color: blue; }
+</style>`;
+
+describe('locateByPath / replaceByPath (sfc-element-editing)', () => {
+  it('locates by element-child indices, skipping text and comment nodes', () => {
+    // [0] = div.app, [0,0] = header (comment skipped), [0,0,1] = button
+    const located = locateByPath(EDIT_SFC, [0, 0, 1]);
+    expect(located).not.toBeNull();
+    expect(located!.tag).toBe('button');
+    expect(located!.source).toBe('<button @click="go" :class="btnCls">開始</button>');
+  });
+
+  it('locates the v-for template node (repeats share one node)', () => {
+    const located = locateByPath(EDIT_SFC, [0, 1, 0]);
+    expect(located!.tag).toBe('div');
+    expect(located!.source).toContain('v-for="item in items"');
+    expect(located!.source).toContain('<img :src="item.img" />');
+  });
+
+  it('returns null for out-of-range or invalid paths', () => {
+    expect(locateByPath(EDIT_SFC, [0, 9])).toBeNull();
+    expect(locateByPath(EDIT_SFC, [])).toBeNull();
+    expect(locateByPath(EDIT_SFC, [-1])).toBeNull();
+  });
+
+  it('extract→replace with identical snippet is byte-identical (round trip)', () => {
+    const located = locateByPath(EDIT_SFC, [0, 1, 0])!;
+    const replaced = replaceByPath(EDIT_SFC, [0, 1, 0], located.source);
+    expect(replaced.ok).toBe(true);
+    expect((replaced as { sfc: string }).sfc).toBe(EDIT_SFC);
+  });
+
+  it('replaces only the addressed subtree; everything else byte-identical', () => {
+    const snippet = '<button @click="go" class="rounded-full">開始</button>';
+    const replaced = replaceByPath(EDIT_SFC, [0, 0, 1], snippet);
+    expect(replaced.ok).toBe(true);
+    const out = (replaced as { sfc: string }).sfc;
+    expect(out).toContain(snippet);
+    expect(out).not.toContain(':class="btnCls"');
+    // Outside the replaced range: byte-identical prefix and suffix
+    const located = locateByPath(EDIT_SFC, [0, 0, 1])!;
+    expect(out.slice(0, located.start)).toBe(EDIT_SFC.slice(0, located.start));
+    expect(out.slice(located.start + snippet.length)).toBe(EDIT_SFC.slice(located.end));
+  });
+
+  it('rejects multi-root and stray-text snippets', () => {
+    expect(validateSubtree('<div>a</div><div>b</div>').ok).toBe(false);
+    expect(validateSubtree('hello <div>a</div>').ok).toBe(false);
+    expect(validateSubtree('   <div>ok</div>  ').ok).toBe(true);
+  });
+
+  it('tolerates fences-stripped snippet with leading comment', () => {
+    const v = validateSubtree('<!-- updated -->\n<section class="p-4">新</section>');
+    expect(v.ok).toBe(true);
+    expect((v as { element: string }).element).toBe('<section class="p-4">新</section>');
+  });
+});
+
+describe('relatedStyles', () => {
+  it('keeps rules whose class tokens appear in the subtree, drops unrelated', () => {
+    const located = locateByPath(EDIT_SFC, [0, 1, 0])!; // .card subtree
+    const css = relatedStyles(EDIT_SFC, located.source);
+    expect(css).toContain('.card');
+    expect(css).not.toContain('.unrelated');
+  });
+
+  it('returns empty string when subtree has no classes', () => {
+    expect(relatedStyles(EDIT_SFC, '<span>純文字</span>')).toBe('');
+  });
+});

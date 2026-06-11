@@ -15,14 +15,14 @@
 
 ## 2. Phase 2 — sfcSurgeon + 雙軌編輯
 
-- [ ] 2.1 server 新增 htmlparser2 + dom-serializer 依賴；`services/sfcSurgeon.ts`：parse SFC、結構路徑定位、extract、replace、re-serialize
-- [ ] 2.2 Round-trip 單元測試：v-if/v-for/@click/slot/HTML 註解/中文內容/自閉合標籤，extract→replace 位元等價
-- [ ] 2.3 相關 style 抽取（class token 比對，寧多勿漏）+ 測試
-- [ ] 2.4 預覽 iframe 元素選取 → 結構路徑演算法（client 端與 server 同邏輯）+ 傳遞至 chat request
-- [ ] 2.5 元素軌道 endpoint/flow：子樹 + style + tokens 進 prompt → AI 回子樹 → 驗證（單根、可 parse）→ 原位替換 → 新 artifact version
-- [ ] 2.6 驗證失敗自動降級整頁軌道 + SSE 降級通知 + 測試
-- [ ] 2.7 整頁軌道：未選元素時完整 SFC + 嚴格保留指令（接 1.1 的 source 區段）
-- [ ] 2.8 Phase 2 測試全綠 + commit
+- [x] 2.1 server 新增 htmlparser2 + dom-serializer 依賴；`services/sfcSurgeon.ts`：parse SFC、結構路徑定位、extract、replace、re-serialize
+- [x] 2.2 Round-trip 單元測試：v-if/v-for/@click/slot/HTML 註解/中文內容/自閉合標籤，extract→replace 位元等價
+- [x] 2.3 相關 style 抽取（class token 比對，寧多勿漏）+ 測試
+- [x] 2.4 預覽 iframe 元素選取 → 結構路徑演算法（client 端與 server 同邏輯）+ 傳遞至 chat request
+- [x] 2.5 元素軌道 endpoint/flow：子樹 + style + tokens 進 prompt → AI 回子樹 → 驗證（單根、可 parse）→ 原位替換 → 新 artifact version
+- [x] 2.6 驗證失敗自動降級整頁軌道 + SSE 降級通知 + 測試
+- [x] 2.7 整頁軌道：未選元素時完整 SFC + 嚴格保留指令（接 1.1 的 source 區段）
+- [x] 2.8 Phase 2 測試全綠 + commit
 
 ## 3. Phase 3 — 元件庫
 

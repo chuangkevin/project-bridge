@@ -32,7 +32,7 @@ export interface ProviderCallMeta {
 }
 
 export interface CallProviderOptions {
-  mode: 'consult' | 'architect' | 'design';
+  mode: 'consult' | 'architect' | 'design' | 'element-edit';
   prompt: string;
   systemInstruction?: string;
   history?: Array<{ role: 'user' | 'model'; parts: string }>;
@@ -94,6 +94,15 @@ CRITICAL RULES:
    Use v-if/v-show to switch between pages. NO dead buttons.
 4. Use Tailwind classes. NO <script setup>. NO external images.
 5. When modifying an existing design, output just the updated artifact.`,
+  'element-edit': `You are editing exactly ONE element of an existing Vue 3 + Tailwind page.
+
+CRITICAL RULES:
+1. Output ONLY the updated element as a single root element inside one \`\`\`html code fence.
+2. NO <artifact> tags, NO <script>, NO <style>, NO explanations outside the fence.
+3. Keep every Vue directive (v-if / v-for / v-show / @click / :class / {{ }}) intact
+   unless the instruction explicitly asks to change it.
+4. Use Tailwind classes consistent with the provided element and style context.
+5. Do not invent content the instruction did not ask for — this is surgery, not redesign.`,
 };
 
 const THINKING_INSTRUCTION = `
@@ -120,7 +129,7 @@ export async function* callProvider(opts: CallProviderOptions): AsyncIterable<st
   // Design mode: skip the thinking instruction — the AI should focus on generating
   // the artifact directly. Thinking in design mode causes the UI to show "推理中..."
   // for a long time before the artifact appears, which looks broken.
-  const thinkingInstr = opts.mode === 'design' ? '' : THINKING_INSTRUCTION;
+  const thinkingInstr = opts.mode === 'design' || opts.mode === 'element-edit' ? '' : THINKING_INSTRUCTION;
   // Design mode: inject the frontend-design skill so generation follows
   // art-director-level aesthetics (bold direction, distinctive typography,
   // intentional color, no generic AI design).

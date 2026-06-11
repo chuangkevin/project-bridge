@@ -62,6 +62,125 @@ export function parseTemplate(template: string): Document {
   return parseDocument(template, PARSE_OPTS);
 }
 
+// ─── Subtree locate / extract / replace (sfc-element-editing spec) ─────────
+//
+// Element paths are sequences of ELEMENT-child indices rooted at the outer
+// <template>'s element children, e.g. [0, 2, 1] = first element child's third
+// element child's second element child. The client-side instrumenter
+// (sfcRuntime.instrumentTemplate) MUST produce identical semantics — both
+// sides count element nodes only, skipping text/comment nodes.
+//
+// All edits splice the ORIGINAL source string using parser node indices, so
+// untouched regions stay byte-identical (round-trip fidelity requirement).
+
+export interface LocatedElement {
+  tag: string;
+  /** Absolute offsets into the full SFC source; end is exclusive. */
+  start: number;
+  end: number;
+  /** Verbatim source slice of the subtree. */
+  source: string;
+}
+
+function elementChildren(node: Document | Element): Element[] {
+  return (node.children ?? []).filter(isElement);
+}
+
+/** Locate the element addressed by `path` inside the SFC's template block. */
+export function locateByPath(sfc: string, path: number[]): LocatedElement | null {
+  if (!Array.isArray(path) || path.length === 0 || path.some(i => !Number.isInteger(i) || i < 0)) return null;
+  const doc = parseDocument(sfc, { ...PARSE_OPTS, withStartIndices: true, withEndIndices: true });
+  const tpl = doc.children.find((n): n is Element => isElement(n) && n.name === 'template');
+  if (!tpl) return null;
+
+  let current: Element | undefined;
+  let scope: Element[] = elementChildren(tpl);
+  for (const idx of path) {
+    current = scope[idx];
+    if (!current) return null;
+    scope = elementChildren(current);
+  }
+  if (!current || current.startIndex == null || current.endIndex == null) return null;
+  const start = current.startIndex;
+  const end = current.endIndex + 1;
+  return { tag: current.name, start, end, source: sfc.slice(start, end) };
+}
+
+/**
+ * Validate that a replacement snippet is a single well-formed element
+ * (whitespace and comments around it are tolerated and trimmed away).
+ */
+export function validateSubtree(snippet: string): { ok: true; element: string } | { ok: false; reason: string } {
+  const doc = parseDocument(snippet, { ...PARSE_OPTS, withStartIndices: true, withEndIndices: true });
+  const elements = elementChildren(doc);
+  if (elements.length === 0) return { ok: false, reason: '回傳內容沒有任何元素節點' };
+  if (elements.length > 1) return { ok: false, reason: `回傳內容有 ${elements.length} 個根元素，必須恰好一個` };
+  const stray = (doc.children ?? []).some(n => n.type === 'text' && ((n as { data?: string }).data ?? '').trim() !== '');
+  if (stray) return { ok: false, reason: '元素外存在非空白文字' };
+  const el = elements[0];
+  if (el.startIndex == null || el.endIndex == null) return { ok: false, reason: '無法定位元素邊界' };
+  return { ok: true, element: snippet.slice(el.startIndex, el.endIndex + 1) };
+}
+
+/** Replace the subtree at `path` with `snippet`. Untouched content is byte-identical. */
+export function replaceByPath(
+  sfc: string,
+  path: number[],
+  snippet: string,
+): { ok: true; sfc: string; tag: string } | { ok: false; reason: string } {
+  const valid = validateSubtree(snippet);
+  if (!valid.ok) return valid;
+  const located = locateByPath(sfc, path);
+  if (!located) return { ok: false, reason: `路徑 [${path.join('/')}] 在 template 中定位失敗` };
+  const next = sfc.slice(0, located.start) + valid.element + sfc.slice(located.end);
+  // Re-parse to guarantee the spliced document still has a sane template.
+  if (!splitSfcBlocks(next)) return { ok: false, reason: '替換後的 SFC 無法解析 template 區塊' };
+  return { ok: true, sfc: next, tag: located.tag };
+}
+
+/**
+ * Collect <style> rules related to a subtree by class-token matching.
+ * Intentionally over-inclusive (寧多勿漏) — extra context is harmless,
+ * missing context makes the AI invent styles.
+ */
+export function relatedStyles(sfc: string, subtreeSource: string): string {
+  const styleBlocks: string[] = [];
+  const doc = parseDocument(sfc, { ...PARSE_OPTS, withStartIndices: true, withEndIndices: true });
+  const collect = (nodes: AnyNode[]): void => {
+    for (const n of nodes) {
+      if (isElement(n) && n.name === 'style') styleBlocks.push(textOf(n));
+      else if (isElement(n)) collect(n.children ?? []);
+    }
+  };
+  collect(doc.children);
+  if (styleBlocks.length === 0) return '';
+
+  const tokens = new Set<string>();
+  const subDoc = parseTemplate(subtreeSource);
+  const walkClasses = (nodes: AnyNode[]): void => {
+    for (const n of nodes) {
+      if (!isElement(n)) continue;
+      for (const attr of ['class', ':class']) {
+        const v = n.attribs?.[attr];
+        if (v) for (const t of v.split(/[^A-Za-z0-9_-]+/)) if (t) tokens.add(t);
+      }
+      walkClasses(n.children ?? []);
+    }
+  };
+  walkClasses(subDoc.children);
+  if (tokens.size === 0) return '';
+
+  const kept: string[] = [];
+  for (const block of styleBlocks) {
+    for (const rule of block.split('}')) {
+      const trimmed = rule.trim();
+      if (!trimmed) continue;
+      if ([...tokens].some(t => trimmed.includes(`.${t}`))) kept.push(trimmed + '}');
+    }
+  }
+  return kept.join('\n');
+}
+
 function isElement(node: AnyNode): node is Element {
   return node.type === 'tag' || node.type === 'script' || node.type === 'style';
 }

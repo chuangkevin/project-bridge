@@ -126,7 +126,7 @@ export default function DesignStage() {
 
   // Bridge interaction state
   const [bridgeMode, setBridgeMode] = useState<'browse' | 'annotate' | 'regen'>('browse');
-  const [bridgeClick, setBridgeClick] = useState<{selector:string;tag:string;text:string;x:number;y:number}|null>(null);
+  const [bridgeClick, setBridgeClick] = useState<{selector:string;tag:string;text:string;dbPath?:string|null;x:number;y:number}|null>(null);
   const [regenInstruction, setRegenInstruction] = useState('');
   const [regenning, setRegenning] = useState(false);
 
@@ -654,12 +654,23 @@ export default function DesignStage() {
                   if (!projectId || !selectedId) return;
                   setRegenning(true);
                   try {
+                    const elementPath = bridgeClick.dbPath
+                      ? bridgeClick.dbPath.split('/').map(n => Number(n)).filter(n => Number.isInteger(n) && n >= 0)
+                      : null;
                     const r = await fetch(`/api/projects/${projectId}/quick-regen`, {
                       method:'POST', headers:{'Content-Type':'application/json'},
-                      body: JSON.stringify({ artifactId: selectedId, bridgeSelector: bridgeClick.selector, instruction: regenInstruction }),
+                      body: JSON.stringify({
+                        artifactId: selectedId, bridgeSelector: bridgeClick.selector, instruction: regenInstruction,
+                        ...(elementPath && elementPath.length > 0 ? { elementPath } : {}),
+                      }),
                     });
                     const data = await r.json();
-                    if (data.ok) { await refreshArtifacts(); setSelectedId(data.artifactId); }
+                    if (data.ok) {
+                      if (data.downgraded) {
+                        console.warn(`[quick-regen] 元素軌道降級為整頁重生：${data.downgradeReason ?? ''}`);
+                      }
+                      await refreshArtifacts(); setSelectedId(data.artifactId);
+                    }
                   } finally {
                     setRegenning(false); setBridgeClick(null); setRegenInstruction(''); setBridgeMode('browse');
                   }
