@@ -5,7 +5,10 @@ FROM node:22-bookworm AS builder
 WORKDIR /app
 
 # Native build tools for better-sqlite3 + bcrypt + git for ai-core tarball dependency
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# apt hardened: runner egress to deb.debian.org is flaky (IPv6 dead, IPv4
+# intermittent) — retry and force IPv4 instead of failing the whole build.
+RUN apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true update \
+    && apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     python3 \
     make \
     g++ \
@@ -71,7 +74,8 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 # package names vary across Debian versions (libasound2 vs libasound2t64 etc.)
 # and websiteCrawler.ts uses a lazy dynamic import so the server starts fine
 # without Chromium; the crawler fails gracefully if called without a browser.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true update \
+    && apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     python3 \
     make \
     g++ \
