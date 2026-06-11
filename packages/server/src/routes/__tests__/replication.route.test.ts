@@ -65,7 +65,7 @@ describe('design chat — replication intake', () => {
     });
     expect(r.status).toBe(200);
     expect(r.text).toContain('event: artifact');
-    const call = captured[0];
+    const call = captured[captured.length - 1];
     expect(call.systemInstruction).toContain('pixel-faithful UI replicator');
     expect(call.systemInstruction).not.toContain('art director'); // no frontend-design skill push
     expect(call.prompt).toContain('爬到的內容');
@@ -78,7 +78,7 @@ describe('design chat — replication intake', () => {
       mode: 'design', text: '看看這個 https://example.com/page',
     });
     expect(r.status).toBe(200);
-    const call = captured[0];
+    const call = captured[captured.length - 1];
     expect(call.systemInstruction).toContain('尚未表明是否要照抄');
     expect(call.systemInstruction).toContain('Vue 3 + Tailwind CSS UI designer'); // still design mode
   });
@@ -89,7 +89,7 @@ describe('design chat — replication intake', () => {
       mode: 'design', text: '參考 https://example.com 的風格做一頁',
       replicationIntent: { intent: 'style-only' },
     });
-    const call = captured[0];
+    const call = captured[captured.length - 1];
     expect(call.systemInstruction).toContain('僅供擷取整體風格');
     expect(call.systemInstruction).toContain('Vue 3 + Tailwind CSS UI designer');
   });
@@ -111,7 +111,7 @@ describe('design chat — replication intake', () => {
     });
     expect(r.status).toBe(200);
     expect(r.text).toContain('event: artifact');
-    expect(captured[0].systemInstruction).toContain('OUTPUT FORMAT OVERRIDE');
+    expect(captured[captured.length - 1].systemInstruction).toContain('OUTPUT FORMAT OVERRIDE');
 
     // New artifact contains the inserted snippet INSIDE the target section
     const artifactsList = await request(app).get(`/api/projects/${projectId}/artifacts`);

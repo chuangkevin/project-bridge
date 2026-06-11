@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 
 const PHASE_LABEL: Record<string, string> = {
   loading_memory: '讀取專案記憶…',
-  selecting_skills: '選擇技能…',
+  selecting_skills: '挑選知識中…',
   thinking: '推理中…',
   answering: '生成設計中…',
   council_start: '合議啟動…',

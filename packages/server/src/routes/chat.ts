@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { getProject } from '../services/projectService.js';
 import { buildMemorySnapshot } from '../services/memorySnapshot.js';
-import { listSkills, readSkill, getSystemPromptSkillList } from '../services/skillRegistry.js';
+import { readSkill, getSystemPromptSkillList } from '../services/skillRegistry.js';
 import { parseSlashCommand } from '../services/slashCommand.js';
 import { callProvider } from '../services/callProvider.js';
 import { startSseKeepalive, stopSseKeepalive } from '../utils/sseKeepalive.js';
@@ -25,6 +25,7 @@ import {
 } from '../services/replication.js';
 import { insertIntoPath } from '../services/sfcSurgeon.js';
 import { geminiVisionQuery, visionModel } from '../services/provider.js';
+import { selectSkills } from '../services/skillSelector.js';
 
 /** Build the global-design system prompt block for design mode, or '' when
  *  the project opted out (inherit_global_style = 0) or nothing is configured. */
@@ -89,8 +90,17 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       const slashCmd = parseSlashCommand(text.trim());
       const forcedSkill = slashCmd ? readSkill(slashCmd.skill, { projectId }) : null;
       const skillDescriptions = getSystemPromptSkillList({ projectId });
-      const allSkillNames = listSkills({ projectId }).map(s => s.name);
-      sse(res, 'phase', { phase: 'selecting_skills', skills: allSkillNames });
+      sse(res, 'phase', { phase: 'selecting_skills', skills: [] });
+
+      // Domain-skill auto-selection (domain-skill-selection spec): skipped when
+      // a slash command forces a skill; failure falls back to no injection.
+      let autoSkills: { selected: string[]; block: string } = { selected: [], block: '' };
+      if (!forcedSkill && (mode === 'design' || mode === 'consult')) {
+        autoSkills = await selectSkills({ userText: text.trim(), projectId });
+        if (autoSkills.selected.length > 0) {
+          sse(res, 'phase', { phase: 'selecting_skills', skills: autoSkills.selected });
+        }
+      }
 
       // Attachments
       const attachments: Attachment[] = [];
@@ -125,7 +135,8 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         attachments: attachments.map(a => ({ kind: a.kind, parsedText: a.parsedText, originalName: a.originalName })),
         activeArtifact,
       }) + (mode === 'design' ? globalStyleBlock(db, project.inheritGlobalStyle) : '')
-        + (mode === 'design' ? prefixed(componentIndexBlock(db, projectId)) : '');
+        + (mode === 'design' ? prefixed(componentIndexBlock(db, projectId)) : '')
+        + prefixed(autoSkills.block);
 
       // ── Replication intake (design-replication spec) ─────────────────────
       const replicationIntent = parseReplicationIntent(req.body?.replicationIntent);
@@ -226,6 +237,7 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
           projectId, mode: 'design' as TurnMode,
           userText: text.trim(),
           aiResponse: { text: answerText || '[照抄完成]' },
+          skillsUsed: autoSkills.selected.length > 0 ? autoSkills.selected : undefined,
           modelUsed: formatModelUsed(replicateMeta),
         });
 
@@ -430,7 +442,7 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         mode: mode as TurnMode,
         userText: text.trim(),
         aiResponse: { text: answerText, thinking: thinkingText || undefined },
-        skillsUsed: forcedSkill ? [forcedSkill.name] : undefined,
+        skillsUsed: forcedSkill ? [forcedSkill.name] : (autoSkills.selected.length > 0 ? autoSkills.selected : undefined),
         modelUsed: formatModelUsed(callMeta),
       });
       for (const f of facts) addFact(db, { projectId, turnId: turn.id, kind: f.kind, text: f.text });

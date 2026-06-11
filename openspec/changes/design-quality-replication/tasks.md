@@ -48,11 +48,11 @@
 
 ## 5. Phase 5 — Domain skill selector
 
-- [ ] 5.1 `services/skillSelector.ts`：skill 索引 + 使用者訊息 → JSON 選擇呼叫（maxOutputTokens 512、`withJsonInstruction`/`extractJsonBody`），失敗回空清單
-- [ ] 5.2 注入邏輯：0–3 skills、8K/skill、20K 總上限；斜槓強制時跳過；寫入 `turns.skills_used`
-- [ ] 5.3 design/consult 流程接線 + UI phase 顯示「挑選知識中」+ skill badge
-- [ ] 5.4 單元/route 測試（選中、空、失敗、強制跳過）
-- [ ] 5.5 Phase 5 測試全綠 + commit
+- [x] 5.1 `services/skillSelector.ts`：skill 索引 + 使用者訊息 → JSON 選擇呼叫（maxOutputTokens 512、`withJsonInstruction`/`extractJsonBody`），失敗回空清單
+- [x] 5.2 注入邏輯：0–3 skills、8K/skill、20K 總上限；斜槓強制時跳過；寫入 `turns.skills_used`
+- [x] 5.3 design/consult 流程接線 + UI phase 顯示「挑選知識中」+ skill badge
+- [x] 5.4 單元/route 測試（選中、空、失敗、強制跳過）
+- [x] 5.5 Phase 5 測試全綠 + commit
 
 ## 6. Phase 6 — iOS 27 液態玻璃 restyle
 
