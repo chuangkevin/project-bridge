@@ -21,7 +21,7 @@ describe('all migrations', () => {
       'api_key_cooldowns', 'api_key_leases', 'api_key_usage',
       'architecture_versions',
       'artifacts', 'attachments',
-      'components',
+      'component_versions', 'components',
       'extracted_facts',
       'openai_oauth_state',
       'project_settings', 'project_skills', 'projects',

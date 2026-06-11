@@ -39,6 +39,13 @@ export default function ProjectsPage() {
         <h1 style={{ margin: 0 }}>專案</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Link
+            to="/components"
+            style={{ ...iconBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, padding: '6px 12px' }}
+            title="可重用元件庫"
+          >
+            📦 元件庫
+          </Link>
+          <Link
             to="/global-design"
             style={{ ...iconBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, padding: '6px 12px' }}
             title="全域設計設定"

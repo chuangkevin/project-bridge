@@ -16,6 +16,7 @@ import { createArtifact, getArtifact, listArtifacts, readArtifactPayload } from 
 import type { ProviderCallMeta } from '../services/callProvider.js';
 import { runCouncil } from '../services/councilOrchestrator.js';
 import { readSetting } from '../services/settings.js';
+import { componentIndexBlock, expandLibComponents } from '../services/componentLibrary.js';
 
 /** Build the global-design system prompt block for design mode, or '' when
  *  the project opted out (inherit_global_style = 0) or nothing is configured. */
@@ -33,6 +34,11 @@ function globalStyleBlock(db: Database.Database, inherit: boolean): string {
 }
 
 const VALID_MODES: TurnMode[] = ['consult', 'architect', 'design'];
+
+/** Join an optional prompt block with section spacing. */
+function prefixed(block: string): string {
+  return block ? '\n\n' + block : '';
+}
 
 function sse(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -110,7 +116,25 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
         forcedSkillBody: forcedSkill?.body,
         attachments: attachments.map(a => ({ kind: a.kind, parsedText: a.parsedText, originalName: a.originalName })),
         activeArtifact,
-      }) + (mode === 'design' ? globalStyleBlock(db, project.inheritGlobalStyle) : '');
+      }) + (mode === 'design' ? globalStyleBlock(db, project.inheritGlobalStyle) : '')
+        + (mode === 'design' ? prefixed(componentIndexBlock(db, projectId)) : '');
+
+      // Verbatim expansion of <lib-component name="..."/> placeholders before
+      // persisting any vue-sfc artifact (component-library spec). Unknown names
+      // surface as explicit SSE errors — never silently guessed.
+      const expandComponents = (kind: string, payload: string): string => {
+        if (kind !== 'vue-sfc' || mode !== 'design') return payload;
+        try {
+          const result = expandLibComponents(db, projectId, payload);
+          for (const name of result.unknown) {
+            sse(res, 'error', { code: 'UNKNOWN_COMPONENT', message: `元件「${name}」不存在於元件庫，該位置已以警告區塊代替` });
+          }
+          return result.payload;
+        } catch (e) {
+          console.warn('[chat] component expansion failed:', (e as Error).message);
+          return payload;
+        }
+      };
 
       sse(res, 'phase', { phase: 'thinking' });
 
@@ -190,7 +214,8 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
           const artifactsRoot = join(dataDir, 'projects', projectId, 'artifacts');
           for (const block of artifactBlocks) {
             const ext = block.kind === 'vue-sfc' ? 'vue' : 'json';
-            const a = createArtifact(db, { projectId, createdByTurn: turn.id, kind: block.kind, name: block.name, payload: block.payload, payloadExt: ext, artifactsRoot });
+            const payload = expandComponents(block.kind, block.payload);
+            const a = createArtifact(db, { projectId, createdByTurn: turn.id, kind: block.kind, name: block.name, payload, payloadExt: ext, artifactsRoot });
             sse(res, 'artifact', { id: a.id, kind: a.kind, name: a.name });
           }
           sse(res, 'done', { turnId: turn.id });
@@ -295,10 +320,11 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       const artifactsRoot = join(dataDir, 'projects', projectId, 'artifacts');
       for (const block of artifactBlocks) {
         const ext = block.kind === 'vue-sfc' ? 'vue' : 'json';
+        const payload = expandComponents(block.kind, block.payload);
         const a = createArtifact(db, {
           projectId, createdByTurn: turn.id,
           kind: block.kind, name: block.name,
-          payload: block.payload, payloadExt: ext,
+          payload, payloadExt: ext,
           artifactsRoot,
         });
         sse(res, 'artifact', { id: a.id, kind: a.kind, name: a.name });

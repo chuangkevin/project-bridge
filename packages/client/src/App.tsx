@@ -3,6 +3,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import WorkspacePage from './pages/WorkspacePage';
 import SettingsPage from './pages/SettingsPage';
 import GlobalDesignPage from './pages/GlobalDesignPage';
+import ComponentsPage from './pages/ComponentsPage';
 import SharePage from './pages/SharePage';
 import { useViewportHeight } from './hooks/useViewportHeight';
 
@@ -22,6 +23,7 @@ export default function App() {
       <Route path="/projects/:id" element={<WorkspacePage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/global-design" element={<GlobalDesignPage />} />
+      <Route path="/components" element={<ComponentsPage />} />
       <Route path="/share/:token" element={<SharePage />} />
       <Route path="*" element={<Navigate to="/projects" replace />} />
     </Routes>

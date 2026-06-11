@@ -26,14 +26,14 @@
 
 ## 3. Phase 3 — 元件庫
 
-- [ ] 3.1 Migration：`components` table（scope/project_id/name/description/template/style/tags/source/version/timestamps，含版本歷史保留策略）
-- [ ] 3.2 `services/componentLibrary.ts`：CRUD + 同名衝突（覆蓋 version+1 / 改名）+ 版本查詢
-- [ ] 3.3 routes：`/api/components`（list/get/create/update/delete）+ route 測試
-- [ ] 3.4 「存為元件」：預覽選取元素 → dialog（名稱/描述/scope）→ sfcSurgeon 抽取入庫；整個 artifact 存為元件
-- [ ] 3.5 生成 prompt 注入元件索引 + 佔位符指示（design/replicate 模式）
-- [ ] 3.6 `expandLibComponents()`：artifact 解析後佔位符原樣展開（template 替換 + style 合併去重 + class 前綴化）；未知名稱 → SSE error + 警告容器；單元測試含逐字元相等驗證
-- [ ] 3.7 Client 元件庫頁（瀏覽/搜尋/預覽/刪除/版本）
-- [ ] 3.8 Phase 3 測試全綠 + commit
+- [x] 3.1 Migration：`components` table（scope/project_id/name/description/template/style/tags/source/version/timestamps，含版本歷史保留策略）
+- [x] 3.2 `services/componentLibrary.ts`：CRUD + 同名衝突（覆蓋 version+1 / 改名）+ 版本查詢
+- [x] 3.3 routes：`/api/components`（list/get/create/update/delete）+ route 測試
+- [x] 3.4 「存為元件」：預覽選取元素 → dialog（名稱/描述/scope）→ sfcSurgeon 抽取入庫；整個 artifact 存為元件
+- [x] 3.5 生成 prompt 注入元件索引 + 佔位符指示（design/replicate 模式）
+- [x] 3.6 `expandLibComponents()`：artifact 解析後佔位符原樣展開（template 替換 + style 合併去重 + class 前綴化）；未知名稱 → SSE error + 警告容器；單元測試含逐字元相等驗證
+- [x] 3.7 Client 元件庫頁（瀏覽/搜尋/預覽/刪除/版本）
+- [x] 3.8 Phase 3 測試全綠 + commit
 
 ## 4. Phase 4 — 照抄 pipeline
 

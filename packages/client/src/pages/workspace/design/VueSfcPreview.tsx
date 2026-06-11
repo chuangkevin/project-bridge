@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { buildSfcIframeSrc } from '../../../lib/sfcRuntime';
 
-export default function VueSfcPreview({ sfc, bridgeMode = 'browse' }: { sfc: string; bridgeMode?: 'browse' | 'annotate' | 'regen' }) {
+export default function VueSfcPreview({ sfc, bridgeMode = 'browse' }: { sfc: string; bridgeMode?: 'browse' | 'annotate' | 'regen' | 'component' }) {
   const html = useMemo(() => buildSfcIframeSrc(sfc), [sfc]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // Each new sfc remounts the iframe (key change in parent forces full reload)

@@ -125,7 +125,9 @@ export default function DesignStage() {
   };
 
   // Bridge interaction state
-  const [bridgeMode, setBridgeMode] = useState<'browse' | 'annotate' | 'regen'>('browse');
+  const [bridgeMode, setBridgeMode] = useState<'browse' | 'annotate' | 'regen' | 'component'>('browse');
+  const [componentForm, setComponentForm] = useState({ name: '', description: '', scope: 'project' as 'project' | 'global' });
+  const [savingElementComponent, setSavingElementComponent] = useState(false);
   const [bridgeClick, setBridgeClick] = useState<{selector:string;tag:string;text:string;dbPath?:string|null;x:number;y:number}|null>(null);
   const [regenInstruction, setRegenInstruction] = useState('');
   const [regenning, setRegenning] = useState(false);
@@ -400,6 +402,11 @@ export default function DesignStage() {
               style={{ background: bridgeMode === 'regen' ? 'var(--accent-glass)' : undefined }}>
               ⚡ 重生成
             </button>
+            <button className="design__btn" onClick={() => setBridgeMode(m => m === 'component' ? 'browse' : 'component')}
+              style={{ background: bridgeMode === 'component' ? 'var(--accent-glass)' : undefined }}
+              title="點選預覽中的元素，存入元件庫供之後原樣重用">
+              📦 存元素為元件
+            </button>
           </>
         )}
         {qualityScore && (
@@ -646,6 +653,72 @@ export default function DesignStage() {
                 projectId={projectId!} bridgeId={bridgeClick.selector}
                 onDone={() => { setBridgeClick(null); setBridgeMode('browse'); }}
               />
+            ) : bridgeMode === 'component' ? (
+              <div>
+                <input
+                  autoFocus value={componentForm.name}
+                  onChange={e => setComponentForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="元件名稱（例：pricing-card）"
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12, boxSizing: 'border-box' }}
+                />
+                <input
+                  value={componentForm.description}
+                  onChange={e => setComponentForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="描述（AI 依此判斷何時使用這個元件）"
+                  style={{ width: '100%', marginTop: 6, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12, boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <input type="checkbox" checked={componentForm.scope === 'global'}
+                      onChange={e => setComponentForm(f => ({ ...f, scope: e.target.checked ? 'global' : 'project' }))} />
+                    全域元件（所有專案可用）
+                  </label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => { setBridgeClick(null); setBridgeMode('browse'); }} disabled={savingElementComponent}
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12 }}>
+                      取消
+                    </button>
+                    <button
+                      disabled={savingElementComponent || !componentForm.name.trim()}
+                      onClick={async () => {
+                        if (!projectId || !selectedId) return;
+                        const elementPath = bridgeClick.dbPath
+                          ? bridgeClick.dbPath.split('/').map(n => Number(n)).filter(n => Number.isInteger(n) && n >= 0)
+                          : null;
+                        if (!elementPath || elementPath.length === 0) { alert('無法取得元素路徑，請重新點選元素'); return; }
+                        setSavingElementComponent(true);
+                        try {
+                          const doSave = async (overwrite: boolean) => fetch(`/api/projects/${projectId}/components/save-from-artifact`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              artifactId: selectedId, elementPath, overwrite,
+                              name: componentForm.name.trim(), description: componentForm.description.trim(),
+                              scope: componentForm.scope,
+                            }),
+                          });
+                          let r = await doSave(false);
+                          if (r.status === 409) {
+                            if (!confirm(`同範圍已存在元件「${componentForm.name.trim()}」，要覆蓋並升版嗎？`)) return;
+                            r = await doSave(true);
+                          }
+                          if (!r.ok) {
+                            const err = await r.json().catch(() => null);
+                            alert(`儲存失敗：${err?.error?.message ?? r.status}`);
+                            return;
+                          }
+                          alert(`已存入元件庫：「${componentForm.name.trim()}」`);
+                          setComponentForm({ name: '', description: '', scope: 'project' });
+                          setBridgeClick(null); setBridgeMode('browse');
+                        } finally {
+                          setSavingElementComponent(false);
+                        }
+                      }}
+                      style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12 }}>
+                      {savingElementComponent ? '儲存中…' : '存入元件庫'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
               <RegenQuickForm
                 instruction={regenInstruction} onChange={setRegenInstruction}
