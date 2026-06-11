@@ -67,4 +67,4 @@
 
 - [x] 7.1 E2E 補測：**改判定** — repo 的 e2e 套件指向 legacy 舊版 app（pnpm test:e2e → legacy/packages/e2e），對 M1 active codebase 無覆蓋；以 384 個 server 測試 + production build 實機 Playwright 截圖驗證取代。M1 專屬 e2e 另列 future work
 - [x] 7.2 CLAUDE.md / DEPLOY.md 更新（新設定、新表、新模式）；memory 更新
-- [ ] 7.3 全部 commit 一次 push（雙 remote），確認 Gitea CI 綠
+- [x] 7.3 全部 commit push（雙 remote）；Gitea CI 綠（b3c65f9 / 14fca5c / 5204d2e；8b8c9fe 為 runner 暫時性 apt 網路故障，retry 後綠）
