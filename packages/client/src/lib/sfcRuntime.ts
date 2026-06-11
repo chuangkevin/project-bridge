@@ -90,17 +90,19 @@ export function buildSfcIframeSrc(sfc: string): string {
 <style>
   html, body, #app { height: 100%; margin: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif; }
-  /* 預覽文件內也用細圓角 scrollbar，避免系統預設粗白卷軸毀掉版面 */
-  * { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.5) transparent; }
-  *::-webkit-scrollbar { width: 8px; height: 8px; }
-  *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb {
-    background: rgba(100, 116, 139, 0.45);
+  /* 預覽文件內也用細圓角 scrollbar。根卷軸（html）要點名處理，
+     並把 Windows Chrome 的上下箭頭按鈕殺掉 — 不然預設粗白卷軸毀掉深色版面 */
+  html, * { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.55) transparent; }
+  html::-webkit-scrollbar, *::-webkit-scrollbar { width: 9px; height: 9px; background: transparent; }
+  html::-webkit-scrollbar-button, *::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  html::-webkit-scrollbar-track, *::-webkit-scrollbar-track { background: transparent; }
+  html::-webkit-scrollbar-thumb, *::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.5);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
-  *::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.7); background-clip: padding-box; }
+  html::-webkit-scrollbar-thumb:hover, *::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.75); background-clip: padding-box; }
   *::-webkit-scrollbar-corner { background: transparent; }
   ${safeStyles}
 </style>
