@@ -386,3 +386,33 @@
 
 /* 統一對話流的 mode 標記在 user 氣泡內 */
 .bubble--user .mode-badge { vertical-align: middle; }
+
+
+/* 輸入區上緣拖曳把手 — 上下拖調整整個輸入區高度 */
+.composer__resize-handle {
+  position: absolute;
+  top: -5px;
+  left: 0;
+  right: 0;
+  height: 11px;
+  cursor: ns-resize;
+  z-index: 6;
+  touch-action: none;
+}
+.composer__resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 1px;
+  background: var(--glass-border);
+  transition: background 0.15s var(--ease-glass), height 0.15s var(--ease-glass);
+}
+.composer__resize-handle:hover::after,
+.composer__resize-handle:active::after {
+  height: 3px;
+  top: 4px;
+  background: var(--accent);
+  border-radius: 2px;
+}

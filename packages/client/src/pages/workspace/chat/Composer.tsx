@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { getToken } from '../../../lib/api';
 import SlashAutocomplete from './SlashAutocomplete';
 
@@ -38,6 +38,24 @@ export default function Composer({ projectId, disabled, onSend, enableReplicatio
   const showSlash = text.startsWith('/') && !text.includes(' ');
   const hasMedia = attachments.some(a => a.kind === 'image') || URL_RE.test(text);
   const showIntake = !!enableReplicationIntake && hasMedia;
+
+  // 整個輸入區上緣的拖曳把手：往上拖變高、往下拖變矮（高度套在 textarea 上，
+  // composer 跟著長）。位置由下方的 ResizeObserver 寫入 localStorage 記住。
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const onHandleDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const ta = taRef.current;
+    if (!ta) return;
+    dragRef.current = { startY: e.clientY, startH: ta.getBoundingClientRect().height };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onHandleMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    const ta = taRef.current;
+    if (!d || !ta) return;
+    const h = Math.min(Math.max(d.startH + (d.startY - e.clientY), 40), Math.round(window.innerHeight * 0.6));
+    ta.style.height = `${h}px`;
+  };
+  const onHandleUp = () => { dragRef.current = null; };
 
   // 記住使用者拖出的輸入框高度（native resize handle → ResizeObserver → localStorage）
   useEffect(() => {
@@ -155,6 +173,17 @@ export default function Composer({ projectId, disabled, onSend, enableReplicatio
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
+      <div
+        className="composer__resize-handle"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="拖曳調整輸入區高度"
+        title="上下拖曳調整輸入區高度"
+        onPointerDown={onHandleDown}
+        onPointerMove={onHandleMove}
+        onPointerUp={onHandleUp}
+        onPointerCancel={onHandleUp}
+      />
       {showIntake && (
         <div className="composer__intake">
           <span className="composer__intake-label">偵測到圖片/網址 — 要怎麼用？</span>
