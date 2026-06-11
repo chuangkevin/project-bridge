@@ -37,14 +37,14 @@
 
 ## 4. Phase 4 — 照抄 pipeline
 
-- [ ] 4.1 `callProvider` 新增 `replicate` 模式（不注入 frontend-design、像素忠實指令、支援 `params.images`）
-- [ ] 4.2 Composer intake 偵測（圖片附件 / URL regex）→ 選項列 UI（意圖 × 目的地）→ `replicationIntent` 隨 request 送出
-- [ ] 4.3 未選擇時 server 注入「先確認意圖」指令（雙保險）
-- [ ] 4.4 圖片照抄 flow：圖片經 OpenCode multimodal 附上；失敗自動 geminiVisionQuery 規格路徑 + SSE 告知
-- [ ] 4.5 URL 照抄 flow：重用爬蟲 cleaned HTML（截 30K）+ computed style 摘要進 replicate prompt
-- [ ] 4.6 「插入選定區域」目的地：照抄結果經元素軌道錨點插入
-- [ ] 4.7 Route/單元測試（intake 分支、模式 prompt 組成、備援切換）
-- [ ] 4.8 Phase 4 測試全綠 + commit
+- [x] 4.1 `callProvider` 新增 `replicate` 模式（不注入 frontend-design、像素忠實指令、支援 `params.images`）
+- [x] 4.2 Composer intake 偵測（圖片附件 / URL regex）→ 選項列 UI（意圖 × 目的地）→ `replicationIntent` 隨 request 送出
+- [x] 4.3 未選擇時 server 注入「先確認意圖」指令（雙保險）
+- [x] 4.4 圖片照抄 flow：圖片經 OpenCode multimodal 附上；失敗自動 geminiVisionQuery 規格路徑 + SSE 告知
+- [x] 4.5 URL 照抄 flow：重用爬蟲 cleaned HTML（截 30K）+ computed style 摘要進 replicate prompt
+- [x] 4.6 「插入選定區域」目的地：照抄結果經元素軌道錨點插入
+- [x] 4.7 Route/單元測試（intake 分支、模式 prompt 組成、備援切換）
+- [x] 4.8 Phase 4 測試全綠 + commit
 
 ## 5. Phase 5 — Domain skill selector
 

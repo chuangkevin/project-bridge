@@ -17,6 +17,14 @@ import type { ProviderCallMeta } from '../services/callProvider.js';
 import { runCouncil } from '../services/councilOrchestrator.js';
 import { readSetting } from '../services/settings.js';
 import { componentIndexBlock, expandLibComponents } from '../services/componentLibrary.js';
+import {
+  parseReplicationIntent, detectFirstUrl, imagesFromAttachments,
+  crawlForReplication, crawledSourceBlock,
+  REPLICATE_CONFIRM_INSTRUCTION, STYLE_ONLY_INSTRUCTION, REFERENCE_ONLY_INSTRUCTION,
+  REPLICATION_SPEC_PROMPT,
+} from '../services/replication.js';
+import { insertIntoPath } from '../services/sfcSurgeon.js';
+import { geminiVisionQuery, visionModel } from '../services/provider.js';
 
 /** Build the global-design system prompt block for design mode, or '' when
  *  the project opted out (inherit_global_style = 0) or nothing is configured. */
@@ -111,13 +119,26 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
       }
 
       // Compose system prompt. Design mode appends global style when the project inherits it.
-      const userSystem = buildSystemPrompt({
+      let userSystem = buildSystemPrompt({
         mode, memorySnapshot: snapshot, skillDescriptions,
         forcedSkillBody: forcedSkill?.body,
         attachments: attachments.map(a => ({ kind: a.kind, parsedText: a.parsedText, originalName: a.originalName })),
         activeArtifact,
       }) + (mode === 'design' ? globalStyleBlock(db, project.inheritGlobalStyle) : '')
         + (mode === 'design' ? prefixed(componentIndexBlock(db, projectId)) : '');
+
+      // ── Replication intake (design-replication spec) ─────────────────────
+      const replicationIntent = parseReplicationIntent(req.body?.replicationIntent);
+      const replicationImages = mode === 'design' ? imagesFromAttachments(dataDir, attachments) : [];
+      const replicationUrl = mode === 'design' ? detectFirstUrl(text) : null;
+      const hasReplicationMedia = replicationImages.length > 0 || !!replicationUrl;
+      if (mode === 'design' && hasReplicationMedia && !replicationIntent) {
+        userSystem += prefixed(REPLICATE_CONFIRM_INSTRUCTION); // 雙保險：UI 選項被忽略時 AI 先確認
+      } else if (mode === 'design' && replicationIntent?.intent === 'style-only') {
+        userSystem += prefixed(STYLE_ONLY_INSTRUCTION);
+      } else if (mode === 'design' && replicationIntent?.intent === 'reference') {
+        userSystem += prefixed(REFERENCE_ONLY_INSTRUCTION);
+      }
 
       // Verbatim expansion of <lib-component name="..."/> placeholders before
       // persisting any vue-sfc artifact (component-library spec). Unknown names
@@ -135,6 +156,105 @@ export function buildChatRouter(db: Database.Database, dataDir: string): Router 
           return payload;
         }
       };
+
+      // ── 照抄 branch (design-replication spec) ─────────────────────────────
+      if (mode === 'design' && replicationIntent?.intent === 'replicate' && hasReplicationMedia) {
+        sse(res, 'phase', { phase: 'thinking', message: '照抄模式：整理來源素材…' });
+
+        let sourceBlock = '';
+        if (replicationUrl) {
+          sse(res, 'phase', { phase: 'thinking', message: `爬取目標頁面：${replicationUrl}` });
+          try {
+            const crawled = await crawlForReplication(replicationUrl);
+            sourceBlock = crawledSourceBlock(crawled);
+          } catch (e) {
+            const msg = (e as Error).message;
+            if (replicationImages.length === 0) throw new Error(`照抄來源爬取失敗：${msg}`);
+            sse(res, 'error', { code: 'CRAWL_FAILED', message: `網址爬取失敗（${msg}），改以圖片為唯一來源繼續照抄` });
+          }
+        }
+
+        const cleanText = slashCmd ? slashCmd.rest : text.trim();
+        const basePrompt = cleanText + (sourceBlock ? '\n\n' + sourceBlock : '');
+        const elementDestination = replicationIntent.destination === 'element'
+          && replicationIntent.elementPath && activeArtifact ? replicationIntent.elementPath : null;
+        const elementOverride = elementDestination
+          ? '\n\nOUTPUT FORMAT OVERRIDE: output ONLY the replicated content as ONE single root element inside one ```html code fence. NO <artifact> tag, NO <script>, NO full page.'
+          : '';
+
+        let replicateMeta: ProviderCallMeta | null = null;
+        const runReplicate = async (withImages: boolean, visionSpec: string | null): Promise<string> => {
+          let full = '';
+          for await (const tok of callProvider({
+            mode: 'replicate',
+            prompt: basePrompt + (visionSpec ? `\n\n## 視覺規格（由圖片分析產生，照此重建）\n${visionSpec}` : ''),
+            systemInstruction: userSystem + elementOverride,
+            // Non-streaming when images ride along → a mid-call failure can
+            // fall back to the vision-spec path without half-streamed tokens.
+            streaming: !withImages,
+            ...(withImages ? { model: visionModel(), images: replicationImages } : {}),
+            onMeta: (m) => { replicateMeta = m; sse(res, 'meta', m); },
+          })) {
+            full += tok;
+            if (!withImages) sse(res, 'token', { text: tok });
+          }
+          if (withImages) sse(res, 'token', { text: full });
+          return full;
+        };
+
+        let replicateFullText: string;
+        if (replicationImages.length > 0) {
+          try {
+            replicateFullText = await runReplicate(true, null);
+          } catch (e) {
+            // OpenCode/model rejected image parts → deterministic Gemini vision
+            // spec, then text-only replicate. Never silent (SSE tells the user).
+            sse(res, 'phase', { phase: 'thinking', message: '圖片直送失敗，改用視覺規格路徑重建（Gemini 分析圖片 → 文字規格）…' });
+            const spec = await geminiVisionQuery(REPLICATION_SPEC_PROMPT, replicationImages.map(i => ({ mimeType: i.mimeType, data: i.data })), { maxOutputTokens: 3000 });
+            if (!spec) throw e;
+            replicateFullText = await runReplicate(false, spec);
+          }
+        } else {
+          replicateFullText = await runReplicate(false, null);
+        }
+
+        const answerText = replicateFullText
+          .replace(/<artifact[\s\S]*?<\/artifact>/gi, '')
+          .replace(/```[\s\S]*?```/g, '')
+          .trim();
+        const turn = appendTurn(db, {
+          projectId, mode: 'design' as TurnMode,
+          userText: text.trim(),
+          aiResponse: { text: answerText || '[照抄完成]' },
+          modelUsed: formatModelUsed(replicateMeta),
+        });
+
+        const artifactsRoot = join(dataDir, 'projects', projectId, 'artifacts');
+        if (elementDestination && activeArtifact) {
+          const { extractElementSnippet } = await import('./quickRegen.js');
+          const snippet = extractElementSnippet(replicateFullText);
+          const inserted = insertIntoPath(activeArtifact.source, elementDestination, snippet);
+          if (inserted.ok) {
+            const a = createArtifact(db, {
+              projectId, createdByTurn: turn.id, kind: 'vue-sfc', name: activeArtifact.name,
+              payload: inserted.sfc, payloadExt: 'vue', artifactsRoot,
+            });
+            sse(res, 'artifact', { id: a.id, kind: a.kind, name: a.name });
+          } else {
+            sse(res, 'error', { code: 'INSERT_FAILED', message: `照抄結果插入選定區域失敗：${inserted.reason}` });
+          }
+        } else {
+          const artifactBlocks = parseArtifactsFromResponseWithFallback(replicateFullText);
+          for (const block of artifactBlocks) {
+            const ext = block.kind === 'vue-sfc' ? 'vue' : 'json';
+            const payload = expandComponents(block.kind, block.payload);
+            const a = createArtifact(db, { projectId, createdByTurn: turn.id, kind: block.kind, name: block.name, payload, payloadExt: ext, artifactsRoot });
+            sse(res, 'artifact', { id: a.id, kind: a.kind, name: a.name });
+          }
+        }
+        sse(res, 'done', { turnId: turn.id });
+        return;
+      }
 
       sse(res, 'phase', { phase: 'thinking' });
 

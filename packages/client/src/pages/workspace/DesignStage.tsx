@@ -267,10 +267,10 @@ export default function DesignStage() {
   const filteredTurns = turns.filter((t) => t.mode === 'design');
   const pending = state.phase === 'idle' ? null : { userText: pendingRef.current, state };
 
-  const handleSend = async (text: string, attachmentIds: string[]) => {
+  const handleSend = async (text: string, attachmentIds: string[], replicationIntent?: import('./chat/Composer').ReplicationIntent) => {
     if (!projectId) return;
     pendingRef.current = text;
-    const result = await send({ projectId, mode: 'design', text, attachmentIds, council: councilEnabled });
+    const result = await send({ projectId, mode: 'design', text, attachmentIds, council: councilEnabled, replicationIntent });
     // Always refresh turns so the stored turn shows up even on partial success
     await refreshTurns().catch(() => {});
     await refreshArtifacts().catch(() => {});
@@ -547,6 +547,10 @@ export default function DesignStage() {
             projectId={projectId ?? ''}
             disabled={state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'error'}
             onSend={handleSend}
+            enableReplicationIntake
+            selectedElementPath={bridgeClick?.dbPath
+              ? bridgeClick.dbPath.split('/').map(n => Number(n)).filter(n => Number.isInteger(n) && n >= 0)
+              : null}
           />
         </div>
 

@@ -138,6 +138,28 @@ export function replaceByPath(
   return { ok: true, sfc: next, tag: located.tag };
 }
 
+/** Insert `snippet` as the LAST child of the element at `path`
+ *  (design-replication spec: 照抄結果插入選定區域). */
+export function insertIntoPath(
+  sfc: string,
+  path: number[],
+  snippet: string,
+): { ok: true; sfc: string; tag: string } | { ok: false; reason: string } {
+  const valid = validateSubtree(snippet);
+  if (!valid.ok) return valid;
+  const located = locateByPath(sfc, path);
+  if (!located) return { ok: false, reason: `路徑 [${path.join('/')}] 在 template 中定位失敗` };
+  if (/\/>\s*$/.test(located.source)) {
+    return { ok: false, reason: `目標元素 <${located.tag}> 是自閉合元素，無法插入子元素` };
+  }
+  const closeIdx = located.source.lastIndexOf('</');
+  if (closeIdx <= 0) return { ok: false, reason: `目標元素 <${located.tag}> 沒有結尾標籤，無法插入` };
+  const abs = located.start + closeIdx;
+  const next = sfc.slice(0, abs) + '\n' + valid.element + '\n' + sfc.slice(abs);
+  if (!splitSfcBlocks(next)) return { ok: false, reason: '插入後的 SFC 無法解析 template 區塊' };
+  return { ok: true, sfc: next, tag: located.tag };
+}
+
 /**
  * Collect <style> rules related to a subtree by class-token matching.
  * Intentionally over-inclusive (寧多勿漏) — extra context is harmless,

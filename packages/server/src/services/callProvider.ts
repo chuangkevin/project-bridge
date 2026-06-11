@@ -32,13 +32,15 @@ export interface ProviderCallMeta {
 }
 
 export interface CallProviderOptions {
-  mode: 'consult' | 'architect' | 'design' | 'element-edit';
+  mode: 'consult' | 'architect' | 'design' | 'element-edit' | 'replicate';
   prompt: string;
   systemInstruction?: string;
   history?: Array<{ role: 'user' | 'model'; parts: string }>;
   streaming?: boolean;
   /** Override the model ID. Defaults to `defaultModel()` from provider settings. */
   model?: string;
+  /** Inline images riding the generation call (replicate mode). */
+  images?: Array<{ type: 'inline'; mimeType: string; data: string }>;
   /** Fired once with the actual routing selection before tokens flow. */
   onMeta?: (meta: ProviderCallMeta) => void;
 }
@@ -103,6 +105,22 @@ CRITICAL RULES:
    unless the instruction explicitly asks to change it.
 4. Use Tailwind classes consistent with the provided element and style context.
 5. Do not invent content the instruction did not ask for — this is surgery, not redesign.`,
+  replicate: `You are a pixel-faithful UI replicator. The user provided a design (image and/or crawled page source). Reproduce it as Vue 3 + Tailwind, AS CLOSE TO THE ORIGINAL AS POSSIBLE.
+
+CRITICAL RULES:
+1. FIDELITY FIRST: clone the layout, spacing, alignment, typography scale, exact colors
+   (use the provided hex values / sampled pixel colors), border radii, and shadows.
+   Do NOT "improve", restyle, or reinterpret the design. 照抄就是照抄。
+2. ALWAYS output EXACTLY ONE <artifact> tag total:
+   <artifact kind="vue-sfc" name="descriptive-name">
+   <template>...</template>
+   <script>...</script>
+   </artifact>
+3. Use Tailwind classes (arbitrary values like w-[372px] / text-[#1a2b3c] are encouraged
+   for fidelity). NO <script setup>. Replace external images with neutral placeholder
+   blocks of the SAME dimensions (bg-slate-200 + centered label).
+4. Reproduce ALL visible text verbatim. Keep the original language of the source.
+5. Interactive elements must at least be visually identical; behavior can be minimal.`,
 };
 
 const THINKING_INSTRUCTION = `
@@ -129,7 +147,8 @@ export async function* callProvider(opts: CallProviderOptions): AsyncIterable<st
   // Design mode: skip the thinking instruction — the AI should focus on generating
   // the artifact directly. Thinking in design mode causes the UI to show "推理中..."
   // for a long time before the artifact appears, which looks broken.
-  const thinkingInstr = opts.mode === 'design' || opts.mode === 'element-edit' ? '' : THINKING_INSTRUCTION;
+  const artifactModes = new Set(['design', 'element-edit', 'replicate']);
+  const thinkingInstr = artifactModes.has(opts.mode) ? '' : THINKING_INSTRUCTION;
   // Design mode: inject the frontend-design skill so generation follows
   // art-director-level aesthetics (bold direction, distinctive typography,
   // intentional color, no generic AI design).
@@ -142,6 +161,7 @@ export async function* callProvider(opts: CallProviderOptions): AsyncIterable<st
     prompt: opts.prompt,
     systemInstruction,
     history: opts.history,
+    ...(opts.images && opts.images.length > 0 ? { images: opts.images } : {}),
   };
 
   const emitMeta = (selection: { provider: string; model: string; credentialRef?: string }): void => {

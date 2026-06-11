@@ -37,6 +37,11 @@ export interface SendParams {
   text: string;
   attachmentIds?: string[];
   council?: boolean;
+  replicationIntent?: {
+    intent: 'replicate' | 'style-only' | 'reference';
+    destination?: 'new' | 'element';
+    elementPath?: number[];
+  };
 }
 
 export interface SendResult {
@@ -85,7 +90,7 @@ export function useChatStream(): {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ mode: params.mode, text: params.text, attachmentIds: params.attachmentIds, council: params.council }),
+        body: JSON.stringify({ mode: params.mode, text: params.text, attachmentIds: params.attachmentIds, council: params.council, replicationIntent: params.replicationIntent }),
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {
