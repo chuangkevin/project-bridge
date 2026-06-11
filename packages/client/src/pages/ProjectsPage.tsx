@@ -29,8 +29,9 @@ export default function ProjectsPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    await create(name.trim());
+    const p = await create(name.trim());
     setName('');
+    navigate(`/projects/${p.id}`); // 建立完直接進工作區，不用再點一次
   };
 
   return (
