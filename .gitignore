@@ -31,3 +31,4 @@ packages/server/test-e2e-generate.js
 packages/server/data/*.db
 packages/server/data/*.db-wal
 packages/server/data/*.db-shm
+playwright-report/
