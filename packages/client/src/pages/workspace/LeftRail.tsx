@@ -65,10 +65,10 @@ export default function LeftRail() {
         {skills.map(s => (
           <div
             key={s.name}
-            className="rail-item"
+            className="rail-item rail-item--skill"
             aria-selected={selectedSkillName === s.name}
             onClick={() => selectSkill(s.name)}
-            title={s.description.length > 120 ? s.description.slice(0, 120) + "…" : s.description}
+            data-skill-tip={s.description.length > 120 ? s.description.slice(0, 120) + '…' : s.description}
           >
             {s.name}
           </div>
