@@ -80,7 +80,7 @@ export async function crawlForReplication(url: string): Promise<CrawledReplicati
   try {
     const page = await context.newPage();
     await applyCrawlerStealth(page);
-    const response = await page.goto(parsed.href, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    const response = await page.goto(parsed.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
 
     const initialHtml = await page.content();
@@ -115,7 +115,7 @@ export async function crawlForReplication(url: string): Promise<CrawledReplicati
     try {
       const tokens = await Promise.race([
         crawlWebsite(parsed.href),
-        new Promise<{ success: false }>((resolve) => setTimeout(() => resolve({ success: false } as never), 15000)),
+        new Promise<{ success: false }>((resolve) => setTimeout(() => resolve({ success: false } as never), 50000)), // goto 已放寬到 45s，15s 必輸
       ]);
       if ((tokens as { success: boolean }).success) {
         const t = tokens as Record<string, unknown>;

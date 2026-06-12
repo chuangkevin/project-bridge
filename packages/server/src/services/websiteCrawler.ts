@@ -132,7 +132,8 @@ export async function crawlWebsite(url: string): Promise<CrawledStyles> {
 
     await applyCrawlerStealth(page);
 
-    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    // 45s：buy.houseprice.tw 這類重站本機實測 goto 就要 ~17s，pod 上更慢
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
 
     const html = await page.content();

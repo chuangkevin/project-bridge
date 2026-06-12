@@ -181,7 +181,7 @@ export function buildCrawlRouter(db: Database.Database, _dataDir: string): Route
 
       await applyCrawlerStealth(page);
 
-      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
 
       const initialHtml = await page.content();

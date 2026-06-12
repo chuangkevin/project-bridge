@@ -107,18 +107,20 @@ export function buildDesignPresetsRouter(db: Database.Database): Router {
       return;
     }
 
-    // Crawl each URL with a per-item timeout so one slow site doesn't block the batch.
-    const PER_URL_TIMEOUT = 45_000;
-    const crawls = await Promise.all(urls.map(async (url) => {
+    // 逐條爬 + 每條 60s 上限：三條 heavy 頁面在小 pod 上並發會 CPU 餓死、
+    // 全部撞 goto timeout（production 實測 timeout ×3 的根因）。
+    const PER_URL_TIMEOUT = 60_000;
+    const crawls: Awaited<ReturnType<typeof crawlWebsite>>[] = [];
+    for (const url of urls) {
       try {
-        return await Promise.race([
+        crawls.push(await Promise.race([
           crawlWebsite(url),
           new Promise<never>((_, rej) => setTimeout(() => rej(new Error('crawl timeout')), PER_URL_TIMEOUT)),
-        ]);
+        ]));
       } catch (err: any) {
-        return { url, success: false, error: String(err?.message ?? err), colors: [], typography: { fonts: [], sizes: [], headings: [], body: null }, buttons: [], inputs: [], backgrounds: [], borderRadii: [], shadows: [] };
+        crawls.push({ url, success: false, error: String(err?.message ?? err), colors: [], typography: { fonts: [], sizes: [], headings: [], body: null }, buttons: [], inputs: [], backgrounds: [], borderRadii: [], shadows: [] });
       }
-    }));
+    }
 
     const ok = crawls.filter(c => c.success);
     if (ok.length === 0) {
