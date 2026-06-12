@@ -70,10 +70,8 @@ ARG INTERNAL_GIT_MIRROR=""
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 # Native build tools required to rebuild better-sqlite3 + bcrypt against glibc.
-# Playwright deps (libnss3, libatk, etc.) are intentionally omitted — their
-# package names vary across Debian versions (libasound2 vs libasound2t64 etc.)
-# and websiteCrawler.ts uses a lazy dynamic import so the server starts fine
-# without Chromium; the crawler fails gracefully if called without a browser.
+# Playwright's browser binary is installed after production dependencies so
+# runtime URL crawling does not depend on an empty /root/.cache/ms-playwright.
 RUN apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true update \
     && apt-get -o Acquire::Retries=5 -o Acquire::ForceIPv4=true install -y --no-install-recommends \
     python3 \
@@ -116,6 +114,9 @@ RUN if [ -n "$INTERNAL_GIT_MIRROR" ]; then \
 
 # Force native module rebuild from source on the production glibc base.
 RUN npm_config_build_from_source=true pnpm install --frozen-lockfile --prod --reporter=append-only
+
+# Install Chromium plus the Linux libraries Playwright needs at runtime.
+RUN pnpm --dir packages/server exec playwright install --with-deps chromium
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
